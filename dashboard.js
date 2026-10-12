@@ -938,11 +938,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (!secrets || secrets.length === 0) {
       secretsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching secrets or findings found. Run a crawl or adjust filters above.</td></tr>`;
+      if (secretsCountLabel) secretsCountLabel.textContent = `0 findings`;
       return;
     }
 
+    // STRICT IN-MEMORY CONSOLIDATION: Absolutely impossible for duplicate secret keys to ever render
+    const uniqueMap = new Map();
+    for (const s of secrets) {
+      if (!s || !s.match) continue;
+      const key = s.match.trim();
+      if (!key) continue;
+
+      const rawSources = Array.isArray(s.sources) && s.sources.length > 0
+        ? s.sources
+        : (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType || 'html', context: s.context || '', discoveredAt: s.discoveredAt || Date.now() }] : []);
+
+      if (uniqueMap.has(key)) {
+        const existing = uniqueMap.get(key);
+        for (const src of rawSources) {
+          if (src.url && !existing.sources.some(e => e.url === src.url)) {
+            existing.sources.push(src);
+          }
+        }
+      } else {
+        uniqueMap.set(key, {
+          ...s,
+          match: key,
+          sources: [...rawSources]
+        });
+      }
+    }
+
+    const dedupedSecrets = Array.from(uniqueMap.values());
+    if (secretsCountLabel) {
+      secretsCountLabel.textContent = `${dedupedSecrets.length} unique findings`;
+    }
+
     let rowsHtml = '';
-    secrets.forEach((s, idx) => {
+    dedupedSecrets.forEach((s, idx) => {
       const sevClass = s.severity === 'critical' ? 'badge-sev-critical' :
                        s.severity === 'high' ? 'badge-sev-high' :
                        s.severity === 'medium' ? 'badge-sev-medium' : 'badge-sev-info';

@@ -8,14 +8,16 @@ class KatanaStorage {
     this.dbName = 'KatanaCrawlerDB';
     this.dbVersion = 2;
     this.db = null;
+    this.initPromise = null;
     this.knownUrlSet = new Set(); // In-memory URL deduplication set
     this.knownSecretMap = new Map(); // In-memory unique secret deduplication map: match -> record
   }
 
   async init() {
     if (this.db) return this.db;
+    if (this.initPromise) return this.initPromise;
 
-    return new Promise((resolve, reject) => {
+    this.initPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onupgradeneeded = (event) => {
@@ -63,9 +65,12 @@ class KatanaStorage {
 
       request.onerror = (event) => {
         console.error('IndexedDB open error:', event.target.error);
+        this.initPromise = null;
         reject(event.target.error);
       };
     });
+
+    return this.initPromise;
   }
 
   // Canonical URL normalizer for persistent deduplication
@@ -348,22 +353,47 @@ class KatanaStorage {
     if (!secretsList || secretsList.length === 0) return { newCount: 0, updatedCount: 0 };
     await this.init();
 
-    const secretsToInsert = [];
-    const secretsToUpdate = [];
     const now = Date.now();
 
+    // 1. Strictly consolidate incoming batch by trimmed match key
+    const incomingConsolidated = new Map();
     for (const s of secretsList) {
       if (!s || !s.match) continue;
+      const matchKey = s.match.trim();
+      if (!matchKey) continue;
 
       const locItem = {
-        url: s.sourceUrl,
+        url: s.sourceUrl || '',
         type: s.sourceType || 'html',
         context: s.context || '',
         discoveredAt: s.discoveredAt || now
       };
 
-      if (this.knownSecretMap.has(s.match)) {
-        const existing = this.knownSecretMap.get(s.match);
+      if (incomingConsolidated.has(matchKey)) {
+        const item = incomingConsolidated.get(matchKey);
+        if (locItem.url && !item.sources.some(l => l.url === locItem.url)) {
+          item.sources.push(locItem);
+        }
+      } else {
+        incomingConsolidated.set(matchKey, {
+          ruleName: s.ruleName,
+          severity: s.severity || 'info',
+          category: s.category || 'General',
+          match: matchKey,
+          masked: s.masked || '••••••••',
+          sources: locItem.url ? [locItem] : [],
+          discoveredAt: s.discoveredAt || now
+        });
+      }
+    }
+
+    const secretsToInsert = [];
+    const secretsToUpdate = [];
+
+    // 2. Process against knownSecretMap
+    for (const [matchKey, incoming] of incomingConsolidated.entries()) {
+      if (this.knownSecretMap.has(matchKey)) {
+        const existing = this.knownSecretMap.get(matchKey);
         if (!Array.isArray(existing.sources)) {
           existing.sources = existing.sourceUrl ? [{
             url: existing.sourceUrl,
@@ -373,27 +403,33 @@ class KatanaStorage {
           }] : [];
         }
 
-        // Avoid adding duplicate location URLs to the same secret
-        const alreadyHasUrl = existing.sources.some(loc => loc.url === s.sourceUrl);
-        if (!alreadyHasUrl) {
-          existing.sources.push(locItem);
+        let locAdded = false;
+        for (const loc of incoming.sources) {
+          if (loc.url && !existing.sources.some(l => l.url === loc.url)) {
+            existing.sources.push(loc);
+            locAdded = true;
+          }
+        }
+
+        if (locAdded) {
           existing.lastDiscoveredAt = now;
-          if (!secretsToUpdate.some(u => u.match === existing.match)) {
+          // ONLY queue for update if it already has a database ID and is NOT already in secretsToUpdate
+          if (existing.id && !secretsToUpdate.some(u => u.id === existing.id)) {
             secretsToUpdate.push(existing);
           }
         }
       } else {
         const newRecord = {
-          ruleName: s.ruleName,
-          severity: s.severity || 'info',
-          category: s.category || 'General',
-          match: s.match,
-          masked: s.masked || '••••••••',
-          sources: [locItem],
-          firstDiscoveredAt: s.discoveredAt || now,
-          lastDiscoveredAt: s.discoveredAt || now
+          ruleName: incoming.ruleName,
+          severity: incoming.severity,
+          category: incoming.category,
+          match: incoming.match,
+          masked: incoming.masked,
+          sources: incoming.sources,
+          firstDiscoveredAt: incoming.discoveredAt || now,
+          lastDiscoveredAt: incoming.discoveredAt || now
         };
-        this.knownSecretMap.set(s.match, newRecord);
+        this.knownSecretMap.set(matchKey, newRecord);
         secretsToInsert.push(newRecord);
       }
     }
@@ -414,7 +450,9 @@ class KatanaStorage {
       }
 
       for (const item of secretsToUpdate) {
-        store.put(item);
+        if (item.id) {
+          store.put(item);
+        }
       }
 
       tx.oncomplete = () => resolve({
@@ -431,25 +469,61 @@ class KatanaStorage {
       if (!this.db.objectStoreNames.contains('secrets')) {
         return resolve([]);
       }
-      const tx = this.db.transaction('secrets', 'readonly');
+      const tx = this.db.transaction('secrets', 'readwrite');
       const store = tx.objectStore('secrets');
       const req = store.getAll();
 
       req.onsuccess = () => {
-        let results = req.result || [];
+        let rawResults = req.result || [];
 
-        // Normalize legacy format if any row hasn't been migrated
-        results = results.map(item => {
-          if (!Array.isArray(item.sources) || item.sources.length === 0) {
-            item.sources = item.sourceUrl ? [{
-              url: item.sourceUrl,
-              type: item.sourceType || 'html',
-              context: item.context || '',
-              discoveredAt: item.discoveredAt || Date.now()
-            }] : [];
+        // STRICT DEDUPLICATION & RECONCILIATION
+        const consolidatedMap = new Map();
+        const duplicatesToDelete = [];
+
+        for (const item of rawResults) {
+          if (!item || !item.match) continue;
+          const matchKey = item.match.trim();
+          if (!matchKey) continue;
+
+          const itemSources = Array.isArray(item.sources) && item.sources.length > 0
+            ? item.sources
+            : (item.sourceUrl ? [{
+                url: item.sourceUrl,
+                type: item.sourceType || 'html',
+                context: item.context || '',
+                discoveredAt: item.discoveredAt || Date.now()
+              }] : []);
+
+          if (consolidatedMap.has(matchKey)) {
+            // Duplicate found in database! Merge sources and mark duplicate ID for deletion
+            const existing = consolidatedMap.get(matchKey);
+            for (const src of itemSources) {
+              if (src.url && !existing.sources.some(s => s.url === src.url)) {
+                existing.sources.push(src);
+              }
+            }
+            if (item.id && item.id !== existing.id) {
+              duplicatesToDelete.push(item.id);
+            }
+          } else {
+            item.match = matchKey;
+            item.sources = itemSources;
+            consolidatedMap.set(matchKey, item);
           }
-          return item;
-        });
+        }
+
+        // Clean up duplicate rows from IndexedDB so the database is self-healing
+        for (const delId of duplicatesToDelete) {
+          store.delete(delId);
+        }
+        for (const [matchKey, record] of consolidatedMap.entries()) {
+          this.knownSecretMap.set(matchKey, record);
+          if (duplicatesToDelete.length > 0) {
+            store.put(record);
+          }
+        }
+
+        let results = Array.from(consolidatedMap.values());
 
         if (filters.search) {
           const q = filters.search.toLowerCase();

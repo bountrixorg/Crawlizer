@@ -101,9 +101,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   const terminalAutoscroll = document.getElementById('terminal-autoscroll');
   const btnClearLogs = document.getElementById('btn-clear-logs');
 
+  // Secrets & Findings Tab Elements
+  const metricSecrets = document.getElementById('metric-secrets');
+  const metricSecretsBreakdown = document.getElementById('metric-secrets-breakdown');
+  const tabSecretsCount = document.getElementById('tab-secrets-count');
+  const secretsSearch = document.getElementById('secrets-search');
+  const secretsFilterSeverity = document.getElementById('secrets-filter-severity');
+  const secretsFilterSource = document.getElementById('secrets-filter-source');
+  const secretsCountLabel = document.getElementById('secrets-count-label');
+  const secretsTbody = document.getElementById('secrets-tbody');
+  const btnExportSecretsJson = document.getElementById('btn-export-secrets-json');
+  const btnExportSecretsCsv = document.getElementById('btn-export-secrets-csv');
+  const btnCopySecrets = document.getElementById('btn-copy-secrets');
+  const btnClearSecrets = document.getElementById('btn-clear-secrets');
+
   let currentPage = 1;
   let pageSize = 50;
   let cachedResults = [];
+  let cachedSecrets = [];
 
   // ==========================================
   // Initialization
@@ -112,6 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshMetrics();
   await renderTargetsTable();
   await refreshResultsTable();
+  await refreshSecretsTable();
 
   // Auto-persist configuration whenever user toggles any switch or changes an input
   async function persistCurrentConfig() {
@@ -376,7 +392,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshMetrics();
       renderTargetsTable();
       refreshResultsTable();
+      refreshSecretsTable();
     }
+  };
+
+  engine.onSecretFound = () => {
+    refreshMetrics();
+    debouncedRefreshSecrets();
   };
 
   // ==========================================
@@ -393,6 +415,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (tab.dataset.tab === 'tab-results') {
         refreshResultsTable();
+      } else if (tab.dataset.tab === 'tab-secrets') {
+        refreshSecretsTable();
       }
     });
   });
@@ -668,6 +692,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabDiscoveredCount.textContent = stats.totalDiscovered;
     loadedSeedsBadge.textContent = `${stats.totalTargets} Seeds Ready`;
 
+    const totalSec = stats.totalSecrets || 0;
+    if (metricSecrets) metricSecrets.textContent = totalSec;
+    if (tabSecretsCount) tabSecretsCount.textContent = totalSec;
+
+    try {
+      const allSecrets = await storage.getSecrets();
+      const critCount = allSecrets.filter(s => s.severity === 'critical').length;
+      const highCount = allSecrets.filter(s => s.severity === 'high').length;
+      if (metricSecretsBreakdown) {
+        if (critCount > 0 || highCount > 0) {
+          metricSecretsBreakdown.textContent = `${critCount} Crit, ${highCount} High`;
+        } else {
+          metricSecretsBreakdown.textContent = `${totalSec} Sensitive Findings`;
+        }
+      }
+    } catch {}
+
     const progress = stats.totalTargets > 0 ? Math.min(100, Math.round((stats.crawledTargets / stats.totalTargets) * 100)) : 0;
     metricProgressPercent.textContent = `${progress}% Completed`;
     progressBarFill.style.width = `${progress}%`;
@@ -830,6 +871,172 @@ document.addEventListener('DOMContentLoaded', async () => {
     terminalBody.innerHTML = '';
     engine.log('inf', 'Logs cleared');
   });
+
+  // ==========================================
+  // Secrets & Sensitive Findings Operations
+  // ==========================================
+  let refreshSecretsDebounce = null;
+  function debouncedRefreshSecrets() {
+    clearTimeout(refreshSecretsDebounce);
+    refreshSecretsDebounce = setTimeout(refreshSecretsTable, 300);
+  }
+
+  async function refreshSecretsTable() {
+    if (!secretsTbody) return;
+
+    const filters = {
+      search: secretsSearch ? secretsSearch.value.trim() : '',
+      severity: secretsFilterSeverity ? secretsFilterSeverity.value : 'all',
+      sourceType: secretsFilterSource ? secretsFilterSource.value : 'all'
+    };
+
+    cachedSecrets = await storage.getSecrets(filters);
+    if (secretsCountLabel) {
+      secretsCountLabel.textContent = `${cachedSecrets.length} findings`;
+    }
+
+    renderSecretsTable(cachedSecrets);
+  }
+
+  function renderSecretsTable(secrets) {
+    if (!secretsTbody) return;
+
+    if (!secrets || secrets.length === 0) {
+      secretsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching secrets or findings found. Run a crawl or adjust filters above.</td></tr>`;
+      return;
+    }
+
+    let rowsHtml = '';
+    secrets.forEach((s, idx) => {
+      const sevClass = s.severity === 'critical' ? 'badge-sev-critical' :
+                       s.severity === 'high' ? 'badge-sev-high' :
+                       s.severity === 'medium' ? 'badge-sev-medium' : 'badge-sev-info';
+      
+      const timeStr = s.discoveredAt ? new Date(s.discoveredAt).toLocaleTimeString() : '-';
+
+      rowsHtml += `
+        <tr>
+          <td>${idx + 1}</td>
+          <td><span class="badge-sev ${sevClass}">${s.severity || 'info'}</span></td>
+          <td><strong style="color: var(--text-primary);">${escapeHtml(s.ruleName)}</strong></td>
+          <td>
+            <div class="secret-value-box">
+              <span class="secret-text font-mono" data-secret="${escapeHtml(s.match)}" data-masked="${escapeHtml(s.masked || '••••••••')}" data-revealed="false">${escapeHtml(s.masked || '••••••••')}</span>
+              <button class="secret-toggle-btn" title="Show / Hide raw value">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="secret-copy-btn" title="Copy to clipboard">Copy</button>
+            </div>
+          </td>
+          <td><span class="badge-mini">${escapeHtml(s.sourceType || 'asset')}</span></td>
+          <td>
+            <a href="${escapeHtml(s.sourceUrl)}" target="_blank" class="url-link text-xs" style="color: var(--cyan-bright); word-break: break-all;">${escapeHtml(s.sourceUrl)}</a>
+            ${s.context ? `<div class="secret-context-snippet">${escapeHtml(s.context)}</div>` : ''}
+          </td>
+          <td class="font-mono text-xs" style="color: var(--text-muted);">${timeStr}</td>
+        </tr>
+      `;
+    });
+
+    secretsTbody.innerHTML = rowsHtml;
+  }
+
+  // Interactive secret table event delegation (copy and show/hide)
+  if (secretsTbody) {
+    secretsTbody.addEventListener('click', async (e) => {
+      const copyBtn = e.target.closest('.secret-copy-btn');
+      if (copyBtn) {
+        const box = copyBtn.closest('.secret-value-box');
+        const textSpan = box ? box.querySelector('.secret-text') : null;
+        if (textSpan && textSpan.dataset.secret) {
+          await navigator.clipboard.writeText(textSpan.dataset.secret);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        }
+        return;
+      }
+
+      const toggleBtn = e.target.closest('.secret-toggle-btn');
+      if (toggleBtn) {
+        const box = toggleBtn.closest('.secret-value-box');
+        const textSpan = box ? box.querySelector('.secret-text') : null;
+        if (textSpan) {
+          const isRevealed = textSpan.dataset.revealed === 'true';
+          if (isRevealed) {
+            textSpan.textContent = textSpan.dataset.masked;
+            textSpan.dataset.revealed = 'false';
+          } else {
+            textSpan.textContent = textSpan.dataset.secret;
+            textSpan.dataset.revealed = 'true';
+          }
+        }
+      }
+    });
+  }
+
+  if (secretsSearch) {
+    secretsSearch.addEventListener('input', debouncedRefreshSecrets);
+  }
+  if (secretsFilterSeverity) {
+    secretsFilterSeverity.addEventListener('change', refreshSecretsTable);
+  }
+  if (secretsFilterSource) {
+    secretsFilterSource.addEventListener('change', refreshSecretsTable);
+  }
+
+  if (btnExportSecretsJson) {
+    btnExportSecretsJson.addEventListener('click', async () => {
+      const secrets = await storage.getSecrets();
+      if (secrets.length === 0) {
+        alert('No secrets found to export.');
+        return;
+      }
+      downloadFile(JSON.stringify(secrets, null, 2), 'katana-secrets.json', 'application/json');
+      engine.log('inf', `Exported ${secrets.length} findings to katana-secrets.json`);
+    });
+  }
+
+  if (btnExportSecretsCsv) {
+    btnExportSecretsCsv.addEventListener('click', async () => {
+      const secrets = await storage.getSecrets();
+      if (secrets.length === 0) {
+        alert('No secrets found to export.');
+        return;
+      }
+      let csv = 'Rule,Severity,Category,Secret,SourceType,SourceURL,DiscoveredAt\n';
+      secrets.forEach(s => {
+        const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+        const date = s.discoveredAt ? new Date(s.discoveredAt).toISOString() : '';
+        csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${esc(s.sourceType)},${esc(s.sourceUrl)},${esc(date)}\n`;
+      });
+      downloadFile(csv, 'katana-secrets.csv', 'text/csv');
+      engine.log('inf', `Exported ${secrets.length} findings to katana-secrets.csv`);
+    });
+  }
+
+  if (btnCopySecrets) {
+    btnCopySecrets.addEventListener('click', async () => {
+      const secrets = await storage.getSecrets();
+      if (secrets.length === 0) {
+        alert('No secrets found to copy.');
+        return;
+      }
+      const text = secrets.map(s => `[${(s.severity || 'INFO').toUpperCase()}] ${s.ruleName}: ${s.match} (${s.sourceUrl})`).join('\n');
+      await navigator.clipboard.writeText(text);
+      alert(`Copied ${secrets.length} secrets to clipboard!`);
+    });
+  }
+
+  if (btnClearSecrets) {
+    btnClearSecrets.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to clear all discovered secrets findings?')) {
+        await storage.clearSecrets();
+        await refreshMetrics();
+        await refreshSecretsTable();
+        engine.log('inf', 'All secrets findings cleared from database.');
+      }
+    });
+  }
 
   function escapeHtml(str) {
     if (!str) return '';

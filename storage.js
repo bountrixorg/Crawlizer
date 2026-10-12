@@ -6,9 +6,10 @@
 class KatanaStorage {
   constructor() {
     this.dbName = 'KatanaCrawlerDB';
-    this.dbVersion = 1;
+    this.dbVersion = 2;
     this.db = null;
-    this.knownUrlSet = new Set(); // In-memory deduplication set
+    this.knownUrlSet = new Set(); // In-memory URL deduplication set
+    this.knownSecretSet = new Set(); // In-memory secret deduplication set
   }
 
   async init() {
@@ -35,6 +36,17 @@ class KatanaStorage {
           urlStore.createIndex('scope', 'scope', { unique: false });
           urlStore.createIndex('sourceUrl', 'sourceUrl', { unique: false });
           urlStore.createIndex('discoveredAt', 'discoveredAt', { unique: false });
+        }
+
+        // Secrets & Sensitive Findings store
+        if (!db.objectStoreNames.contains('secrets')) {
+          const secretStore = db.createObjectStore('secrets', { keyPath: 'id', autoIncrement: true });
+          secretStore.createIndex('ruleName', 'ruleName', { unique: false });
+          secretStore.createIndex('severity', 'severity', { unique: false });
+          secretStore.createIndex('category', 'category', { unique: false });
+          secretStore.createIndex('sourceUrl', 'sourceUrl', { unique: false });
+          secretStore.createIndex('sourceType', 'sourceType', { unique: false });
+          secretStore.createIndex('discoveredAt', 'discoveredAt', { unique: false });
         }
 
         // Settings & Sessions store
@@ -81,10 +93,12 @@ class KatanaStorage {
     }
   }
 
-  // Load existing URLs into in-memory Set for instant O(1) deduplication
+  // Load existing URLs and Secrets into in-memory Sets for instant O(1) deduplication
   async loadUrlCache() {
     this.knownUrlSet.clear();
-    return new Promise((resolve) => {
+    this.knownSecretSet.clear();
+
+    await new Promise((resolve) => {
       const tx = this.db.transaction('discovered_urls', 'readonly');
       const store = tx.objectStore('discovered_urls');
       const req = store.openCursor();
@@ -102,6 +116,28 @@ class KatanaStorage {
 
       req.onerror = () => resolve();
     });
+
+    if (this.db.objectStoreNames.contains('secrets')) {
+      await new Promise((resolve) => {
+        const tx = this.db.transaction('secrets', 'readonly');
+        const store = tx.objectStore('secrets');
+        const req = store.openCursor();
+
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const v = cursor.value;
+            const key = `${v.ruleName}:::${v.match}:::${v.sourceUrl}`;
+            this.knownSecretSet.add(key);
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+
+        req.onerror = () => resolve();
+      });
+    }
   }
 
   // Save new seed targets from .txt
@@ -273,17 +309,113 @@ class KatanaStorage {
     });
   }
 
+  // ==========================================
+  // Secrets & Sensitive Findings Operations
+  // ==========================================
+  async saveSecrets(secretsList) {
+    if (!secretsList || secretsList.length === 0) return 0;
+    await this.init();
+
+    const newSecrets = [];
+    for (const s of secretsList) {
+      const key = `${s.ruleName}:::${s.match}:::${s.sourceUrl}`;
+      if (!this.knownSecretSet.has(key)) {
+        this.knownSecretSet.add(key);
+        newSecrets.push(s);
+      }
+    }
+
+    if (newSecrets.length === 0) return 0;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('secrets', 'readwrite');
+      const store = tx.objectStore('secrets');
+
+      for (const item of newSecrets) {
+        store.add(item);
+      }
+
+      tx.oncomplete = () => resolve(newSecrets.length);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async getSecrets(filters = {}) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      if (!this.db.objectStoreNames.contains('secrets')) {
+        return resolve([]);
+      }
+      const tx = this.db.transaction('secrets', 'readonly');
+      const store = tx.objectStore('secrets');
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        let results = req.result || [];
+
+        if (filters.search) {
+          const q = filters.search.toLowerCase();
+          results = results.filter(item => 
+            item.ruleName.toLowerCase().includes(q) || 
+            item.match.toLowerCase().includes(q) || 
+            (item.sourceUrl && item.sourceUrl.toLowerCase().includes(q)) ||
+            (item.context && item.context.toLowerCase().includes(q))
+          );
+        }
+
+        if (filters.severity && filters.severity !== 'all') {
+          results = results.filter(item => item.severity === filters.severity);
+        }
+
+        if (filters.category && filters.category !== 'all') {
+          results = results.filter(item => item.category === filters.category);
+        }
+
+        if (filters.sourceType && filters.sourceType !== 'all') {
+          results = results.filter(item => item.sourceType === filters.sourceType);
+        }
+
+        // Sort: critical > high > medium > info > date desc
+        const sevOrder = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+        results.sort((a, b) => {
+          const sa = sevOrder[a.severity] || 0;
+          const sb = sevOrder[b.severity] || 0;
+          if (sa !== sb) return sb - sa;
+          return (b.discoveredAt || 0) - (a.discoveredAt || 0);
+        });
+
+        resolve(results);
+      };
+
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async clearSecrets() {
+    await this.init();
+    this.knownSecretSet.clear();
+    return new Promise((resolve, reject) => {
+      if (!this.db.objectStoreNames.contains('secrets')) return resolve();
+      const tx = this.db.transaction('secrets', 'readwrite');
+      tx.objectStore('secrets').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
   async getStats() {
     await this.init();
     const targets = await this.getAllTargets();
     const totalDiscovered = this.knownUrlSet.size;
+    const totalSecrets = this.knownSecretSet.size;
 
     const stats = {
       totalTargets: targets.length,
       pendingTargets: targets.filter(t => t.status === 'pending').length,
       crawledTargets: targets.filter(t => t.status === 'completed').length,
       failedTargets: targets.filter(t => t.status === 'failed').length,
-      totalDiscovered: totalDiscovered
+      totalDiscovered: totalDiscovered,
+      totalSecrets: totalSecrets
     };
 
     return stats;
@@ -292,10 +424,14 @@ class KatanaStorage {
   async clearAll() {
     await this.init();
     this.knownUrlSet.clear();
+    this.knownSecretSet.clear();
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(['targets', 'discovered_urls'], 'readwrite');
+      const stores = ['targets', 'discovered_urls'];
+      if (this.db.objectStoreNames.contains('secrets')) stores.push('secrets');
+      const tx = this.db.transaction(stores, 'readwrite');
       tx.objectStore('targets').clear();
       tx.objectStore('discovered_urls').clear();
+      if (this.db.objectStoreNames.contains('secrets')) tx.objectStore('secrets').clear();
 
       tx.oncomplete = () => resolve();
       tx.onerror = (e) => reject(e.target.error);

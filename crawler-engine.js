@@ -47,10 +47,15 @@ class KatanaCrawlerEngine {
     this.currentCaptchaTarget = null;
     this.captchaCheckInterval = null;
 
+    // Secret Scanner Engine
+    this.secretScanner = (typeof KatanaSecretScanner !== 'undefined') ? new KatanaSecretScanner() : null;
+    this.totalSecretsInSession = 0;
+
     // Callbacks
     this.onLog = null;
     this.onProgress = null;
     this.onUrlFound = null;
+    this.onSecretFound = null;
     this.onStateChange = null;
     this.onCaptchaDetected = null;
     this.onCaptchaResolved = null;
@@ -373,6 +378,25 @@ class KatanaCrawlerEngine {
   }
 
   /**
+   * Extract asset URLs and font/image paths from CSS stylesheets
+   */
+  extractUrlsFromCss(cssContent, pageUrl) {
+    const discovered = [];
+    if (!cssContent || typeof cssContent !== 'string') return discovered;
+    const cssUrlRegex = /url\(\s*['"]?([^'"()\s]+)['"]?\s*\)/gi;
+    let match;
+    while ((match = cssUrlRegex.exec(cssContent)) !== null) {
+      const raw = match[1].trim();
+      if (!raw || raw.startsWith('data:')) continue;
+      const normalized = this.normalizeUrl(raw, pageUrl);
+      if (normalized) {
+        discovered.push({ url: normalized, type: 'css-asset', sourceUrl: pageUrl });
+      }
+    }
+    return discovered;
+  }
+
+  /**
    * Parse robots.txt and sitemap.xml
    */
   async fetchRobotsAndSitemaps(seedUrl) {
@@ -557,7 +581,9 @@ class KatanaCrawlerEngine {
       htmlComments: [],
       metaLinks: [],
       jsonBlobs: [],
-      rawHtml: ''
+      rawHtml: '',
+      cssSources: [],
+      inlineStyles: []
     };
 
     // 1. CAPTCHA & Cloudflare Bot Challenge Detection (Checks for real blocking interstitials)
@@ -660,7 +686,17 @@ class KatanaCrawlerEngine {
       });
     } catch {}
 
-    // 10. Capture Raw HTML for deep Katana regex parsing
+    // 10. Extract CSS stylesheets & inline style blocks
+    document.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el => {
+      const href = el.getAttribute('href');
+      if (href) result.cssSources.push(href);
+    });
+    document.querySelectorAll('style').forEach(el => {
+      const content = el.textContent || '';
+      if (content.length > 5) result.inlineStyles.push(content);
+    });
+
+    // 11. Capture Raw HTML for deep Katana regex parsing
     try {
       result.rawHtml = document.documentElement.outerHTML.slice(0, 1500000);
     } catch(e) {}
@@ -861,6 +897,8 @@ class KatanaCrawlerEngine {
 
     let discoveredInItem = [];
     const effectivePageUrl = tabData?.pageUrl || url;
+    const discoveredSecrets = [];
+    const sourceMapUrlsToFetch = [];
 
     // Fallback: If in-tab DOM inspection returned null (e.g. extension permission denied on error page or CSP sandbox), fetch directly
     if (!tabData) {
@@ -871,6 +909,9 @@ class KatanaCrawlerEngine {
           const bodyText = await resp.text();
           const fallbackUrls = this.extractUrlsFromHtml(bodyText, url);
           discoveredInItem.push(...fallbackUrls);
+          if (this.secretScanner) {
+            discoveredSecrets.push(...this.secretScanner.scan(bodyText, url, 'html'));
+          }
           this.log('inf', `[Engine Fallback] Extracted ${fallbackUrls.length} links via background spider for ${url}`);
         }
       } catch (err) {
@@ -879,6 +920,91 @@ class KatanaCrawlerEngine {
     }
 
     if (tabData) {
+      // 1. Scan Raw HTML Document Source with Secret Scanner & Katana Endpoint Regex
+      if (tabData.rawHtml) {
+        if (this.secretScanner) {
+          discoveredSecrets.push(...this.secretScanner.scan(tabData.rawHtml, effectivePageUrl, 'html'));
+        }
+        const rawEndpoints = this.extractEndpointsFromJs(tabData.rawHtml, effectivePageUrl);
+        discoveredInItem.push(...rawEndpoints);
+      }
+
+      // 2. Scan Rendered DOM Inline Scripts & JSON Hydration Blobs
+      for (const scriptText of tabData.inlineScripts || []) {
+        if (this.secretScanner) {
+          discoveredSecrets.push(...this.secretScanner.scan(scriptText, effectivePageUrl, 'rendered-js'));
+        }
+        const jsEndpoints = this.extractEndpointsFromJs(scriptText, effectivePageUrl);
+        discoveredInItem.push(...jsEndpoints);
+
+        // Check for Source Maps inside inline scripts
+        if (typeof KatanaSecretScanner !== 'undefined') {
+          const maps = KatanaSecretScanner.extractSourceMapUrls(scriptText, effectivePageUrl);
+          sourceMapUrlsToFetch.push(...maps);
+        }
+      }
+
+      // Next.js / Nuxt JSON Blobs & Hydration States
+      for (const jsonStr of tabData.jsonBlobs || []) {
+        if (this.secretScanner) {
+          discoveredSecrets.push(...this.secretScanner.scan(jsonStr, effectivePageUrl, 'rendered-js'));
+        }
+        const jsonEndpoints = this.extractEndpointsFromJs(jsonStr, effectivePageUrl);
+        discoveredInItem.push(...jsonEndpoints);
+      }
+
+      // 3. Scan HTML Comments (staging secrets, dev routes, subdomains)
+      for (const comment of tabData.htmlComments || []) {
+        if (this.secretScanner) {
+          discoveredSecrets.push(...this.secretScanner.scan(comment, effectivePageUrl, 'html-comment'));
+        }
+        const commentEndpoints = this.extractEndpointsFromJs(comment, effectivePageUrl);
+        discoveredInItem.push(...commentEndpoints);
+        if (this.config.subdomainCrawl) {
+          const commentSubs = this.extractSubdomainsFromText(comment, seedUrl);
+          discoveredInItem.push(...commentSubs);
+        }
+      }
+
+      // 4. Scan Inline Styles & CSS Stylesheets
+      for (const styleText of tabData.inlineStyles || []) {
+        if (this.secretScanner) {
+          discoveredSecrets.push(...this.secretScanner.scan(styleText, effectivePageUrl, 'css'));
+        }
+        discoveredInItem.push(...this.extractUrlsFromCss(styleText, effectivePageUrl));
+        if (typeof KatanaSecretScanner !== 'undefined') {
+          const maps = KatanaSecretScanner.extractSourceMapUrls(styleText, effectivePageUrl);
+          sourceMapUrlsToFetch.push(...maps);
+        }
+      }
+
+      // Process External CSS Stylesheets
+      const cssFiles = (tabData.cssSources || [])
+        .map(c => this.normalizeUrl(c, effectivePageUrl))
+        .filter(u => u && this.isInScope(u, seedUrl) && !this.visitedUrls.has(u));
+
+      if (cssFiles.length > 0) {
+        const cssToFetch = cssFiles.slice(0, 10);
+        cssToFetch.forEach(u => this.visitedUrls.add(u));
+        const cssPromises = cssToFetch.map(async (cssUrl) => {
+          try {
+            const resp = await this.fetchWithTimeout(cssUrl, { timeout: 4000 });
+            if (resp && resp.ok) {
+              const cssText = await resp.text();
+              if (this.secretScanner) {
+                discoveredSecrets.push(...this.secretScanner.scan(cssText, cssUrl, 'css'));
+              }
+              discoveredInItem.push(...this.extractUrlsFromCss(cssText, cssUrl));
+              if (typeof KatanaSecretScanner !== 'undefined') {
+                const maps = KatanaSecretScanner.extractSourceMapUrls(cssText, cssUrl);
+                sourceMapUrlsToFetch.push(...maps);
+              }
+            }
+          } catch {}
+        });
+        await Promise.allSettled(cssPromises);
+      }
+
       // Process HTML links
       for (const href of tabData.htmlLinks) {
         const normalized = this.normalizeUrl(href, effectivePageUrl);
@@ -903,7 +1029,7 @@ class KatanaCrawlerEngine {
         if (normalized) discoveredInItem.push({ url: normalized, type: `attr-${d.name}`, sourceUrl: effectivePageUrl });
       }
 
-      // Process Live Network Resources (XHR/Fetch/JS Chunks executed by the browser)
+      // Process Live Network Resources
       for (const res of tabData.networkResources) {
         const normalized = this.normalizeUrl(res.name, effectivePageUrl);
         if (normalized) {
@@ -913,34 +1039,6 @@ class KatanaCrawlerEngine {
               ? 'script-bundle'
               : 'network-resource';
           discoveredInItem.push({ url: normalized, type: resType, sourceUrl: effectivePageUrl });
-        }
-      }
-
-      // Parse Inline Scripts with Katana Regex
-      for (const scriptText of tabData.inlineScripts || []) {
-        const jsEndpoints = this.extractEndpointsFromJs(scriptText, effectivePageUrl);
-        discoveredInItem.push(...jsEndpoints);
-      }
-
-      // Parse Raw HTML Document Source with Katana Endpoint Regex (catches embedded routes & webpack strings)
-      if (tabData.rawHtml) {
-        const rawEndpoints = this.extractEndpointsFromJs(tabData.rawHtml, effectivePageUrl);
-        discoveredInItem.push(...rawEndpoints);
-      }
-
-      // Parse Next.js / Nuxt JSON Blobs & Hydration States (finds hidden route manifests)
-      for (const jsonStr of tabData.jsonBlobs || []) {
-        const jsonEndpoints = this.extractEndpointsFromJs(jsonStr, effectivePageUrl);
-        discoveredInItem.push(...jsonEndpoints);
-      }
-
-      // Parse HTML Comments for Hidden / Staging Endpoints
-      for (const comment of tabData.htmlComments || []) {
-        const commentEndpoints = this.extractEndpointsFromJs(comment, effectivePageUrl);
-        discoveredInItem.push(...commentEndpoints);
-        if (this.config.subdomainCrawl) {
-          const commentSubs = this.extractSubdomainsFromText(comment, seedUrl);
-          discoveredInItem.push(...commentSubs);
         }
       }
 
@@ -1020,6 +1118,21 @@ class KatanaCrawlerEngine {
               const endpoints = this.extractEndpointsFromJs(jsText, jsItem.url);
               discoveredInItem.push(...endpoints);
 
+              // Secret scan of external JS bundle
+              if (this.secretScanner) {
+                discoveredSecrets.push(...this.secretScanner.scan(jsText, jsItem.url, 'js-bundle'));
+              }
+
+              // Extract sourcemap references (.js.map)
+              if (typeof KatanaSecretScanner !== 'undefined') {
+                const maps = KatanaSecretScanner.extractSourceMapUrls(jsText, jsItem.url);
+                if (maps.length > 0) {
+                  sourceMapUrlsToFetch.push(...maps);
+                } else if (jsItem.url.endsWith('.js')) {
+                  sourceMapUrlsToFetch.push(jsItem.url + '.map');
+                }
+              }
+
               if (this.config.subdomainCrawl) {
                 const jsSubdomains = this.extractSubdomainsFromText(jsText, seedUrl);
                 if (jsSubdomains.length > 0) {
@@ -1030,6 +1143,42 @@ class KatanaCrawlerEngine {
           } catch {}
         });
         await Promise.allSettled(jsPromises);
+      }
+    }
+
+    // 6b. Deep Source Map Spidering (.js.map and .css.map):
+    // Fetches original unminified source code arrays & audits them for secrets & endpoints
+    if (sourceMapUrlsToFetch.length > 0) {
+      const uniqueMaps = [...new Set(sourceMapUrlsToFetch)]
+        .filter(m => m && this.isInScope(m, seedUrl) && !this.visitedUrls.has(m))
+        .slice(0, 10);
+
+      uniqueMaps.forEach(m => this.visitedUrls.add(m));
+
+      if (uniqueMaps.length > 0) {
+        this.log('inf', `[Katana-Map] Parallel spidering ${uniqueMaps.length} source maps (.js.map)...`);
+        const mapPromises = uniqueMaps.map(async (mapUrl) => {
+          try {
+            const mapResp = await this.fetchWithTimeout(mapUrl, { timeout: 4500 });
+            if (mapResp && mapResp.ok) {
+              const mapText = await mapResp.text();
+              if (mapText.includes('"sources"') || mapText.includes('"version"')) {
+                this.log('inf', `[Katana-Map] Auditing source map: ${mapUrl}`);
+                discoveredInItem.push({ url: mapUrl, type: 'source-map', sourceUrl: effectivePageUrl });
+
+                // Deep secret scanning on original unminified source code!
+                if (this.secretScanner) {
+                  discoveredSecrets.push(...this.secretScanner.scan(mapText, mapUrl, 'source-map'));
+                }
+
+                // Extract endpoints from source map!
+                const mapEndpoints = this.extractEndpointsFromJs(mapText, mapUrl);
+                discoveredInItem.push(...mapEndpoints);
+              }
+            }
+          } catch {}
+        });
+        await Promise.allSettled(mapPromises);
       }
     }
 
@@ -1095,6 +1244,18 @@ class KatanaCrawlerEngine {
 
     const addedCount = await this.storage.addDiscoveredUrls(processedDiscovered);
     this.totalDiscoveredInSession += addedCount;
+
+    // Persist discovered secrets to database & notify dashboard
+    if (this.secretScanner && discoveredSecrets.length > 0) {
+      const savedSecretsCount = await this.storage.saveSecrets(discoveredSecrets);
+      if (savedSecretsCount > 0) {
+        this.totalSecretsInSession += savedSecretsCount;
+        this.log('wrn', `[SECRETS] Discovered ${savedSecretsCount} sensitive credentials/tokens on ${effectivePageUrl}!`);
+        if (this.onSecretFound) {
+          this.onSecretFound(discoveredSecrets);
+        }
+      }
+    }
 
     if (targetId) {
       await this.storage.updateTarget(targetId, {
@@ -1348,6 +1509,20 @@ class KatanaCrawlerEngine {
     const added = await this.storage.addDiscoveredUrls(processed);
     this.totalDiscoveredInSession += added;
     if (this.onUrlFound) this.onUrlFound(processed);
+
+    // Secret scanning in Fast-Fetch mode
+    if (this.secretScanner) {
+      const srcType = contentType.includes('javascript') ? 'js-bundle' : contentType.includes('css') ? 'css' : 'html';
+      const sec = this.secretScanner.scan(body, url, srcType);
+      if (sec.length > 0) {
+        const saved = await this.storage.saveSecrets(sec);
+        if (saved > 0) {
+          this.totalSecretsInSession += saved;
+          this.log('wrn', `[SECRETS] Discovered ${saved} sensitive findings on ${url}!`);
+          if (this.onSecretFound) this.onSecretFound(sec);
+        }
+      }
+    }
   }
 
   pause() {

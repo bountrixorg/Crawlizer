@@ -255,6 +255,17 @@
       <div class="metric-footer">Strict Canonical</div>
     </div>
 
+    <div class="metric-card highlight-glow-rose">
+      <div class="metric-header">
+        <span class="metric-title">SECRETS FOUND</span>
+        <div class="metric-icon-box text-rose">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+        </div>
+      </div>
+      <div class="metric-value text-rose font-mono" id="metric-secrets">0</div>
+      <div class="metric-footer" id="metric-secrets-breakdown">Sensitive Findings</div>
+    </div>
+
     <div class="metric-card">
       <div class="metric-header">
         <span class="metric-title">ERRORS</span>
@@ -283,6 +294,11 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span>Discovered Endpoints</span>
         <span class="tab-badge" id="tab-discovered-count">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-secrets">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+        <span>Secrets & Findings</span>
+        <span class="tab-badge badge-rose" id="tab-secrets-count">0</span>
       </button>
       <button class="nav-tab" data-tab="tab-terminal">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -629,7 +645,92 @@
       </div>
     </div>
 
-    <!-- TAB 3: KATANA TERMINAL LOGS -->
+    <!-- TAB 3: SECRETS & SENSITIVE FINDINGS -->
+    <div class="tab-pane" id="tab-secrets">
+      <div class="glass-panel">
+        <div class="panel-header" style="margin-bottom: 16px;">
+          <div class="panel-title-group">
+            <div class="panel-icon-badge" style="background: rgba(244, 63, 94, 0.15); color: var(--rose);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+            </div>
+            <div>
+              <h3>Secrets & Sensitive Findings</h3>
+              <p class="panel-sub">Real-time detection of API tokens, private keys, cloud credentials & source maps across HTML, JS, CSS, and .map</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="btn-export-secrets-json" class="btn btn-xs btn-glass">Export JSON</button>
+            <button id="btn-export-secrets-csv" class="btn btn-xs btn-glass">Export CSV</button>
+            <button id="btn-copy-secrets" class="btn btn-xs btn-glass">Copy All</button>
+            <button id="btn-clear-secrets" class="btn btn-xs btn-icon-glass" title="Clear all secrets findings">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-toolbar">
+          <div class="search-input-wrapper">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="secrets-search" placeholder="Search finding name, token value, source URL, or code context...">
+          </div>
+
+          <div class="filter-group">
+            <label>Severity:</label>
+            <div class="select-wrapper">
+              <select id="secrets-filter-severity" class="filter-select">
+                <option value="all">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="info">Info / Assets</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label>Source:</label>
+            <div class="select-wrapper">
+              <select id="secrets-filter-source" class="filter-select">
+                <option value="all">All Sources</option>
+                <option value="html">HTML Source</option>
+                <option value="rendered-js">Rendered DOM JS</option>
+                <option value="js-bundle">External JS Bundle</option>
+                <option value="css">CSS / Styles</option>
+                <option value="source-map">Source Map (.map)</option>
+                <option value="html-comment">HTML Comments</option>
+              </select>
+            </div>
+          </div>
+
+          <span class="filter-stats" id="secrets-count-label">0 findings</span>
+        </div>
+
+        <div class="table-wrapper scrollable-table">
+          <table class="data-table" id="secrets-table">
+            <thead>
+              <tr>
+                <th width="40">#</th>
+                <th width="100">Severity</th>
+                <th width="180">Finding Type</th>
+                <th width="280">Detected Secret / Value</th>
+                <th width="110">Source Type</th>
+                <th>Source URL & Code Context</th>
+                <th width="100">Discovered</th>
+              </tr>
+            </thead>
+            <tbody id="secrets-tbody">
+              <tr>
+                <td colspan="7" class="empty-state">No sensitive credentials detected yet. Launch a crawl to start scanning HTML, JS, CSS, and Source Maps!</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: KATANA TERMINAL LOGS -->
     <div class="tab-pane" id="tab-terminal">
       <div class="terminal-container">
         <div class="terminal-header">
@@ -663,6 +764,7 @@ ProjectDiscovery Katana Engine ported to Browser Extension
     </div>
   </main>
 
+  <script src="secret-scanner.js"></script>
   <script src="storage.js"></script>
   <script src="crawler-engine.js"></script>
   <script src="dashboard.js"></script>

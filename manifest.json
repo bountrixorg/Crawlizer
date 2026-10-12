@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Katana - Endpoint Crawler & URL Spider",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Browser extension port of ProjectDiscovery's Katana. Single-tab JS execution & CAPTCHA solving, endpoint spidering, and URL storage.",
   "permissions": [
     "storage",

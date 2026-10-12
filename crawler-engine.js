@@ -22,7 +22,7 @@ class KatanaCrawlerEngine {
       tabRenderDelay: 2000, // Wait 2s after DOM load for JS to execute (Single Page Apps / React / Angular)
       scopeMode: 'same-domain', // 'same-domain', 'same-root', 'regex', 'all'
       scopeRegex: '',
-      subdomainCrawl: false,    // Crawl discovered subdomains (*.example.com) when enabled
+      subdomainCrawl: true,     // Crawl discovered subdomains (*.example.com) when enabled
       openFoundUrlsInTab: true, // Automatically open discovered URLs in the single tab (excluding static assets)
       crawlJavascript: true,    // Deep JS crawl: Fetch & regex-extract external JS bundles
       autoClickButtons: true,   // Automatically click buttons & interactive elements to discover dynamic endpoints

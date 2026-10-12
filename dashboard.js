@@ -111,8 +111,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   await renderTargetsTable();
   await refreshResultsTable();
 
+  // Auto-persist configuration whenever user toggles any switch or changes an input
+  async function persistCurrentConfig() {
+    try {
+      const config = {
+        mode: cfgMode.value,
+        scopeMode: cfgScope.value,
+        scopeRegex: cfgScopeRegex.value.trim(),
+        tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 2000,
+        concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
+        maxDepth: parseInt(cfgDepth.value, 10) || 2,
+        timeout: (parseInt(cfgTimeout.value, 10) || 15) * 1000,
+        subdomainCrawl: cfgSubdomainCrawl.checked,
+        openFoundUrlsInTab: cfgOpenInTab.checked,
+        autoClickButtons: cfgClickButtons.checked,
+        crawlJavascript: cfgCrawlJs.checked,
+        parseRobotsAndSitemaps: cfgRobotsSitemap.checked,
+        userAgent: cfgUserAgent.value.trim()
+      };
+      await storage.saveSetting('crawler_config', config);
+
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          katana_singletab: (cfgMode.value === 'single-tab'),
+          katana_subdomains: cfgSubdomainCrawl.checked,
+          katana_clicker: cfgClickButtons.checked
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to auto-persist config:', e);
+    }
+  }
+
   // Load saved settings if any
-  const savedConfig = await storage.getSetting('crawler_config');
+  let savedConfig = await storage.getSetting('crawler_config');
+  if (!savedConfig && chrome && chrome.storage && chrome.storage.local) {
+    const local = await new Promise(r => chrome.storage.local.get(['katana_singletab', 'katana_subdomains', 'katana_clicker'], r));
+    if (local && (local.katana_subdomains !== undefined || local.katana_singletab !== undefined)) {
+      savedConfig = {
+        subdomainCrawl: local.katana_subdomains !== undefined ? local.katana_subdomains : true,
+        mode: local.katana_singletab === false ? 'fast-fetch' : 'single-tab',
+        autoClickButtons: local.katana_clicker !== undefined ? local.katana_clicker : true
+      };
+    }
+  }
+
   if (savedConfig) {
     if (savedConfig.mode) cfgMode.value = savedConfig.mode;
     if (savedConfig.scopeMode) cfgScope.value = savedConfig.scopeMode;
@@ -121,15 +164,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (savedConfig.concurrency) cfgConcurrency.value = savedConfig.concurrency;
     if (savedConfig.maxDepth) cfgDepth.value = savedConfig.maxDepth;
     if (savedConfig.timeout) cfgTimeout.value = savedConfig.timeout / 1000;
-    if (savedConfig.subdomainCrawl !== undefined) cfgSubdomainCrawl.checked = savedConfig.subdomainCrawl;
-    if (savedConfig.openFoundUrlsInTab !== undefined) cfgOpenInTab.checked = savedConfig.openFoundUrlsInTab;
-    if (savedConfig.autoClickButtons !== undefined) cfgClickButtons.checked = savedConfig.autoClickButtons;
-    if (savedConfig.crawlJavascript !== undefined) cfgCrawlJs.checked = savedConfig.crawlJavascript;
-    if (savedConfig.parseRobotsAndSitemaps !== undefined) cfgRobotsSitemap.checked = savedConfig.parseRobotsAndSitemaps;
+    if (savedConfig.subdomainCrawl !== undefined) {
+      cfgSubdomainCrawl.checked = Boolean(savedConfig.subdomainCrawl);
+    } else {
+      cfgSubdomainCrawl.checked = true;
+    }
+    if (savedConfig.openFoundUrlsInTab !== undefined) cfgOpenInTab.checked = Boolean(savedConfig.openFoundUrlsInTab);
+    if (savedConfig.autoClickButtons !== undefined) cfgClickButtons.checked = Boolean(savedConfig.autoClickButtons);
+    if (savedConfig.crawlJavascript !== undefined) cfgCrawlJs.checked = Boolean(savedConfig.crawlJavascript);
+    if (savedConfig.parseRobotsAndSitemaps !== undefined) cfgRobotsSitemap.checked = Boolean(savedConfig.parseRobotsAndSitemaps);
     if (savedConfig.userAgent) cfgUserAgent.value = savedConfig.userAgent;
     toggleModeGroup();
     toggleRegexGroup();
+  } else {
+    // Brand new state: keep Subdomain Crawl enabled by default
+    cfgSubdomainCrawl.checked = true;
+    await persistCurrentConfig();
   }
+
+  // Attach immediate auto-save listeners to all config controls
+  [cfgMode, cfgScope, cfgScopeRegex, cfgTabDelay, cfgConcurrency, cfgDepth, cfgTimeout, 
+   cfgSubdomainCrawl, cfgOpenInTab, cfgClickButtons, cfgCrawlJs, cfgRobotsSitemap, cfgUserAgent].forEach(el => {
+    if (el) {
+      el.addEventListener('change', persistCurrentConfig);
+    }
+  });
 
   function toggleModeGroup() {
     if (cfgMode.value === 'single-tab') {

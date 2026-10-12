@@ -33,11 +33,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load saved config toggles
   async function loadPopupConfig() {
     try {
-      const savedConfig = await window.katanaStorage.getSetting('crawler_config');
+      let savedConfig = await window.katanaStorage.getSetting('crawler_config');
+      if (!savedConfig && chrome && chrome.storage && chrome.storage.local) {
+        const local = await new Promise(r => chrome.storage.local.get(['katana_singletab', 'katana_subdomains', 'katana_clicker'], r));
+        if (local && (local.katana_subdomains !== undefined || local.katana_singletab !== undefined)) {
+          savedConfig = {
+            mode: local.katana_singletab === false ? 'fast-fetch' : 'single-tab',
+            subdomainCrawl: local.katana_subdomains !== undefined ? local.katana_subdomains : true,
+            autoClickButtons: local.katana_clicker !== undefined ? local.katana_clicker : true
+          };
+        }
+      }
+
       if (savedConfig) {
         if (savedConfig.mode !== undefined) cfgSingleTab.checked = (savedConfig.mode === 'single-tab');
-        if (savedConfig.subdomainCrawl !== undefined) cfgSubdomains.checked = savedConfig.subdomainCrawl;
-        if (savedConfig.autoClickButtons !== undefined) cfgClicker.checked = savedConfig.autoClickButtons;
+        if (savedConfig.subdomainCrawl !== undefined) cfgSubdomains.checked = Boolean(savedConfig.subdomainCrawl);
+        else cfgSubdomains.checked = true;
+        if (savedConfig.autoClickButtons !== undefined) cfgClicker.checked = Boolean(savedConfig.autoClickButtons);
+      } else {
+        cfgSubdomains.checked = true;
       }
     } catch (e) {
       console.warn('Could not load config in popup:', e);
@@ -47,10 +61,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function savePopupConfig() {
     try {
       const savedConfig = (await window.katanaStorage.getSetting('crawler_config')) || {};
-      savedConfig.mode = cfgSingleTab.checked ? 'single-tab' : 'fetch';
+      savedConfig.mode = cfgSingleTab.checked ? 'single-tab' : 'fast-fetch';
       savedConfig.subdomainCrawl = cfgSubdomains.checked;
       savedConfig.autoClickButtons = cfgClicker.checked;
-      await window.katanaStorage.setSetting('crawler_config', savedConfig);
+      await window.katanaStorage.saveSetting('crawler_config', savedConfig);
+
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          katana_singletab: cfgSingleTab.checked,
+          katana_subdomains: cfgSubdomains.checked,
+          katana_clicker: cfgClicker.checked
+        });
+      }
     } catch (e) {
       console.warn('Could not save config in popup:', e);
     }

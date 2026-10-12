@@ -539,7 +539,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.configure(config);
     await storage.saveSetting('crawler_config', config);
 
-    const pending = await storage.getPendingTargets();
+    let pending = await storage.getPendingTargets();
+    if (pending.length === 0) {
+      // If all targets were already marked completed in a previous run, automatically re-activate them!
+      const allTargets = await storage.getAllTargets();
+      if (allTargets.length > 0) {
+        engine.log('inf', `Re-activating ${allTargets.length} seed targets for new crawl session...`);
+        const tx = storage.db.transaction('targets', 'readwrite');
+        const store = tx.objectStore('targets');
+        for (const t of allTargets) {
+          t.status = 'pending';
+          store.put(t);
+        }
+        await new Promise(r => { tx.oncomplete = r; });
+        pending = await storage.getPendingTargets();
+      }
+    }
+
     if (pending.length === 0) {
       alert('No pending targets to crawl. Please upload a .txt file or paste seed URLs.');
       return;

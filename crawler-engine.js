@@ -89,6 +89,9 @@ class KatanaCrawlerEngine {
       const candidateObj = new URL(candidateUrl);
       const seedObj = new URL(seedUrl);
 
+      const candidateHost = candidateObj.hostname.replace(/^www\./i, '').toLowerCase();
+      const seedHost = seedObj.hostname.replace(/^www\./i, '').toLowerCase();
+
       // Subdomain Crawl Mode: If enabled, any URL matching the seed's apex domain (*.domain.com) is in-scope
       if (this.config.subdomainCrawl) {
         const candidateApex = this.getApexDomain(candidateObj.hostname).toLowerCase();
@@ -99,7 +102,7 @@ class KatanaCrawlerEngine {
       }
 
       if (this.config.scopeMode === 'same-domain') {
-        return candidateObj.hostname.toLowerCase() === seedObj.hostname.toLowerCase();
+        return candidateHost === seedHost;
       }
 
       if (this.config.scopeMode === 'same-root') {
@@ -111,7 +114,7 @@ class KatanaCrawlerEngine {
         return re.test(candidateUrl);
       }
 
-      return candidateObj.hostname.toLowerCase() === seedObj.hostname.toLowerCase();
+      return candidateHost === seedHost;
     } catch {
       return false;
     }
@@ -546,7 +549,7 @@ class KatanaCrawlerEngine {
       networkResources: []
     };
 
-    // 1. CAPTCHA & Cloudflare Bot Challenge Detection
+    // 1. CAPTCHA & Cloudflare Bot Challenge Detection (Checks for real blocking interstitials)
     const title = (document.title || '').toLowerCase();
     const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
 
@@ -554,29 +557,20 @@ class KatanaCrawlerEngine {
                          title.includes('attention required! | cloudflare') ||
                          document.querySelector('#challenge-form') !== null ||
                          document.querySelector('#cf-challenge-running') !== null ||
-                         document.querySelector('.cf-turnstile') !== null ||
-                         document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null;
+                         document.querySelector('.cf-turnstile-wrapper') !== null ||
+                         (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')));
 
-    const isRecaptcha = document.querySelector('.g-recaptcha, iframe[src*="recaptcha"]') !== null;
-    const isHcaptcha = document.querySelector('.h-captcha, iframe[src*="hcaptcha"]') !== null;
-    const isGeneralCaptcha = bodyText.includes('verify you are human') ||
-                             bodyText.includes('security check') ||
-                             bodyText.includes('please solve the challenge') ||
-                             bodyText.includes('enter the characters you see');
+    // Only flag true blocking challenge pages! NOT pages with invisible background reCAPTCHA widgets!
+    const isBlockingCaptcha = (
+      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('robot')) &&
+      (document.querySelector('.g-recaptcha, .h-captcha') !== null || bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge'))
+    );
 
     if (isCloudflare) {
       result.captchaDetected = true;
       result.challengeType = 'Cloudflare Challenge / Turnstile';
       return result;
-    } else if (isRecaptcha) {
-      result.captchaDetected = true;
-      result.challengeType = 'Google reCAPTCHA';
-      return result;
-    } else if (isHcaptcha) {
-      result.captchaDetected = true;
-      result.challengeType = 'hCaptcha';
-      return result;
-    } else if (isGeneralCaptcha && (title.includes('challenge') || title.includes('verify') || title.includes('captcha'))) {
+    } else if (isBlockingCaptcha) {
       result.captchaDetected = true;
       result.challengeType = 'Bot Verification / Captcha';
       return result;
@@ -832,6 +826,22 @@ class KatanaCrawlerEngine {
     let discoveredInItem = [];
     const effectivePageUrl = tabData?.pageUrl || url;
 
+    // Fallback: If in-tab DOM inspection returned null (e.g. extension permission denied on error page or CSP sandbox), fetch directly
+    if (!tabData) {
+      try {
+        this.log('inf', `[Engine Fallback] In-tab execution unavailable for ${url}, spidering via background HTTP engine...`);
+        const resp = await this.fetchWithTimeout(url, { timeout: 8000 });
+        if (resp && resp.ok) {
+          const bodyText = await resp.text();
+          const fallbackUrls = this.extractUrlsFromHtml(bodyText, url);
+          discoveredInItem.push(...fallbackUrls);
+          this.log('inf', `[Engine Fallback] Extracted ${fallbackUrls.length} links via background spider for ${url}`);
+        }
+      } catch (err) {
+        this.log('wrn', `Fallback fetch failed for ${url}: ${err.message}`);
+      }
+    }
+
     if (tabData) {
       // Process HTML links
       for (const href of tabData.htmlLinks) {
@@ -960,8 +970,8 @@ class KatanaCrawlerEngine {
       }
     }
 
-    // 7. Check robots.txt and sitemap.xml on depth 1 seeds
-    if (depth === 1 && this.config.parseRobotsAndSitemaps) {
+    // 7. Check robots.txt and sitemap.xml on depth 0 and 1 seeds
+    if (depth <= 1 && this.config.parseRobotsAndSitemaps) {
       try {
         const robotsUrls = await this.fetchRobotsAndSitemaps(url);
         discoveredInItem.push(...robotsUrls);

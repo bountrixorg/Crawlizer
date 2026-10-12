@@ -135,6 +135,8 @@ class KatanaStorage {
 
           for (const item of all) {
             if (!item || !item.match) continue;
+            const matchKey = item.match.trim();
+            if (!matchKey) continue;
 
             const itemSources = Array.isArray(item.sources) && item.sources.length > 0
               ? item.sources
@@ -145,18 +147,21 @@ class KatanaStorage {
                   discoveredAt: item.discoveredAt || Date.now()
                 }] : []);
 
-            if (consolidatedMap.has(item.match)) {
+            if (consolidatedMap.has(matchKey)) {
               // Existing secret found: merge locations and mark duplicate for deletion
-              const existing = consolidatedMap.get(item.match);
+              const existing = consolidatedMap.get(matchKey);
               for (const src of itemSources) {
-                if (!existing.sources.some(s => s.url === src.url)) {
+                if (src.url && !existing.sources.some(s => s.url === src.url)) {
                   existing.sources.push(src);
                 }
               }
-              duplicatesToDelete.push(item.id);
+              if (item.id && item.id !== existing.id) {
+                duplicatesToDelete.push(item.id);
+              }
             } else {
+              item.match = matchKey;
               item.sources = itemSources;
-              consolidatedMap.set(item.match, item);
+              consolidatedMap.set(matchKey, item);
             }
           }
 

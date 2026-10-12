@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const metricSubdomains = document.getElementById('metric-subdomains');
   const metricDupes = document.getElementById('metric-dupes');
   const metricErrors = document.getElementById('metric-errors');
+  const metricDuration = document.getElementById('metric-duration');
+  const metricDurationStatus = document.getElementById('metric-duration-status');
   const progressBarFill = document.getElementById('progress-bar-fill');
 
   // Header & Status
@@ -120,7 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         scopeRegex: cfgScopeRegex.value.trim(),
         tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 2000,
         concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
-        maxDepth: parseInt(cfgDepth.value, 10) || 2,
+        maxDepth: parseInt(cfgDepth.value, 10) || 3,
         timeout: (parseInt(cfgTimeout.value, 10) || 15) * 1000,
         subdomainCrawl: cfgSubdomainCrawl.checked,
         openFoundUrlsInTab: cfgOpenInTab.checked,
@@ -280,9 +282,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  // ==========================================
+  // Live Scan Duration Timer
+  // ==========================================
+  let scanTimerInterval = null;
+  let totalElapsedSeconds = 0;
+  let isTimerPaused = false;
+
+  function formatTime(totalSeconds) {
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (hrs > 0) {
+      return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+    }
+    return `00:${pad(mins)}:${pad(secs)}`;
+  }
+
+  function startScanTimer() {
+    stopScanTimer(false);
+    totalElapsedSeconds = 0;
+    isTimerPaused = false;
+    if (metricDuration) metricDuration.textContent = '00:00:00';
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Running live';
+
+    scanTimerInterval = setInterval(() => {
+      if (!isTimerPaused) {
+        totalElapsedSeconds++;
+        const formatted = formatTime(totalElapsedSeconds);
+        if (metricDuration) metricDuration.textContent = formatted;
+        if (headerStatusLabel && (headerStatusLabel.textContent.startsWith('CRAWLING') || headerStatusLabel.textContent.startsWith('RUNNING'))) {
+          headerStatusLabel.textContent = `CRAWLING (${formatted.slice(3)})`;
+        }
+      }
+    }, 1000);
+  }
+
+  function pauseScanTimer() {
+    isTimerPaused = true;
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Paused';
+  }
+
+  function resumeScanTimer() {
+    isTimerPaused = false;
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Running live';
+  }
+
+  function stopScanTimer(updateSummary = true) {
+    if (scanTimerInterval) {
+      clearInterval(scanTimerInterval);
+      scanTimerInterval = null;
+    }
+    if (updateSummary && totalElapsedSeconds > 0) {
+      const mins = Math.floor(totalElapsedSeconds / 60);
+      const secs = totalElapsedSeconds % 60;
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      if (metricDurationStatus) metricDurationStatus.textContent = `Finished in ${timeStr}`;
+    }
+  }
+
   engine.onStateChange = (state) => {
     headerStatusDot.className = 'status-indicator-dot';
     if (state === 'running') {
+      if (!scanTimerInterval) {
+        startScanTimer();
+      } else {
+        resumeScanTimer();
+      }
       headerStatusDot.classList.add('running');
       headerStatusLabel.textContent = 'CRAWLING';
       btnStart.style.display = 'none';
@@ -291,6 +358,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnStop.disabled = false;
       if (cfgMode.value === 'single-tab') btnFocusTab.style.display = 'inline-flex';
     } else if (state === 'paused') {
+      pauseScanTimer();
       headerStatusDot.classList.add('paused');
       headerStatusLabel.textContent = 'PAUSED';
       btnStart.style.display = 'none';
@@ -298,6 +366,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnResume.style.display = 'inline-flex';
       btnStop.disabled = false;
     } else {
+      stopScanTimer(true);
       headerStatusLabel.textContent = 'IDLE';
       btnStart.style.display = 'inline-flex';
       btnPause.style.display = 'none';
@@ -457,7 +526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       scopeRegex: cfgScopeRegex.value.trim(),
       tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 2000,
       concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
-      maxDepth: parseInt(cfgDepth.value, 10) || 1,
+      maxDepth: parseInt(cfgDepth.value, 10) || 3,
       timeout: (parseInt(cfgTimeout.value, 10) || 15) * 1000,
       subdomainCrawl: cfgSubdomainCrawl.checked,
       openFoundUrlsInTab: cfgOpenInTab.checked,

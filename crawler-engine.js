@@ -17,7 +17,7 @@ class KatanaCrawlerEngine {
     this.config = {
       mode: 'single-tab', // 'single-tab' (interactive browser tab) or 'fast-fetch' (background HTTP)
       concurrency: 1,     // In single-tab mode, concurrency is strictly 1 (single tab); in fast-fetch, up to 30
-      maxDepth: 2,        // Follow discovered in-scope endpoints in the browser tab
+      maxDepth: 3,        // Follow discovered in-scope endpoints in the browser tab
       timeout: 15000,     // 15 seconds per request/tab load
       tabRenderDelay: 2000, // Wait 2s after DOM load for JS to execute (Single Page Apps / React / Angular)
       scopeMode: 'same-domain', // 'same-domain', 'same-root', 'regex', 'all'
@@ -999,9 +999,10 @@ class KatanaCrawlerEngine {
       // Enqueue in-scope links for further depth:
       // CRITICAL: Only enqueue NAVIGABLE pages in the single tab (NOT raw .js, .css, or media files!)
       // This loads actual HTML pages, web endpoints, and subdomains in the tab to find the maximum possible URLs!
+      const canOpenInTab = (this.config.openFoundUrlsInTab !== false);
       if (inScope &&
           depth < this.config.maxDepth &&
-          this.config.openFoundUrlsInTab &&
+          canOpenInTab &&
           this.isNavigableInTab(canonical)) {
 
         if (!this.visitedUrls.has(canonical) && !this.enqueuedUrls.has(canonical)) {
@@ -1012,10 +1013,12 @@ class KatanaCrawlerEngine {
             depth: depth + 1,
             targetId: null
           });
-          this.log('inf', `[Queue Page for Tab] [Depth ${depth + 1}] ${canonical}`);
+          this.log('inf', `[Open in Tab Queued] [Depth ${depth + 1}/${this.config.maxDepth}] ${canonical}`);
         }
       }
     }
+
+    this.updateProgress();
 
     const addedCount = await this.storage.addDiscoveredUrls(processedDiscovered);
     this.totalDiscoveredInSession += addedCount;
@@ -1128,7 +1131,7 @@ class KatanaCrawlerEngine {
           url: canonical,
           seedUrl: canonical,
           targetId: t.id || null,
-          depth: 1
+          depth: 0
         });
       }
     }
@@ -1243,10 +1246,30 @@ class KatanaCrawlerEngine {
     const processed = [];
     for (const d of discovered) {
       if (this.shouldIgnoreExtension(d.url)) continue;
-      d.scope = this.isInScope(d.url, seedUrl) ? 'in-scope' : 'out-of-scope';
+      const canonical = this.canonicalUrl(d.url);
+      if (!canonical) continue;
+      d.url = canonical;
+
+      const inScope = this.isInScope(canonical, seedUrl);
+      d.scope = inScope ? 'in-scope' : 'out-of-scope';
       d.targetUrl = seedUrl;
       d.depth = depth;
-      processed.push(d);
+
+      if (!this.visitedUrls.has(canonical) && !this.storage.knownUrlSet.has(canonical)) {
+        processed.push(d);
+      }
+
+      if (inScope && depth < this.config.maxDepth && this.isNavigableInTab(canonical)) {
+        if (!this.visitedUrls.has(canonical) && !this.enqueuedUrls.has(canonical)) {
+          this.enqueuedUrls.add(canonical);
+          this.queue.push({
+            url: canonical,
+            seedUrl: seedUrl,
+            depth: depth + 1,
+            targetId: null
+          });
+        }
+      }
     }
 
     const added = await this.storage.addDiscoveredUrls(processed);

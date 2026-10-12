@@ -11,7 +11,7 @@
 |__/  \__/ \_______/   \___/   \_______/|__/  |__/ \_______/        |________/|__/  \__/   \___/  
                                                                                                   
                                                                                                   
-                                                                                                   
+                                                                                                      
 ```
 
 ### ⚡ Next-Generation In-Browser Web Spider & Endpoint Discovery Engine ⚡

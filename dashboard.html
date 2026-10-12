@@ -222,6 +222,17 @@
       <div class="metric-footer">Req / Second</div>
     </div>
 
+    <div class="metric-card highlight-glow-amber">
+      <div class="metric-header">
+        <span class="metric-title">SCAN DURATION</span>
+        <div class="metric-icon-box text-amber">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+      </div>
+      <div class="metric-value font-mono text-amber" id="metric-duration">00:00:00</div>
+      <div class="metric-footer" id="metric-duration-status">Total Scan Time</div>
+    </div>
+
     <div class="metric-card highlight-glow-purple">
       <div class="metric-header">
         <span class="metric-title">SUBDOMAINS</span>
@@ -399,7 +410,7 @@
 
               <div class="form-group">
                 <label for="cfg-depth">Max Crawl Depth</label>
-                <input type="number" id="cfg-depth" class="form-control font-mono" value="2" min="1" max="5">
+                <input type="number" id="cfg-depth" class="form-control font-mono" value="3" min="1" max="10">
               </div>
 
               <div class="form-group">

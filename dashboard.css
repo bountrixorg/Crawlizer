@@ -528,6 +528,15 @@ body.katana-app {
   background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), var(--bg-surface));
 }
 
+.highlight-glow-amber {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), var(--bg-surface));
+}
+
+.text-amber {
+  color: #f59e0b;
+}
+
 .metric-header {
   display: flex;
   justify-content: space-between;

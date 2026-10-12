@@ -9,7 +9,7 @@ class KatanaStorage {
     this.dbVersion = 2;
     this.db = null;
     this.knownUrlSet = new Set(); // In-memory URL deduplication set
-    this.knownSecretSet = new Set(); // In-memory secret deduplication set
+    this.knownSecretMap = new Map(); // In-memory unique secret deduplication map: match -> record
   }
 
   async init() {
@@ -93,10 +93,10 @@ class KatanaStorage {
     }
   }
 
-  // Load existing URLs and Secrets into in-memory Sets for instant O(1) deduplication
+  // Load existing URLs and Secrets into in-memory Sets/Maps for instant O(1) deduplication
   async loadUrlCache() {
     this.knownUrlSet.clear();
-    this.knownSecretSet.clear();
+    this.knownSecretMap.clear();
 
     await new Promise((resolve) => {
       const tx = this.db.transaction('discovered_urls', 'readonly');
@@ -119,20 +119,52 @@ class KatanaStorage {
 
     if (this.db.objectStoreNames.contains('secrets')) {
       await new Promise((resolve) => {
-        const tx = this.db.transaction('secrets', 'readonly');
+        const tx = this.db.transaction('secrets', 'readwrite');
         const store = tx.objectStore('secrets');
-        const req = store.openCursor();
+        const req = store.getAll();
 
-        req.onsuccess = (e) => {
-          const cursor = e.target.result;
-          if (cursor) {
-            const v = cursor.value;
-            const key = `${v.ruleName}:::${v.match}:::${v.sourceUrl}`;
-            this.knownSecretSet.add(key);
-            cursor.continue();
-          } else {
-            resolve();
+        req.onsuccess = () => {
+          const all = req.result || [];
+          const consolidatedMap = new Map();
+          const duplicatesToDelete = [];
+
+          for (const item of all) {
+            if (!item || !item.match) continue;
+
+            const itemSources = Array.isArray(item.sources) && item.sources.length > 0
+              ? item.sources
+              : (item.sourceUrl ? [{
+                  url: item.sourceUrl,
+                  type: item.sourceType || 'html',
+                  context: item.context || '',
+                  discoveredAt: item.discoveredAt || Date.now()
+                }] : []);
+
+            if (consolidatedMap.has(item.match)) {
+              // Existing secret found: merge locations and mark duplicate for deletion
+              const existing = consolidatedMap.get(item.match);
+              for (const src of itemSources) {
+                if (!existing.sources.some(s => s.url === src.url)) {
+                  existing.sources.push(src);
+                }
+              }
+              duplicatesToDelete.push(item.id);
+            } else {
+              item.sources = itemSources;
+              consolidatedMap.set(item.match, item);
+            }
           }
+
+          // Clean up duplicates from DB and update consolidated records
+          for (const delId of duplicatesToDelete) {
+            store.delete(delId);
+          }
+          for (const [match, record] of consolidatedMap.entries()) {
+            store.put(record);
+            this.knownSecretMap.set(match, record);
+          }
+
+          resolve();
         };
 
         req.onerror = () => resolve();
@@ -313,29 +345,82 @@ class KatanaStorage {
   // Secrets & Sensitive Findings Operations
   // ==========================================
   async saveSecrets(secretsList) {
-    if (!secretsList || secretsList.length === 0) return 0;
+    if (!secretsList || secretsList.length === 0) return { newCount: 0, updatedCount: 0 };
     await this.init();
 
-    const newSecrets = [];
+    const secretsToInsert = [];
+    const secretsToUpdate = [];
+    const now = Date.now();
+
     for (const s of secretsList) {
-      const key = `${s.ruleName}:::${s.match}:::${s.sourceUrl}`;
-      if (!this.knownSecretSet.has(key)) {
-        this.knownSecretSet.add(key);
-        newSecrets.push(s);
+      if (!s || !s.match) continue;
+
+      const locItem = {
+        url: s.sourceUrl,
+        type: s.sourceType || 'html',
+        context: s.context || '',
+        discoveredAt: s.discoveredAt || now
+      };
+
+      if (this.knownSecretMap.has(s.match)) {
+        const existing = this.knownSecretMap.get(s.match);
+        if (!Array.isArray(existing.sources)) {
+          existing.sources = existing.sourceUrl ? [{
+            url: existing.sourceUrl,
+            type: existing.sourceType || 'html',
+            context: existing.context || '',
+            discoveredAt: existing.discoveredAt || now
+          }] : [];
+        }
+
+        // Avoid adding duplicate location URLs to the same secret
+        const alreadyHasUrl = existing.sources.some(loc => loc.url === s.sourceUrl);
+        if (!alreadyHasUrl) {
+          existing.sources.push(locItem);
+          existing.lastDiscoveredAt = now;
+          if (!secretsToUpdate.some(u => u.match === existing.match)) {
+            secretsToUpdate.push(existing);
+          }
+        }
+      } else {
+        const newRecord = {
+          ruleName: s.ruleName,
+          severity: s.severity || 'info',
+          category: s.category || 'General',
+          match: s.match,
+          masked: s.masked || '••••••••',
+          sources: [locItem],
+          firstDiscoveredAt: s.discoveredAt || now,
+          lastDiscoveredAt: s.discoveredAt || now
+        };
+        this.knownSecretMap.set(s.match, newRecord);
+        secretsToInsert.push(newRecord);
       }
     }
 
-    if (newSecrets.length === 0) return 0;
+    if (secretsToInsert.length === 0 && secretsToUpdate.length === 0) {
+      return { newCount: 0, updatedCount: 0 };
+    }
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('secrets', 'readwrite');
       const store = tx.objectStore('secrets');
 
-      for (const item of newSecrets) {
-        store.add(item);
+      for (const item of secretsToInsert) {
+        const req = store.add(item);
+        req.onsuccess = (e) => {
+          item.id = e.target.result;
+        };
       }
 
-      tx.oncomplete = () => resolve(newSecrets.length);
+      for (const item of secretsToUpdate) {
+        store.put(item);
+      }
+
+      tx.oncomplete = () => resolve({
+        newCount: secretsToInsert.length,
+        updatedCount: secretsToUpdate.length
+      });
       tx.onerror = (e) => reject(e.target.error);
     });
   }
@@ -353,13 +438,29 @@ class KatanaStorage {
       req.onsuccess = () => {
         let results = req.result || [];
 
+        // Normalize legacy format if any row hasn't been migrated
+        results = results.map(item => {
+          if (!Array.isArray(item.sources) || item.sources.length === 0) {
+            item.sources = item.sourceUrl ? [{
+              url: item.sourceUrl,
+              type: item.sourceType || 'html',
+              context: item.context || '',
+              discoveredAt: item.discoveredAt || Date.now()
+            }] : [];
+          }
+          return item;
+        });
+
         if (filters.search) {
           const q = filters.search.toLowerCase();
           results = results.filter(item => 
-            item.ruleName.toLowerCase().includes(q) || 
-            item.match.toLowerCase().includes(q) || 
-            (item.sourceUrl && item.sourceUrl.toLowerCase().includes(q)) ||
-            (item.context && item.context.toLowerCase().includes(q))
+            (item.ruleName && item.ruleName.toLowerCase().includes(q)) || 
+            (item.match && item.match.toLowerCase().includes(q)) || 
+            (item.category && item.category.toLowerCase().includes(q)) ||
+            (item.sources && item.sources.some(src => 
+              (src.url && src.url.toLowerCase().includes(q)) || 
+              (src.context && src.context.toLowerCase().includes(q))
+            ))
           );
         }
 
@@ -372,16 +473,20 @@ class KatanaStorage {
         }
 
         if (filters.sourceType && filters.sourceType !== 'all') {
-          results = results.filter(item => item.sourceType === filters.sourceType);
+          results = results.filter(item => 
+            item.sources && item.sources.some(src => (src.type || '').toLowerCase() === filters.sourceType.toLowerCase())
+          );
         }
 
-        // Sort: critical > high > medium > info > date desc
+        // Sort: critical > high > medium > low > info > date desc
         const sevOrder = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
         results.sort((a, b) => {
           const sa = sevOrder[a.severity] || 0;
           const sb = sevOrder[b.severity] || 0;
           if (sa !== sb) return sb - sa;
-          return (b.discoveredAt || 0) - (a.discoveredAt || 0);
+          const timeA = a.lastDiscoveredAt || a.firstDiscoveredAt || a.discoveredAt || 0;
+          const timeB = b.lastDiscoveredAt || b.firstDiscoveredAt || b.discoveredAt || 0;
+          return timeB - timeA;
         });
 
         resolve(results);
@@ -393,7 +498,7 @@ class KatanaStorage {
 
   async clearSecrets() {
     await this.init();
-    this.knownSecretSet.clear();
+    this.knownSecretMap.clear();
     return new Promise((resolve, reject) => {
       if (!this.db.objectStoreNames.contains('secrets')) return resolve();
       const tx = this.db.transaction('secrets', 'readwrite');
@@ -407,7 +512,7 @@ class KatanaStorage {
     await this.init();
     const targets = await this.getAllTargets();
     const totalDiscovered = this.knownUrlSet.size;
-    const totalSecrets = this.knownSecretSet.size;
+    const totalSecrets = this.knownSecretMap.size;
 
     const stats = {
       totalTargets: targets.length,
@@ -424,7 +529,7 @@ class KatanaStorage {
   async clearAll() {
     await this.init();
     this.knownUrlSet.clear();
-    this.knownSecretSet.clear();
+    this.knownSecretMap.clear();
     return new Promise((resolve, reject) => {
       const stores = ['targets', 'discovered_urls'];
       if (this.db.objectStoreNames.contains('secrets')) stores.push('secrets');

@@ -1247,10 +1247,16 @@ class KatanaCrawlerEngine {
 
     // Persist discovered secrets to database & notify dashboard
     if (this.secretScanner && discoveredSecrets.length > 0) {
-      const savedSecretsCount = await this.storage.saveSecrets(discoveredSecrets);
-      if (savedSecretsCount > 0) {
-        this.totalSecretsInSession += savedSecretsCount;
-        this.log('wrn', `[SECRETS] Discovered ${savedSecretsCount} sensitive credentials/tokens on ${effectivePageUrl}!`);
+      const res = await this.storage.saveSecrets(discoveredSecrets);
+      const newCount = (typeof res === 'object') ? (res.newCount || 0) : (res || 0);
+      const updatedCount = (typeof res === 'object') ? (res.updatedCount || 0) : 0;
+      if (newCount > 0 || updatedCount > 0) {
+        this.totalSecretsInSession += newCount;
+        if (newCount > 0) {
+          this.log('wrn', `[SECRETS] Discovered ${newCount} new unique sensitive credential(s) on ${effectivePageUrl}!${updatedCount > 0 ? ` (+${updatedCount} location updates)` : ''}`);
+        } else {
+          this.log('info', `[SECRETS] Linked existing secret(s) to new location on ${effectivePageUrl} (+${updatedCount} locations)`);
+        }
         if (this.onSecretFound) {
           this.onSecretFound(discoveredSecrets);
         }
@@ -1515,10 +1521,14 @@ class KatanaCrawlerEngine {
       const srcType = contentType.includes('javascript') ? 'js-bundle' : contentType.includes('css') ? 'css' : 'html';
       const sec = this.secretScanner.scan(body, url, srcType);
       if (sec.length > 0) {
-        const saved = await this.storage.saveSecrets(sec);
-        if (saved > 0) {
-          this.totalSecretsInSession += saved;
-          this.log('wrn', `[SECRETS] Discovered ${saved} sensitive findings on ${url}!`);
+        const res = await this.storage.saveSecrets(sec);
+        const newCount = (typeof res === 'object') ? (res.newCount || 0) : (res || 0);
+        const updatedCount = (typeof res === 'object') ? (res.updatedCount || 0) : 0;
+        if (newCount > 0 || updatedCount > 0) {
+          this.totalSecretsInSession += newCount;
+          if (newCount > 0) {
+            this.log('wrn', `[SECRETS] Discovered ${newCount} new unique sensitive findings on ${url}!${updatedCount > 0 ? ` (+${updatedCount} locations)` : ''}`);
+          }
           if (this.onSecretFound) this.onSecretFound(sec);
         }
       }

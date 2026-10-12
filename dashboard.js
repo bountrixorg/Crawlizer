@@ -898,6 +898,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSecretsTable(cachedSecrets);
   }
 
+  function formatSourceTag(type) {
+    const t = (type || 'html').toLowerCase();
+    let label = t.toUpperCase();
+    let tagClass = 'tag-html';
+    if (t.includes('rendered') || t === 'rendered-js') {
+      label = 'DOM JS';
+      tagClass = 'tag-rendered-js';
+    } else if (t.includes('bundle') || t === 'js-bundle') {
+      label = 'JS BUNDLE';
+      tagClass = 'tag-js-bundle';
+    } else if (t === 'css') {
+      label = 'CSS';
+      tagClass = 'tag-css';
+    } else if (t.includes('map') || t === 'source-map') {
+      label = '.MAP';
+      tagClass = 'tag-source-map';
+    } else if (t.includes('comment') || t === 'html-comment') {
+      label = 'COMMENT';
+      tagClass = 'tag-html-comment';
+    }
+    return `<span class="secret-src-tag ${tagClass}">${label}</span>`;
+  }
+
+  function renderSourceItem(src) {
+    return `
+      <div class="secret-location-item">
+        <div class="secret-location-header">
+          ${formatSourceTag(src.type)}
+          <a href="${escapeHtml(src.url)}" target="_blank" class="url-link text-xs" style="color: var(--cyan-bright); word-break: break-all;">${escapeHtml(src.url)}</a>
+        </div>
+        ${src.context ? `<div class="secret-context-snippet">${escapeHtml(src.context)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function renderSecretsTable(secrets) {
     if (!secretsTbody) return;
 
@@ -911,14 +946,45 @@ document.addEventListener('DOMContentLoaded', async () => {
       const sevClass = s.severity === 'critical' ? 'badge-sev-critical' :
                        s.severity === 'high' ? 'badge-sev-high' :
                        s.severity === 'medium' ? 'badge-sev-medium' : 'badge-sev-info';
-      
-      const timeStr = s.discoveredAt ? new Date(s.discoveredAt).toLocaleTimeString() : '-';
+
+      const sources = Array.isArray(s.sources) && s.sources.length > 0
+        ? s.sources
+        : (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType || 'html', context: s.context || '' }] : []);
+
+      const locCount = sources.length;
+      const countBadgeClass = locCount > 1 ? 'secret-loc-count-badge multi' : 'secret-loc-count-badge';
+      const countBadge = `<span class="${countBadgeClass}">${locCount} ${locCount === 1 ? 'location' : 'locations'}</span>`;
+
+      // Render location list with accordion toggle if > 2 locations
+      const initialSources = sources.slice(0, 2);
+      const remainingSources = sources.slice(2);
+
+      let locationsHtml = `<div class="secret-locations-list">`;
+      initialSources.forEach(src => {
+        locationsHtml += renderSourceItem(src);
+      });
+
+      if (remainingSources.length > 0) {
+        locationsHtml += `<div class="secret-locations-extra" style="display: none;">`;
+        remainingSources.forEach(src => {
+          locationsHtml += renderSourceItem(src);
+        });
+        locationsHtml += `</div>`;
+        locationsHtml += `<button class="secret-more-toggle" data-count="${remainingSources.length}">+ ${remainingSources.length} more location(s)</button>`;
+      }
+      locationsHtml += `</div>`;
+
+      const dateVal = s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt;
+      const timeStr = dateVal ? new Date(dateVal).toLocaleTimeString() : '-';
 
       rowsHtml += `
         <tr>
           <td>${idx + 1}</td>
           <td><span class="badge-sev ${sevClass}">${s.severity || 'info'}</span></td>
-          <td><strong style="color: var(--text-primary);">${escapeHtml(s.ruleName)}</strong></td>
+          <td>
+            <strong style="color: var(--text-primary);">${escapeHtml(s.ruleName)}</strong>
+            ${s.category ? `<div class="text-xs" style="color: var(--text-muted); margin-top: 2px;">${escapeHtml(s.category)}</div>` : ''}
+          </td>
           <td>
             <div class="secret-value-box">
               <span class="secret-text font-mono" data-secret="${escapeHtml(s.match)}" data-masked="${escapeHtml(s.masked || '••••••••')}" data-revealed="false">${escapeHtml(s.masked || '••••••••')}</span>
@@ -928,11 +994,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               <button class="secret-copy-btn" title="Copy to clipboard">Copy</button>
             </div>
           </td>
-          <td><span class="badge-mini">${escapeHtml(s.sourceType || 'asset')}</span></td>
-          <td>
-            <a href="${escapeHtml(s.sourceUrl)}" target="_blank" class="url-link text-xs" style="color: var(--cyan-bright); word-break: break-all;">${escapeHtml(s.sourceUrl)}</a>
-            ${s.context ? `<div class="secret-context-snippet">${escapeHtml(s.context)}</div>` : ''}
-          </td>
+          <td>${countBadge}</td>
+          <td>${locationsHtml}</td>
           <td class="font-mono text-xs" style="color: var(--text-muted);">${timeStr}</td>
         </tr>
       `;
@@ -941,7 +1004,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     secretsTbody.innerHTML = rowsHtml;
   }
 
-  // Interactive secret table event delegation (copy and show/hide)
+  // Interactive secret table event delegation (copy, show/hide, expand locations)
   if (secretsTbody) {
     secretsTbody.addEventListener('click', async (e) => {
       const copyBtn = e.target.closest('.secret-copy-btn');
@@ -970,6 +1033,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             textSpan.dataset.revealed = 'true';
           }
         }
+        return;
+      }
+
+      const moreBtn = e.target.closest('.secret-more-toggle');
+      if (moreBtn) {
+        const extraDiv = moreBtn.previousElementSibling;
+        if (extraDiv && extraDiv.classList.contains('secret-locations-extra')) {
+          const isExpanded = extraDiv.style.display !== 'none';
+          if (isExpanded) {
+            extraDiv.style.display = 'none';
+            moreBtn.textContent = `+ ${moreBtn.dataset.count} more location(s)`;
+          } else {
+            extraDiv.style.display = 'flex';
+            extraDiv.style.flexDirection = 'column';
+            extraDiv.style.gap = '6px';
+            moreBtn.textContent = 'Collapse locations';
+          }
+        }
+        return;
       }
     });
   }
@@ -991,8 +1073,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to export.');
         return;
       }
-      downloadFile(JSON.stringify(secrets, null, 2), 'katana-secrets.json', 'application/json');
-      engine.log('inf', `Exported ${secrets.length} findings to katana-secrets.json`);
+      const exportData = secrets.map(s => ({
+        ruleName: s.ruleName,
+        severity: s.severity,
+        category: s.category,
+        secret: s.match,
+        locationsCount: (s.sources || []).length,
+        sources: s.sources || (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType, context: s.context }] : []),
+        firstDiscoveredAt: s.firstDiscoveredAt || s.discoveredAt,
+        lastDiscoveredAt: s.lastDiscoveredAt || s.discoveredAt
+      }));
+      downloadFile(JSON.stringify(exportData, null, 2), 'katana-secrets.json', 'application/json');
+      engine.log('inf', `Exported ${secrets.length} unique findings to katana-secrets.json`);
     });
   }
 
@@ -1003,14 +1095,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to export.');
         return;
       }
-      let csv = 'Rule,Severity,Category,Secret,SourceType,SourceURL,DiscoveredAt\n';
+      let csv = 'Rule,Severity,Category,Secret,LocationCount,SourceURLs,FirstDiscoveredAt,LastDiscoveredAt\n';
       secrets.forEach(s => {
         const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
-        const date = s.discoveredAt ? new Date(s.discoveredAt).toISOString() : '';
-        csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${esc(s.sourceType)},${esc(s.sourceUrl)},${esc(date)}\n`;
+        const sources = Array.isArray(s.sources) && s.sources.length > 0 ? s.sources : (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType }] : []);
+        const locCount = sources.length;
+        const urlsJoined = sources.map(src => `[${(src.type || 'asset').toUpperCase()}] ${src.url}`).join('; ');
+        const firstDate = (s.firstDiscoveredAt || s.discoveredAt) ? new Date(s.firstDiscoveredAt || s.discoveredAt).toISOString() : '';
+        const lastDate = (s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt) ? new Date(s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt).toISOString() : '';
+        csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${locCount},${esc(urlsJoined)},${esc(firstDate)},${esc(lastDate)}\n`;
       });
       downloadFile(csv, 'katana-secrets.csv', 'text/csv');
-      engine.log('inf', `Exported ${secrets.length} findings to katana-secrets.csv`);
+      engine.log('inf', `Exported ${secrets.length} unique findings to katana-secrets.csv`);
     });
   }
 
@@ -1021,9 +1117,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to copy.');
         return;
       }
-      const text = secrets.map(s => `[${(s.severity || 'INFO').toUpperCase()}] ${s.ruleName}: ${s.match} (${s.sourceUrl})`).join('\n');
+      const text = secrets.map(s => {
+        const sources = Array.isArray(s.sources) && s.sources.length > 0 ? s.sources : (s.sourceUrl ? [{ url: s.sourceUrl }] : []);
+        const urlsStr = sources.map(loc => loc.url).join(', ');
+        return `[${(s.severity || 'INFO').toUpperCase()}] ${s.ruleName}: ${s.match} (Found in ${sources.length} location(s): ${urlsStr})`;
+      }).join('\n');
       await navigator.clipboard.writeText(text);
-      alert(`Copied ${secrets.length} secrets to clipboard!`);
+      alert(`Copied ${secrets.length} unique secrets to clipboard!`);
     });
   }
 

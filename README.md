@@ -1,18 +1,6 @@
 <div align="center">
-
-```
- /$$   /$$             /$$                                           /$$$$$$$$             /$$    
-| $$  /$$/            | $$                                          | $$_____/            | $$    
-| $$ /$$/   /$$$$$$  /$$$$$$    /$$$$$$  /$$$$$$$   /$$$$$$         | $$       /$$   /$$ /$$$$$$  
-| $$$$$/   |____  $$|_  $$_/   |____  $$| $$__  $$ |____  $$ /$$$$$$| $$$$$   |  $$ /$$/|_  $$_/  
-| $$  $$    /$$$$$$$  | $$      /$$$$$$$| $$  \ $$  /$$$$$$$|______/| $$__/    \  $$$$/   | $$    
-| $$\  $$  /$$__  $$  | $$ /$$ /$$__  $$| $$  | $$ /$$__  $$        | $$        >$$  $$   | $$ /$$
-| $$ \  $$|  $$$$$$$  |  $$$$/|  $$$$$$$| $$  | $$|  $$$$$$$        | $$$$$$$$ /$$/\  $$  |  $$$$/
-|__/  \__/ \_______/   \___/   \_______/|__/  |__/ \_______/        |________/|__/  \__/   \___/  
-                                                                                                  
-                                                                                                  
-                                                                                                      
-```
+<img width="326" height="58" alt="ascii-art-text" src="https://github.com/user-attachments/assets/1d9d1ee5-a229-4ff7-9110-a292c45ec1ac" />
+                                                                                 
 
 ### ⚡ Next-Generation In-Browser Web Spider & Endpoint Discovery Engine ⚡
 
@@ -36,9 +24,9 @@
 
 ## 🌟 Overview
 
-**Katana-Ext** brings the reconnaissance power of headless web spidering directly into your browser workflow. Instead of dealing with CLI sandboxes, headless Chromium crashes, or IP bans, Katana-Ext runs natively inside your Chromium session (Chrome, Brave, Edge).
+**Crawlizer** brings the reconnaissance power of headless web spidering directly into your browser workflow. Instead of dealing with CLI sandboxes, headless Chromium crashes, or IP bans, Crawlizer runs natively inside your Chromium session (Chrome, Brave, Edge).
 
-Simply upload or drag & drop your `.txt` target list (such as `alive.txt` from `httpx` or `subfinder`), and Katana-Ext automatically explores web routes, executes client-side Single Page Applications (React, Next.js, Vue, Angular), clicks interactive elements, extracts hidden endpoints from JavaScript source files, and exports deduplicated routes ready for **Nuclei**, **FFUF**, and **Burp Suite**.
+Simply upload or drag & drop your `.txt` target list (such as `alive.txt` from `httpx` or `subfinder`), and Crawlizer automatically explores web routes, executes client-side Single Page Applications (React, Next.js, Vue, Angular), clicks interactive elements, extracts hidden endpoints and secrets from JavaScript source files, and exports deduplicated routes ready for **Nuclei**, **FFUF**, and **Burp Suite**.
 
 ---
 
@@ -226,7 +214,7 @@ Avoid infinite crawling loops and duplicate database records:
 
 1. **Clone or Download this repository**:
    ```bash
-   git clone https://github.com/bytes-Knight/Katana-ext.git
+   git clone https://github.com/bountrixorg/Crawlizer.git
    ```
 
 2. Open your browser and navigate to the Extensions management page:
@@ -357,6 +345,20 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 
 <div align="center">
 
-Crafted with ⚡ for the cybersecurity & bug bounty community by [Bytes_Knight](https://github.com/bytes-Knight).
+Crafted with ⚡ for the cybersecurity & bug bounty community by [bountrixorg](https://github.com/bountrixorg).
 
 </div>
+
+
+## Contributors & Credits
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/bytes-Knight">
+        <img src="https://github.com/bytes-Knight.png" width="80" height="80" alt="bytes-Knight"/>
+        <br />
+        <strong>bytes-Knight</strong>
+      </a>
+  </tr>
+</table>

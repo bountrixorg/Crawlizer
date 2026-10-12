@@ -625,8 +625,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const txtContent = urls.map(u => u.url).join('\n');
-    downloadFile(txtContent, 'katana-urls.txt', 'text/plain');
-    engine.log('inf', `Exported ${urls.length} URLs to katana-urls.txt`);
+    downloadFile(txtContent, 'crawlizer-urls.txt', 'text/plain');
+    engine.log('inf', `Exported ${urls.length} URLs to crawlizer-urls.txt`);
   });
 
   exportJson.addEventListener('click', async () => {
@@ -636,8 +636,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const jsonContent = JSON.stringify(urls, null, 2);
-    downloadFile(jsonContent, 'katana-results.json', 'application/json');
-    engine.log('inf', `Exported ${urls.length} entries to katana-results.json`);
+    downloadFile(jsonContent, 'crawlizer-results.json', 'application/json');
+    engine.log('inf', `Exported ${urls.length} entries to crawlizer-results.json`);
   });
 
   exportCsv.addEventListener('click', async () => {
@@ -653,8 +653,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const date = new Date(u.discoveredAt).toISOString();
       csv += `${escapedUrl},"${u.type}",${escapedSrc},"${u.scope}","${date}"\n`;
     });
-    downloadFile(csv, 'katana-results.csv', 'text/csv');
-    engine.log('inf', `Exported ${urls.length} entries to katana-results.csv`);
+    downloadFile(csv, 'crawlizer-results.csv', 'text/csv');
+    engine.log('inf', `Exported ${urls.length} entries to crawlizer-results.csv`);
   });
 
   copyClipboard.addEventListener('click', async () => {
@@ -725,7 +725,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let rowsHtml = '';
     targets.slice(0, 100).forEach((t, idx) => {
-      const statusColor = t.status === 'completed' ? '#10b981' : t.status === 'crawling' ? '#00d2ff' : t.status === 'failed' ? '#ef4444' : '#94a3b8';
+      const statusColor = t.status === 'completed' ? '#00ff88' : t.status === 'crawling' ? '#00ff88' : t.status === 'failed' ? '#ff0044' : '#94a3b8';
       const crawledTime = t.crawledAt ? new Date(t.crawledAt).toLocaleTimeString() : '-';
 
       rowsHtml += `
@@ -926,7 +926,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="secret-location-item">
         <div class="secret-location-header">
           ${formatSourceTag(src.type)}
-          <a href="${escapeHtml(src.url)}" target="_blank" class="url-link text-xs" style="color: var(--cyan-bright); word-break: break-all;">${escapeHtml(src.url)}</a>
+          <a href="${escapeHtml(src.url)}" target="_blank" class="url-link text-xs" style="color: var(--green-neon); word-break: break-all;">${escapeHtml(src.url)}</a>
         </div>
         ${src.context ? `<div class="secret-context-snippet">${escapeHtml(src.context)}</div>` : ''}
       </div>
@@ -1116,8 +1116,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         firstDiscoveredAt: s.firstDiscoveredAt || s.discoveredAt,
         lastDiscoveredAt: s.lastDiscoveredAt || s.discoveredAt
       }));
-      downloadFile(JSON.stringify(exportData, null, 2), 'katana-secrets.json', 'application/json');
-      engine.log('inf', `Exported ${secrets.length} unique findings to katana-secrets.json`);
+      downloadFile(JSON.stringify(exportData, null, 2), 'crawlizer-secrets.json', 'application/json');
+      engine.log('inf', `Exported ${secrets.length} unique findings to crawlizer-secrets.json`);
     });
   }
 
@@ -1138,8 +1138,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const lastDate = (s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt) ? new Date(s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt).toISOString() : '';
         csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${locCount},${esc(urlsJoined)},${esc(firstDate)},${esc(lastDate)}\n`;
       });
-      downloadFile(csv, 'katana-secrets.csv', 'text/csv');
-      engine.log('inf', `Exported ${secrets.length} unique findings to katana-secrets.csv`);
+      downloadFile(csv, 'crawlizer-secrets.csv', 'text/csv');
+      engine.log('inf', `Exported ${secrets.length} unique findings to crawlizer-secrets.csv`);
     });
   }
 

@@ -1,5 +1,19 @@
 const fs = require('fs');
+const path = require('path');
 const zlib = require('zlib');
+const { execSync } = require('child_process');
+
+// If update_icons.ps1 is available, use high-res crest image resampling with circular alpha mask
+const psScript = path.join(__dirname, 'update_icons.ps1');
+if (fs.existsSync(psScript) && process.platform === 'win32') {
+  try {
+    console.log('Generating high-resolution icons from Katana Crest using PowerShell...');
+    execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'inherit' });
+    process.exit(0);
+  } catch (err) {
+    console.warn('PowerShell generation skipped, falling back to procedural generator:', err.message);
+  }
+}
 
 function createPNG(size) {
   const width = size;
@@ -87,7 +101,7 @@ if (!fs.existsSync('icons')) {
   fs.mkdirSync('icons');
 }
 
-[16, 48, 128].forEach(size => {
+[16, 32, 48, 128].forEach(size => {
   fs.writeFileSync('icons/icon' + size + '.png', createPNG(size));
   console.log('Created icon' + size + '.png');
 });

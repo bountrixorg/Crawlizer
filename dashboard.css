@@ -1,36 +1,54 @@
 /* ==========================================================================
-   Katana Web Crawler - Modern Sleek UI Styling
-   Linear / Vercel / Cyberpunk Inspired Dark Theme
+   Crawlizer Web Crawler & Spider - Ultra Sleek Cyberpunk UI Styling
+   Tactical High-Contrast Neon Green, Crimson Red & Obsidian Black Theme
    ========================================================================== */
 
 :root {
-  --bg-deep: #07090e;
-  --bg-surface: rgba(13, 19, 33, 0.72);
-  --bg-surface-elevated: rgba(19, 28, 48, 0.85);
-  --bg-card: rgba(15, 23, 42, 0.65);
-  --bg-input: rgba(9, 14, 26, 0.9);
-  --bg-hover: rgba(30, 41, 59, 0.6);
+  /* Carbon & Obsidian Pitch Black Canvas */
+  --bg-deep: #030504;
+  --bg-surface: rgba(8, 14, 10, 0.82);
+  --bg-surface-elevated: rgba(12, 20, 15, 0.92);
+  --bg-card: rgba(9, 16, 12, 0.75);
+  --bg-input: rgba(4, 8, 6, 0.95);
+  --bg-hover: rgba(16, 28, 20, 0.7);
 
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-focus: rgba(6, 182, 212, 0.5);
-  --border-glow: rgba(56, 189, 248, 0.25);
+  /* Hairline Tactical Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(0, 255, 136, 0.5);
+  --border-glow: rgba(0, 255, 136, 0.35);
+  --border-danger: rgba(255, 0, 68, 0.45);
 
-  --text-primary: #f8fafc;
+  /* Typography Colors */
+  --text-primary: #f0fdf4;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --text-dim: #475569;
 
-  --cyan: #06b6d4;
-  --cyan-bright: #22d3ee;
-  --blue: #3b82f6;
-  --indigo: #6366f1;
-  --purple: #a855f7;
+  /* Primary Recon Neon Green */
+  --green-neon: #00ff88;
+  --green-bright: #10f080;
   --emerald: #10b981;
-  --amber: #f59e0b;
-  --rose: #f43f5e;
-  --crimson: #ef4444;
+  --emerald-dark: #059669;
+  --green-glow: 0 0 20px rgba(0, 255, 136, 0.45);
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Tactical Crimson Red (Threats, Secrets, Danger) */
+  --red-neon: #ff0044;
+  --red-bright: #ff3366;
+  --crimson: #ef4444;
+  --rose: #f43f5e;
+  --red-glow: 0 0 20px rgba(255, 0, 68, 0.45);
+
+  /* Auxiliary Accents */
+  --amber: #f59e0b;
+  --amber-bright: #fbbf24;
+  --cyan: #00ff88; /* Unified to Recon Neon */
+  --cyan-bright: #10f080;
+  --blue: #38bdf8;
+  --indigo: #818cf8;
+  --purple: #c084fc;
+
+  /* Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Plus Jakarta Sans", sans-serif;
   --font-mono: 'JetBrains Mono', "Fira Code", Consolas, monospace;
 }
 
@@ -38,6 +56,25 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Custom Cyber Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030504;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 136, 0.22);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 136, 0.5);
 }
 
 body.katana-app {
@@ -51,9 +88,10 @@ body.katana-app {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient Background Glows */
+/* Ambient Radial Dual-Tone Glow (Neon Green & Crimson aura over Pitch Black) */
 .ambient-glow {
   position: fixed;
   border-radius: 50%;
@@ -63,19 +101,19 @@ body.katana-app {
 }
 
 .glow-1 {
-  width: 600px;
-  height: 350px;
-  top: -100px;
-  left: 20%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, transparent 70%);
+  width: 700px;
+  height: 400px;
+  top: -120px;
+  left: 15%;
+  background: radial-gradient(circle, rgba(0, 255, 136, 0.14) 0%, transparent 70%);
 }
 
 .glow-2 {
-  width: 500px;
-  height: 350px;
-  top: 15%;
-  right: -100px;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+  width: 600px;
+  height: 400px;
+  top: 10%;
+  right: -80px;
+  background: radial-gradient(circle, rgba(255, 0, 68, 0.12) 0%, transparent 70%);
 }
 
 /* Header */
@@ -83,9 +121,10 @@ body.katana-app {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(7, 9, 14, 0.85);
-  backdrop-filter: blur(20px);
+  background: rgba(4, 7, 5, 0.9);
+  backdrop-filter: blur(24px);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
   padding: 12px 28px;
   display: flex;
   justify-content: space-between;
@@ -115,6 +154,7 @@ body.katana-app {
   border-radius: 8px;
   position: relative;
   z-index: 2;
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.35);
 }
 
 .brand-glow {
@@ -122,9 +162,9 @@ body.katana-app {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: var(--cyan);
-  filter: blur(10px);
-  opacity: 0.6;
+  background: var(--green-neon);
+  filter: blur(12px);
+  opacity: 0.55;
   z-index: 1;
 }
 
@@ -140,23 +180,24 @@ body.katana-app {
   font-size: 17px;
   font-weight: 900;
   letter-spacing: 2.5px;
-  background: linear-gradient(135deg, #ffffff 30%, #38bdf8 80%, #818cf8 100%);
+  background: linear-gradient(135deg, #ffffff 20%, #00ff88 75%, #10b981 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1.1;
+  text-shadow: 0 0 20px rgba(0, 255, 136, 0.25);
 }
 
 .version-tag {
-  background: rgba(6, 182, 212, 0.15);
-  color: var(--cyan-bright);
+  background: rgba(0, 255, 136, 0.14);
+  color: var(--green-neon);
   font-size: 9px;
   padding: 1px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  border: 1px solid rgba(0, 255, 136, 0.35);
   font-family: var(--font-mono);
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.5px;
-  -webkit-text-fill-color: var(--cyan-bright);
+  -webkit-text-fill-color: var(--green-neon);
 }
 
 .sub-text {
@@ -172,8 +213,8 @@ body.katana-app {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid var(--border-subtle);
+  background: rgba(8, 14, 10, 0.85);
+  border: 1px solid rgba(0, 255, 136, 0.2);
   padding: 4px 12px;
   border-radius: 20px;
 }
@@ -187,8 +228,8 @@ body.katana-app {
 }
 
 .status-indicator-dot.running {
-  background-color: var(--emerald);
-  box-shadow: 0 0 10px var(--emerald);
+  background-color: var(--green-neon);
+  box-shadow: 0 0 12px var(--green-neon);
   animation: pulse 1.5s infinite;
 }
 
@@ -229,7 +270,7 @@ body.katana-app {
   background-color: var(--border-subtle);
 }
 
-/* Modern Buttons */
+/* Modern High-Tech Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -243,47 +284,53 @@ body.katana-app {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
   user-select: none;
+  font-family: var(--font-sans);
 }
 
 .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
-  filter: grayscale(40%);
+  filter: grayscale(60%);
+  box-shadow: none !important;
 }
 
+/* Primary Start Crawl Button (Laser Neon Green) */
 .btn-primary {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: #ffffff;
-  border-color: rgba(56, 189, 248, 0.4);
+  background: linear-gradient(135deg, #00ff88, #059669);
+  color: #022010;
+  font-weight: 800;
+  border-color: rgba(0, 255, 136, 0.5);
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
 }
 
 .btn-glow {
-  box-shadow: 0 0 16px rgba(2, 132, 199, 0.35);
+  box-shadow: 0 0 18px rgba(0, 255, 136, 0.4);
 }
 
 .btn-primary:not(:disabled):hover {
-  background: linear-gradient(135deg, #0369a1, #1d4ed8);
-  box-shadow: 0 0 24px rgba(2, 132, 199, 0.55);
+  background: linear-gradient(135deg, #10f080, #047857);
+  box-shadow: 0 0 26px rgba(0, 255, 136, 0.65);
   transform: translateY(-1px);
 }
 
+/* Glass Surface Button */
 .btn-glass {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(10, 16, 12, 0.75);
   border-color: var(--border-subtle);
   color: var(--text-secondary);
   backdrop-filter: blur(8px);
 }
 
 .btn-glass:not(:disabled):hover {
-  background: rgba(30, 41, 59, 0.8);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: var(--text-primary);
+  background: rgba(18, 30, 22, 0.9);
+  border-color: rgba(0, 255, 136, 0.35);
+  color: var(--green-neon);
   transform: translateY(-1px);
 }
 
 .btn-icon-glass {
   padding: 8px 10px;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(10, 16, 12, 0.75);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-secondary);
@@ -292,50 +339,77 @@ body.katana-app {
 }
 
 .btn-icon-glass:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: var(--rose);
+  background: rgba(255, 0, 68, 0.16);
+  border-color: rgba(255, 0, 68, 0.45);
+  color: var(--red-neon);
 }
 
 .text-danger {
-  color: #f87171;
+  color: #ff3366;
 }
 
+/* Stop Danger Button (Electric Crimson Red) */
 .btn-danger {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  background: linear-gradient(135deg, #ff0044, #991b1b);
   color: #ffffff;
-  border-color: rgba(239, 68, 68, 0.4);
+  font-weight: 700;
+  border-color: rgba(255, 0, 68, 0.45);
 }
 
 .btn-danger:not(:disabled):hover {
-  background: #991b1b;
-  box-shadow: 0 0 16px rgba(220, 38, 38, 0.4);
+  background: linear-gradient(135deg, #ff1a53, #7f1d1d);
+  box-shadow: 0 0 20px rgba(255, 0, 68, 0.55);
+  transform: translateY(-1px);
 }
 
 .btn-amber {
-  background: linear-gradient(135deg, #d97706, #b45309);
+  background: linear-gradient(135deg, #d97706, #92400e);
   color: #ffffff;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.btn-amber:not(:disabled):hover {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
 }
 
 .btn-cyan {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: #ffffff;
+  background: linear-gradient(135deg, #00ff88, #059669);
+  color: #022010;
+  font-weight: 700;
+  border-color: rgba(0, 255, 136, 0.4);
+}
+
+.btn-cyan:not(:disabled):hover {
+  box-shadow: 0 0 16px rgba(0, 255, 136, 0.4);
 }
 
 .btn-ghost-danger {
   background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
+  border: 1px solid rgba(255, 0, 68, 0.35);
+  color: #ff3366;
 }
 
 .btn-ghost-danger:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: #ef4444;
+  background: rgba(255, 0, 68, 0.15);
+  border-color: var(--red-neon);
+  box-shadow: 0 0 12px rgba(255, 0, 68, 0.3);
 }
 
 .btn-xs {
   padding: 4px 10px;
   font-size: 11px;
+}
+
+.btn-outline {
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  color: var(--green-neon);
+}
+
+.btn-outline:hover {
+  background: rgba(0, 255, 136, 0.22);
+  border-color: var(--green-neon);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
 }
 
 /* Export Dropdown */
@@ -348,11 +422,11 @@ body.katana-app {
   top: calc(100% + 8px);
   right: 0;
   width: 270px;
-  background: rgba(13, 19, 33, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(6, 11, 8, 0.96);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 255, 136, 0.25);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 255, 136, 0.1);
   display: none;
   flex-direction: column;
   z-index: 200;
@@ -374,7 +448,7 @@ body.katana-app {
 }
 
 .dropdown-item:hover {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(0, 255, 136, 0.1);
 }
 
 .dropdown-item-header {
@@ -398,10 +472,11 @@ body.katana-app {
 .badge-mini {
   font-size: 9px;
   font-family: var(--font-mono);
-  background: rgba(6, 182, 212, 0.15);
-  color: var(--cyan-bright);
+  background: rgba(0, 255, 136, 0.15);
+  color: var(--green-neon);
   padding: 1px 5px;
   border-radius: 4px;
+  border: 1px solid rgba(0, 255, 136, 0.25);
 }
 
 .dropdown-divider {
@@ -410,7 +485,7 @@ body.katana-app {
   margin: 4px 0;
 }
 
-/* CAPTCHA Banner */
+/* CAPTCHA / Bot Banner */
 .captcha-banner {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(180, 83, 9, 0.25));
   border-bottom: 2px solid var(--amber);
@@ -488,7 +563,7 @@ body.katana-app {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px;
   padding: 18px 28px;
-  background: rgba(7, 10, 18, 0.6);
+  background: rgba(4, 7, 5, 0.7);
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
   z-index: 10;
@@ -496,7 +571,7 @@ body.katana-app {
 
 .metric-card {
   background: var(--bg-surface);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 14px 16px;
@@ -508,14 +583,21 @@ body.katana-app {
 }
 
 .metric-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.16);
   transform: translateY(-2px);
-  background: rgba(18, 26, 46, 0.8);
+  background: rgba(14, 24, 18, 0.85);
 }
 
+/* Card Highlighting & Neon/Crimson Pulses */
 .highlight-glow-cyan {
-  border-color: rgba(6, 182, 212, 0.35);
-  background: linear-gradient(180deg, rgba(6, 182, 212, 0.08), var(--bg-surface));
+  border-color: rgba(0, 255, 136, 0.4);
+  background: linear-gradient(180deg, rgba(0, 255, 136, 0.1), var(--bg-surface));
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.12);
+}
+
+.highlight-glow-emerald {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.1), var(--bg-surface));
 }
 
 .highlight-glow-purple {
@@ -523,41 +605,40 @@ body.katana-app {
   background: linear-gradient(180deg, rgba(168, 85, 247, 0.08), var(--bg-surface));
 }
 
-.highlight-glow-emerald {
-  border-color: rgba(16, 185, 129, 0.35);
-  background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), var(--bg-surface));
-}
-
 .highlight-glow-amber {
   border-color: rgba(245, 158, 11, 0.35);
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), var(--bg-surface));
 }
 
+/* Secrets Found Metric Card (Electric Crimson Glow) */
 .highlight-glow-rose {
-  border-color: rgba(244, 63, 94, 0.45);
-  background: linear-gradient(180deg, rgba(244, 63, 94, 0.12), var(--bg-surface));
+  border-color: rgba(255, 0, 68, 0.45);
+  background: linear-gradient(180deg, rgba(255, 0, 68, 0.14), var(--bg-surface));
+  box-shadow: 0 0 22px rgba(255, 0, 68, 0.18);
 }
 
 .text-amber {
-  color: #f59e0b;
+  color: #fbbf24;
 }
 
 .text-rose {
-  color: #fb7185;
+  color: var(--red-neon);
+  text-shadow: 0 0 10px rgba(255, 0, 68, 0.5);
 }
 
 .badge-rose {
-  background: rgba(244, 63, 94, 0.25);
-  color: #fda4af;
-  border: 1px solid rgba(244, 63, 94, 0.4);
+  background: rgba(255, 0, 68, 0.2);
+  color: #ff3366;
+  border: 1px solid rgba(255, 0, 68, 0.45);
 }
 
+/* Severity Badges (Critical Crimson, High Orange, Med Yellow, Info Green) */
 .badge-sev {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -565,15 +646,16 @@ body.katana-app {
 }
 
 .badge-sev-critical {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(255, 0, 68, 0.22);
+  color: #ff3366;
+  border: 1px solid rgba(255, 0, 68, 0.55);
+  box-shadow: 0 0 12px rgba(255, 0, 68, 0.35);
 }
 
 .badge-sev-high {
-  background: rgba(249, 115, 22, 0.2);
+  background: rgba(249, 115, 22, 0.22);
   color: #fb923c;
-  border: 1px solid rgba(249, 115, 22, 0.4);
+  border: 1px solid rgba(249, 115, 22, 0.45);
 }
 
 .badge-sev-medium {
@@ -583,17 +665,23 @@ body.katana-app {
 }
 
 .badge-sev-info {
-  background: rgba(6, 182, 212, 0.2);
-  color: #38bdf8;
-  border: 1px solid rgba(6, 182, 212, 0.4);
+  background: rgba(0, 255, 136, 0.16);
+  color: var(--green-neon);
+  border: 1px solid rgba(0, 255, 136, 0.35);
 }
 
 .secret-value-box {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
+}
+
+.secret-text {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
 }
 
 .secret-toggle-btn {
@@ -601,43 +689,46 @@ body.katana-app {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 2px;
+  padding: 3px;
   display: inline-flex;
   align-items: center;
   transition: color 0.15s;
 }
 
 .secret-toggle-btn:hover {
-  color: var(--cyan-bright);
+  color: var(--green-neon);
 }
 
 .secret-copy-btn {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: 5px;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 10px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
   transition: all 0.15s;
 }
 
 .secret-copy-btn:hover {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(0, 255, 136, 0.22);
+  border-color: rgba(0, 255, 136, 0.45);
   color: #ffffff;
 }
 
 .secret-context-snippet {
   font-family: var(--font-mono);
-  font-size: 10px;
-  color: #cbd5e1;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  padding: 4px 8px;
-  margin-top: 4px;
-  max-width: 600px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 6px;
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
@@ -647,37 +738,38 @@ body.katana-app {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(0, 255, 136, 0.16);
+  color: var(--green-neon);
+  border: 1px solid rgba(0, 255, 136, 0.35);
   border-radius: 12px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .secret-loc-count-badge.multi {
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.35);
+  border-color: rgba(245, 158, 11, 0.45);
 }
 
 .secret-locations-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 650px;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .secret-location-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 4px 6px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
 }
 
 .secret-location-header {
@@ -693,7 +785,7 @@ body.katana-app {
   border-radius: 3px;
   font-size: 9px;
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -702,14 +794,14 @@ body.katana-app {
 .secret-src-tag.tag-rendered-js { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
 .secret-src-tag.tag-js-bundle { background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.3); }
 .secret-src-tag.tag-css { background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
-.secret-src-tag.tag-source-map { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+.secret-src-tag.tag-source-map { background: rgba(0, 255, 136, 0.2); color: var(--green-neon); border: 1px solid rgba(0, 255, 136, 0.3); }
 .secret-src-tag.tag-html-comment { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
 
 .secret-more-toggle {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border: 1px dashed rgba(0, 255, 136, 0.25);
   border-radius: 4px;
-  color: var(--cyan-bright);
+  color: var(--green-neon);
   padding: 3px 8px;
   font-size: 11px;
   cursor: pointer;
@@ -719,8 +811,8 @@ body.katana-app {
 }
 
 .secret-more-toggle:hover {
-  background: rgba(6, 182, 212, 0.15);
-  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(0, 255, 136, 0.15);
+  border-color: rgba(0, 255, 136, 0.5);
 }
 
 .metric-header {
@@ -749,9 +841,12 @@ body.katana-app {
   color: var(--text-dim);
 }
 
-.text-cyan { color: var(--cyan); }
-.text-neon { color: var(--cyan-bright); }
-.text-neon-sub { color: rgba(34, 211, 238, 0.7); }
+.text-cyan { color: var(--green-neon); }
+.text-neon {
+  color: var(--green-neon);
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.45);
+}
+.text-neon-sub { color: rgba(0, 255, 136, 0.7); }
 .text-purple { color: var(--purple); }
 .text-emerald { color: var(--emerald); }
 
@@ -765,7 +860,8 @@ body.katana-app {
 }
 
 .metric-value.error-text {
-  color: var(--rose);
+  color: var(--red-neon);
+  text-shadow: 0 0 8px rgba(255, 0, 68, 0.4);
 }
 
 .metric-footer {
@@ -777,7 +873,7 @@ body.katana-app {
 /* Progress Bar */
 .progress-bar-container {
   height: 3px;
-  background-color: rgba(15, 23, 42, 0.8);
+  background-color: rgba(8, 14, 10, 0.9);
   width: 100%;
   position: relative;
   z-index: 10;
@@ -786,9 +882,9 @@ body.katana-app {
 .progress-bar-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #0284c7, #06b6d4, #a855f7);
+  background: linear-gradient(90deg, #059669, #00ff88, #10f080);
   transition: width 0.3s ease;
-  box-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.85);
 }
 
 /* Modern Segmented Navigation Tabs */
@@ -800,8 +896,8 @@ body.katana-app {
 
 .nav-tabs {
   display: inline-flex;
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(12px);
+  background: rgba(8, 14, 10, 0.85);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 4px;
@@ -811,37 +907,55 @@ body.katana-app {
 .nav-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
+  gap: 9px;
+  padding: 10px 20px;
   background: transparent;
-  border: none;
-  border-radius: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
 }
 
 .nav-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .nav-tab.active {
-  color: #38bdf8;
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.16), rgba(59, 130, 246, 0.16));
-  border: 1px solid rgba(6, 182, 212, 0.35);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color: var(--green-neon);
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.18), rgba(5, 150, 105, 0.16));
+  border: 1px solid rgba(0, 255, 136, 0.45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 14px rgba(0, 255, 136, 0.25);
+}
+
+/* Dedicated Glowing Crimson State for Secrets Tab */
+.nav-tab[data-tab="tab-secrets"].active {
+  color: #ff3366;
+  background: linear-gradient(135deg, rgba(255, 0, 68, 0.22), rgba(153, 27, 27, 0.18));
+  border: 1px solid rgba(255, 0, 68, 0.55);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 16px rgba(255, 0, 68, 0.35);
 }
 
 .tab-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-mono);
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  padding: 1px 6px;
+  font-weight: 700;
+  background: rgba(0, 255, 136, 0.16);
+  color: var(--green-neon);
+  padding: 2px 7px;
   border-radius: 10px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+}
+
+.nav-tab[data-tab="tab-secrets"] .tab-badge {
+  background: rgba(255, 0, 68, 0.25);
+  color: #ff3366;
+  border-color: rgba(255, 0, 68, 0.5);
+  box-shadow: 0 0 8px rgba(255, 0, 68, 0.3);
 }
 
 /* Main Content */
@@ -866,7 +980,7 @@ body.katana-app {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Grid & Panels */
+/* Grid & Glass Panels */
 .grid-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -881,15 +995,15 @@ body.katana-app {
 
 .glass-panel {
   background: var(--bg-surface);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 
 .panel-header {
-  background: rgba(18, 26, 46, 0.6);
+  background: rgba(12, 20, 15, 0.7);
   border-bottom: 1px solid var(--border-subtle);
   padding: 14px 20px;
   display: flex;
@@ -907,12 +1021,12 @@ body.katana-app {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--green-neon);
 }
 
 .panel-header h3 {
@@ -936,22 +1050,22 @@ body.katana-app {
   margin-top: 20px;
 }
 
-/* Drop Zone */
+/* Cyber Drop Zone */
 .drop-zone {
-  border: 2px dashed rgba(56, 189, 248, 0.25);
+  border: 2px dashed rgba(0, 255, 136, 0.3);
   border-radius: 12px;
   padding: 30px 20px;
   text-align: center;
-  background: radial-gradient(circle at center, rgba(6, 182, 212, 0.04) 0%, rgba(9, 14, 26, 0.6) 100%);
+  background: radial-gradient(circle at center, rgba(0, 255, 136, 0.05) 0%, rgba(4, 8, 6, 0.7) 100%);
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
 }
 
 .drop-zone:hover, .drop-zone.dragover {
-  border-color: var(--cyan);
-  background: radial-gradient(circle at center, rgba(6, 182, 212, 0.1) 0%, rgba(9, 14, 26, 0.8) 100%);
-  box-shadow: 0 0 25px rgba(6, 182, 212, 0.15);
+  border-color: var(--green-neon);
+  background: radial-gradient(circle at center, rgba(0, 255, 136, 0.12) 0%, rgba(4, 8, 6, 0.9) 100%);
+  box-shadow: 0 0 28px rgba(0, 255, 136, 0.2);
 }
 
 .file-input {
@@ -975,12 +1089,12 @@ body.katana-app {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--cyan);
+  color: var(--green-neon);
   transition: transform 0.2s;
 }
 
@@ -1039,8 +1153,8 @@ body.katana-app {
 
 .target-textarea:focus {
   outline: none;
-  border-color: var(--cyan);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  border-color: var(--green-neon);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.25);
 }
 
 .target-actions {
@@ -1050,7 +1164,7 @@ body.katana-app {
   flex-wrap: wrap;
 }
 
-/* Forms */
+/* Forms & Selects */
 .form-grid {
   display: flex;
   flex-direction: column;
@@ -1095,8 +1209,8 @@ body.katana-app {
 
 .form-control:focus {
   outline: none;
-  border-color: var(--cyan);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  border-color: var(--green-neon);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.25);
 }
 
 .select-wrapper {
@@ -1120,12 +1234,12 @@ body.katana-app {
   pointer-events: none;
 }
 
-/* Modern Toggle Switches (replaces standard chunky checkboxes) */
+/* Modern High-Tech Toggle Switches */
 .switches-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(9, 14, 26, 0.7);
+  background: rgba(4, 8, 6, 0.85);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 10px;
@@ -1141,7 +1255,7 @@ body.katana-app {
 }
 
 .switch-row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(0, 255, 136, 0.04);
 }
 
 .switch-info {
@@ -1183,8 +1297,8 @@ body.katana-app {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #1e293b;
-  border: 1px solid #334155;
+  background-color: #111a14;
+  border: 1px solid #24382c;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 20px;
 }
@@ -1196,32 +1310,32 @@ body.katana-app {
   width: 14px;
   left: 2px;
   bottom: 2px;
-  background-color: #94a3b8;
+  background-color: #64748b;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 50%;
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: #0284c7;
-  border-color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+  background-color: #00ff88;
+  border-color: #10f080;
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.5);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(18px);
-  background-color: #ffffff;
+  background-color: #030805;
 }
 
-/* Badges */
+/* Badges & Tags */
 .badge-pill {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--green-neon);
   font-size: 10px;
   padding: 3px 10px;
   border-radius: 20px;
   font-family: var(--font-mono);
-  font-weight: 600;
-  border: 1px solid var(--border-subtle);
+  font-weight: 700;
+  border: 1px solid rgba(0, 255, 136, 0.3);
 }
 
 .badge-tag {
@@ -1233,16 +1347,16 @@ body.katana-app {
   font-weight: 600;
 }
 
-.tag-html-link { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.tag-html-link { background: rgba(0, 255, 136, 0.14); color: var(--green-neon); border: 1px solid rgba(0, 255, 136, 0.3); }
 .tag-subdomain { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); }
 .tag-btn-click { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.35); }
-.tag-js-endpoint { background: rgba(168, 85, 247, 0.12); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
-.tag-network-api { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+.tag-js-endpoint { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+.tag-network-api { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); }
 .tag-script-bundle { background: rgba(192, 132, 252, 0.15); color: #e9d5ff; border: 1px solid rgba(192, 132, 252, 0.35); }
 .tag-script-src { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.tag-form { background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.tag-robots { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.tag-in-scope { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+.tag-form { background: rgba(255, 0, 68, 0.15); color: #ff3366; border: 1px solid rgba(255, 0, 68, 0.35); }
+.tag-robots { background: rgba(0, 255, 136, 0.12); color: var(--green-neon); border: 1px solid rgba(0, 255, 136, 0.3); }
+.tag-in-scope { background: rgba(0, 255, 136, 0.12); color: var(--green-neon); border: 1px solid rgba(0, 255, 136, 0.25); }
 .tag-out-of-scope { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 
 /* Filter Toolbar */
@@ -1251,7 +1365,7 @@ body.katana-app {
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
-  background: rgba(18, 26, 46, 0.6);
+  background: rgba(10, 18, 13, 0.65);
   border-bottom: 1px solid var(--border-subtle);
   flex-wrap: wrap;
 }
@@ -1271,8 +1385,8 @@ body.katana-app {
 }
 
 .search-input-wrapper:focus-within {
-  border-color: var(--cyan);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  border-color: var(--green-neon);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.25);
 }
 
 .search-input-wrapper input {
@@ -1309,6 +1423,11 @@ body.katana-app {
   font-size: 12px;
 }
 
+.filter-select:focus {
+  outline: none;
+  border-color: var(--green-neon);
+}
+
 .filter-results-count {
   font-size: 11px;
   color: var(--text-muted);
@@ -1327,6 +1446,43 @@ body.katana-app {
   overflow-y: auto;
 }
 
+/* Secrets & Findings Expansive Panel & Full-Height Workspace */
+#tab-secrets .glass-panel {
+  min-height: calc(100vh - 220px);
+  display: flex;
+  flex-direction: column;
+  border-color: rgba(255, 0, 68, 0.28);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 24px rgba(255, 0, 68, 0.1);
+}
+
+#tab-secrets .table-wrapper.scrollable-table {
+  flex: 1;
+  max-height: calc(100vh - 350px);
+  min-height: 540px;
+  overflow-y: auto;
+}
+
+#secrets-table {
+  width: 100%;
+  font-size: 13px;
+}
+
+#secrets-table th {
+  padding: 14px 20px;
+  font-size: 11px;
+  letter-spacing: 0.9px;
+  background: rgba(6, 11, 8, 0.97);
+}
+
+#secrets-table td {
+  padding: 16px 20px;
+  vertical-align: top;
+}
+
+#secrets-table tr:hover td {
+  background: rgba(255, 0, 68, 0.035);
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -1335,7 +1491,7 @@ body.katana-app {
 }
 
 .data-table th {
-  background: rgba(9, 14, 26, 0.85);
+  background: rgba(4, 8, 6, 0.95);
   color: var(--text-muted);
   font-weight: 700;
   text-transform: uppercase;
@@ -1357,26 +1513,26 @@ body.katana-app {
 }
 
 .data-table tr:hover td {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(0, 255, 136, 0.035);
   color: var(--text-primary);
 }
 
 .url-cell {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #38bdf8;
+  color: var(--green-neon);
   word-break: break-all;
 }
 
 .url-cell a {
-  color: #38bdf8;
+  color: var(--green-neon);
   text-decoration: none;
-  transition: color 0.15s;
+  transition: all 0.15s;
 }
 
 .url-cell a:hover {
   text-decoration: underline;
-  color: var(--cyan-bright);
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
 }
 
 .source-cell {
@@ -1396,6 +1552,12 @@ body.katana-app {
   font-style: italic;
 }
 
+#secrets-table .empty-state {
+  padding: 110px 24px !important;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* Pagination */
 .pagination-bar {
   display: flex;
@@ -1403,7 +1565,7 @@ body.katana-app {
   align-items: center;
   padding: 14px 20px;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(18, 26, 46, 0.6);
+  background: rgba(10, 18, 13, 0.65);
 }
 
 .pagination-info {
@@ -1425,6 +1587,7 @@ body.katana-app {
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
+  color: var(--green-neon);
 }
 
 .page-size-selector {
@@ -1437,18 +1600,18 @@ body.katana-app {
 
 /* Terminal View */
 .terminal-container {
-  background: #03060c;
-  border: 1px solid var(--border-subtle);
+  background: #020402;
+  border: 1px solid rgba(0, 255, 136, 0.25);
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   height: 620px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 136, 0.08);
 }
 
 .terminal-header {
-  background: #090e18;
+  background: #060a07;
   padding: 10px 18px;
   display: flex;
   align-items: center;
@@ -1466,19 +1629,34 @@ body.katana-app {
   height: 10px;
   border-radius: 50%;
 }
-.dot.red { background-color: #ef4444; }
-.dot.yellow { background-color: #f59e0b; }
-.dot.green { background-color: #10b981; }
+.dot.red { background-color: #ff0044; box-shadow: 0 0 6px rgba(255, 0, 68, 0.5); }
+.dot.yellow { background-color: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
+.dot.green { background-color: #00ff88; box-shadow: 0 0 6px rgba(0, 255, 136, 0.5); }
 
 .terminal-title {
   font-size: 11px;
   color: var(--text-muted);
+  letter-spacing: 0.5px;
 }
 
 .terminal-actions {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+}
+
+.checkbox-container input {
+  accent-color: #00ff88;
+  cursor: pointer;
 }
 
 .terminal-body {
@@ -1496,14 +1674,18 @@ body.katana-app {
 }
 
 .log-line.banner {
-  color: var(--cyan);
+  color: var(--green-neon);
   line-height: 1.15;
   margin-bottom: 18px;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
 }
 
-.log-line.info { color: #94a3b8; }
-.log-line.warn { color: #f59e0b; }
-.log-line.error { color: #ef4444; }
+.log-line.info { color: #a7f3d0; }
+.log-line.warn { color: #fbbf24; }
+.log-line.error {
+  color: var(--red-neon);
+  text-shadow: 0 0 8px rgba(255, 0, 68, 0.35);
+}
 
 .font-mono {
   font-family: var(--font-mono);

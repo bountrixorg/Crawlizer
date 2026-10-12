@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Katana - Endpoint Crawler & URL Spider</title>
+  <title>Crawlizer - Endpoint Crawler & URL Spider</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,12 +19,12 @@
     <div class="header-left">
       <div class="brand">
         <div class="brand-icon-wrapper">
-          <img src="icons/icon48.png" alt="Katana Logo" class="brand-logo" width="30" height="30">
+          <img src="icons/icon48.png" alt="Crawlizer Logo" class="brand-logo" width="30" height="30">
           <div class="brand-glow"></div>
         </div>
         <div class="brand-text">
           <div class="brand-title">
-            <span>KATANA</span>
+            <span>CRAWLIZER</span>
             <span class="version-tag">v1.2</span>
           </div>
           <span class="sub-text">NEXT-GEN WEB CRAWLER & SPIDER</span>
@@ -302,7 +302,7 @@
       </button>
       <button class="nav-tab" data-tab="tab-terminal">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        <span>Katana Live Stream</span>
+        <span>Crawlizer Live Stream</span>
       </button>
     </nav>
   </div>
@@ -650,7 +650,7 @@
       <div class="glass-panel">
         <div class="panel-header" style="margin-bottom: 16px;">
           <div class="panel-title-group">
-            <div class="panel-icon-badge" style="background: rgba(244, 63, 94, 0.15); color: var(--rose);">
+            <div class="panel-icon-badge" style="background: rgba(255, 0, 68, 0.16); color: var(--red-neon); border-color: rgba(255, 0, 68, 0.4);">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
             </div>
             <div>
@@ -711,13 +711,13 @@
           <table class="data-table" id="secrets-table">
             <thead>
               <tr>
-                <th width="40">#</th>
-                <th width="100">Severity</th>
-                <th width="180">Finding Type</th>
-                <th width="280">Detected Secret / Value</th>
-                <th width="100">Locations</th>
+                <th width="48">#</th>
+                <th width="110">Severity</th>
+                <th width="200">Finding Type</th>
+                <th width="320">Detected Secret / Value</th>
+                <th width="110">Locations</th>
                 <th>Discovered Location(s) & Code Context</th>
-                <th width="100">Discovered</th>
+                <th width="110">Discovered</th>
               </tr>
             </thead>
             <tbody id="secrets-tbody">
@@ -730,7 +730,7 @@
       </div>
     </div>
 
-    <!-- TAB 4: KATANA TERMINAL LOGS -->
+    <!-- TAB 4: CRAWLIZER TERMINAL LOGS -->
     <div class="tab-pane" id="tab-terminal">
       <div class="terminal-container">
         <div class="terminal-header">
@@ -739,7 +739,7 @@
             <span class="dot yellow"></span>
             <span class="dot green"></span>
           </div>
-          <div class="terminal-title font-mono">katana-engine@browser — live stream</div>
+          <div class="terminal-title font-mono">crawlizer-engine@browser — live stream</div>
           <div class="terminal-actions">
             <label class="checkbox-container text-xs">
               <input type="checkbox" id="terminal-autoscroll" checked>
@@ -751,12 +751,12 @@
         </div>
         <div class="terminal-body font-mono" id="terminal-body">
           <div class="log-line banner font-mono">
-   __        __                     
-  / /_____ _/ /_____ _____  ____ _
- / //_/ __ `/ __/ __ `/ __ \/ __ `/
-/ ,&lt; / /_/ / /_/ /_/ / / / / /_/ / 
-/_/|_|\__,_/\__/\__,_/_/ /_/\__,_/  v1.2.0
-ProjectDiscovery Katana Engine ported to Browser Extension
+   ______                     ___zer
+  / ____/________ __      __/ (_)___  ___  _____
+ / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
+/ /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
+\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.0
+Crawlizer Engine — Next-Gen Deep Web &amp; Secret Spider
           </div>
           <div class="log-line info font-mono">[INF] Storage and database initialized. Ready to load targets.</div>
         </div>

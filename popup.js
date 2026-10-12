@@ -108,11 +108,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       const subRegex = /^https?:\/\/[a-z0-9-_]+\.[a-z0-9-_]+\.[a-z0-9-_]+/i;
 
       allDiscovered.forEach(item => {
-        if (item.type === 'js') countJs++;
-        else if (item.type === 'api' || item.type === 'network') countApis++;
-        else countHtml++;
+        const t = (item.type || '').toLowerCase();
+        if (t.includes('js') || t.includes('script')) {
+          countJs++;
+        } else if (t.includes('api') || t.includes('network') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || t.includes('json') || t.includes('form')) {
+          countApis++;
+        } else {
+          countHtml++;
+        }
 
-        if (subRegex.test(item.url)) countSubs++;
+        if (subRegex.test(item.url) || t.includes('subdomain')) {
+          countSubs++;
+        }
       });
 
       miniHtml.textContent = countHtml;

@@ -18,19 +18,19 @@ class KatanaCrawlerEngine {
       mode: 'single-tab', // 'single-tab' (interactive browser tab) or 'fast-fetch' (background HTTP)
       concurrency: 1,     // In single-tab mode, concurrency is strictly 1 (single tab); in fast-fetch, up to 30
       maxDepth: 3,        // Follow discovered in-scope endpoints in the browser tab
-      timeout: 15000,     // 15 seconds per request/tab load
-      tabRenderDelay: 2000, // Wait 2s after DOM load for JS to execute (Single Page Apps / React / Angular)
+      timeout: 6000,      // Fast 6s timeout per request/tab load
+      tabRenderDelay: 400, // Fast 400ms delay after DOM load for JS hydration
       scopeMode: 'same-domain', // 'same-domain', 'same-root', 'regex', 'all'
       scopeRegex: '',
       subdomainCrawl: true,     // Crawl discovered subdomains (*.example.com) when enabled
       openFoundUrlsInTab: true, // Automatically open discovered URLs in the single tab (excluding static assets)
       crawlJavascript: true,    // Deep JS crawl: Fetch & regex-extract external JS bundles
       autoClickButtons: true,   // Automatically click buttons & interactive elements to discover dynamic endpoints
-      maxButtonClicks: 20,      // Maximum button clicks per page
+      maxButtonClicks: 10,      // Maximum 10 buttons per page for rapid exploration
       parseRobotsAndSitemaps: true, // Check robots.txt and sitemap.xml
       ignoreFileExtensions: ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.css', '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.mp3', '.pdf', '.zip'],
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Katana/1.1',
-      delayMs: 300 // Delay between requests in ms
+      delayMs: 100 // Rapid 100ms delay between requests
     };
 
     // State
@@ -488,45 +488,52 @@ class KatanaCrawlerEngine {
   }
 
   /**
-   * Navigate the single tab and wait for load
+   * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
+   * or complete, preventing waiting for slow trackers/ads/media!
    */
-  async navigateTabAndWait(tabId, url, timeoutMs = this.config.timeout) {
-    return new Promise((resolve, reject) => {
+  async navigateTabAndWait(tabId, url, timeoutMs = 5000) {
+    return new Promise((resolve) => {
       let isResolved = false;
       let timer = null;
+      let pollInterval = null;
 
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+      const finish = () => {
+        if (!isResolved) {
+          isResolved = true;
+          if (timer) clearTimeout(timer);
+          if (pollInterval) clearInterval(pollInterval);
+          chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+          resolve(null);
+        }
       };
 
       const onUpdatedListener = (updatedTabId, changeInfo, tab) => {
-        if (updatedTabId === tabId && changeInfo.status === 'complete') {
-          if (!isResolved) {
-            isResolved = true;
-            cleanup();
-            resolve(tab);
+        if (updatedTabId === tabId) {
+          if (changeInfo.status === 'complete' || (tab && tab.status === 'complete')) {
+            finish();
           }
         }
       };
 
-      timer = setTimeout(() => {
-        if (!isResolved) {
-          isResolved = true;
-          cleanup();
-          resolve(null); // Resolve on timeout to allow inspecting whatever loaded so far
-        }
-      }, timeoutMs);
+      // Fast-poll document.readyState every 200ms: proceed as soon as DOM is interactive!
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => document.readyState
+          });
+          const state = res?.[0]?.result;
+          if (state === 'interactive' || state === 'complete') {
+            finish();
+          }
+        } catch {}
+      }, 200);
+
+      // Max hard timeout: 5s max (prevents hanging on slow tracking pixels/ads)
+      timer = setTimeout(finish, Math.min(timeoutMs, 5000));
 
       chrome.tabs.onUpdated.addListener(onUpdatedListener);
-
-      chrome.tabs.update(tabId, { url }).catch(err => {
-        if (!isResolved) {
-          isResolved = true;
-          cleanup();
-          reject(err);
-        }
-      });
+      chrome.tabs.update(tabId, { url }).catch(finish);
     });
   }
 
@@ -546,7 +553,11 @@ class KatanaCrawlerEngine {
       formActions: [],
       inlineScripts: [],
       dataEndpoints: [],
-      networkResources: []
+      networkResources: [],
+      htmlComments: [],
+      metaLinks: [],
+      jsonBlobs: [],
+      rawHtml: ''
     };
 
     // 1. CAPTCHA & Cloudflare Bot Challenge Detection (Checks for real blocking interstitials)
@@ -576,10 +587,10 @@ class KatanaCrawlerEngine {
       return result;
     }
 
-    // 2. Extract DOM links
-    document.querySelectorAll('a[href], link[href], area[href]').forEach(el => {
-      const href = el.getAttribute('href');
-      if (href) result.htmlLinks.push(href);
+    // 2. Extract DOM links (a, link, area, iframe, embed, object, audio, video, source)
+    document.querySelectorAll('a[href], link[href], area[href], iframe[src], embed[src], object[data], source[src], video[src], audio[src]').forEach(el => {
+      const val = el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data');
+      if (val) result.htmlLinks.push(val);
     });
 
     // 3. Extract Script sources
@@ -588,23 +599,46 @@ class KatanaCrawlerEngine {
       if (src) result.scriptSources.push(src);
     });
 
-    // 4. Extract Form actions
-    document.querySelectorAll('form[action]').forEach(el => {
-      const action = el.getAttribute('action') || '';
+    // 4. Extract Form actions & formactions
+    document.querySelectorAll('form[action], input[formaction], button[formaction]').forEach(el => {
+      const action = el.getAttribute('action') || el.getAttribute('formaction') || '';
       const method = (el.getAttribute('method') || 'GET').toUpperCase();
-      result.formActions.push({ action, method });
+      if (action) result.formActions.push({ action, method });
     });
 
-    // 5. Extract Inline Scripts
+    // 5. Extract Inline Scripts & JSON routing blobs (e.g. Next.js __NEXT_DATA__, Nuxt __NUXT__)
     document.querySelectorAll('script:not([src])').forEach(script => {
       const content = script.textContent || '';
       if (content.length > 5) {
-        result.inlineScripts.push(content);
+        const type = (script.getAttribute('type') || '').toLowerCase();
+        const id = (script.id || '').toLowerCase();
+        if (type.includes('json') || id.includes('next') || id.includes('nuxt')) {
+          result.jsonBlobs.push(content);
+        } else {
+          result.inlineScripts.push(content);
+        }
       }
     });
 
-    // 6. Extract data-* attributes with paths/URLs
-    const pathAttrRegex = /^(?:data-(?:url|href|src|path|endpoint|route)|action|formaction|cite|ping|poster)$/i;
+    // 6. Extract Meta tag URLs
+    document.querySelectorAll('meta[content*="/"], meta[content*="http"]').forEach(m => {
+      const c = m.getAttribute('content');
+      if (c && c.length > 1) result.metaLinks.push(c);
+    });
+
+    // 7. Extract HTML Comments (where developers hide staging URLs, API keys, test routes)
+    try {
+      const iterator = document.createNodeIterator(document.documentElement, NodeFilter.SHOW_COMMENT);
+      let curNode;
+      let count = 0;
+      while ((curNode = iterator.nextNode()) && count < 250) {
+        if (curNode.nodeValue) result.htmlComments.push(curNode.nodeValue);
+        count++;
+      }
+    } catch(e) {}
+
+    // 8. Extract data-* attributes with paths/URLs
+    const pathAttrRegex = /^(?:data-(?:url|href|src|path|endpoint|route|api|target)|action|formaction|cite|ping|poster|manifest)$/i;
     document.querySelectorAll('*').forEach(el => {
       for (const attr of el.attributes) {
         if (pathAttrRegex.test(attr.name) && attr.value) {
@@ -613,8 +647,7 @@ class KatanaCrawlerEngine {
       }
     });
 
-    // 7. Extract network requests recorded by browser Performance API!
-    // (Captures XHR/Fetch API calls, dynamic JS chunks, assets loaded by React/Vue/Angular)
+    // 9. Extract network requests recorded by browser Performance API!
     try {
       const resources = performance.getEntriesByType('resource');
       resources.forEach(r => {
@@ -627,15 +660,18 @@ class KatanaCrawlerEngine {
       });
     } catch {}
 
+    // 10. Capture Raw HTML for deep Katana regex parsing
+    try {
+      result.rawHtml = document.documentElement.outerHTML.slice(0, 1500000);
+    } catch(e) {}
+
     return result;
   }
 
   /**
-   * In-tab automated button clicking & interaction explorer
-   * Hooks network APIs, sequentially clicks interactive elements,
-   * and intercepts dynamic URLs, XHR/fetch requests, and DOM mutations.
+   * High-speed automated button clicking & interaction explorer
    */
-  static inTabClickExplorationScript(maxClicks = 20) {
+  static inTabClickExplorationScript(maxClicks = 10) {
     return new Promise((resolve) => {
       const clickedResults = {
         clickedCount: 0,
@@ -749,7 +785,7 @@ class KatanaCrawlerEngine {
           el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
         } catch(e) {}
 
-        setTimeout(clickNext, 200);
+        setTimeout(clickNext, 35);
       }
 
       clickNext();
@@ -881,20 +917,47 @@ class KatanaCrawlerEngine {
       }
 
       // Parse Inline Scripts with Katana Regex
-      for (const scriptText of tabData.inlineScripts) {
+      for (const scriptText of tabData.inlineScripts || []) {
         const jsEndpoints = this.extractEndpointsFromJs(scriptText, effectivePageUrl);
         discoveredInItem.push(...jsEndpoints);
+      }
+
+      // Parse Raw HTML Document Source with Katana Endpoint Regex (catches embedded routes & webpack strings)
+      if (tabData.rawHtml) {
+        const rawEndpoints = this.extractEndpointsFromJs(tabData.rawHtml, effectivePageUrl);
+        discoveredInItem.push(...rawEndpoints);
+      }
+
+      // Parse Next.js / Nuxt JSON Blobs & Hydration States (finds hidden route manifests)
+      for (const jsonStr of tabData.jsonBlobs || []) {
+        const jsonEndpoints = this.extractEndpointsFromJs(jsonStr, effectivePageUrl);
+        discoveredInItem.push(...jsonEndpoints);
+      }
+
+      // Parse HTML Comments for Hidden / Staging Endpoints
+      for (const comment of tabData.htmlComments || []) {
+        const commentEndpoints = this.extractEndpointsFromJs(comment, effectivePageUrl);
+        discoveredInItem.push(...commentEndpoints);
+        if (this.config.subdomainCrawl) {
+          const commentSubs = this.extractSubdomainsFromText(comment, seedUrl);
+          discoveredInItem.push(...commentSubs);
+        }
+      }
+
+      // Process Meta Tag Links
+      for (const metaVal of tabData.metaLinks || []) {
+        const normalized = this.normalizeUrl(metaVal, effectivePageUrl);
+        if (normalized) discoveredInItem.push({ url: normalized, type: 'meta-link', sourceUrl: effectivePageUrl });
       }
     }
 
     // 5. Automated Button Clicking & Interactive DOM Exploration
     if (this.config.autoClickButtons) {
       try {
-        this.log('inf', `[Button-Clicker] Exploring buttons and interactive elements on ${url}...`);
         const clickResults = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: KatanaCrawlerEngine.inTabClickExplorationScript,
-          args: [this.config.maxButtonClicks || 20]
+          args: [this.config.maxButtonClicks || 10]
         });
 
         const clickData = clickResults?.[0]?.result;
@@ -937,36 +1000,36 @@ class KatanaCrawlerEngine {
       }
     }
 
-    // 6. Deep JS Crawling: Fetch and inspect external .js files found in the tab
+    // 6. Parallel Deep JS Crawling: Fetch and inspect external .js files concurrently
     if (this.config.crawlJavascript) {
       const jsFiles = discoveredInItem.filter(d =>
         (d.type === 'script-src' || d.type === 'script-bundle' || d.url.endsWith('.js')) &&
         this.isInScope(d.url, seedUrl)
       );
 
-      for (const jsItem of jsFiles.slice(0, 10)) { // Inspect up to 10 JS bundles per page
-        if (!this.visitedUrls.has(jsItem.url)) {
-          this.visitedUrls.add(jsItem.url);
+      const jsFilesToFetch = jsFiles.slice(0, 15).filter(j => !this.visitedUrls.has(j.url));
+      jsFilesToFetch.forEach(j => this.visitedUrls.add(j.url));
+
+      if (jsFilesToFetch.length > 0) {
+        this.log('inf', `[Katana-JS] Parallel spidering ${jsFilesToFetch.length} external JS bundles...`);
+        const jsPromises = jsFilesToFetch.map(async (jsItem) => {
           try {
-            this.log('inf', `[Katana-JS] Spidering script bundle: ${jsItem.url}`);
-            const jsResp = await this.fetchWithTimeout(jsItem.url, { timeout: 8000 });
-            if (jsResp.ok) {
+            const jsResp = await this.fetchWithTimeout(jsItem.url, { timeout: 4500 });
+            if (jsResp && jsResp.ok) {
               const jsText = await jsResp.text();
               const endpoints = this.extractEndpointsFromJs(jsText, jsItem.url);
-              this.log('inf', `[Katana-JS] Found ${endpoints.length} endpoints inside ${jsItem.url}`);
               discoveredInItem.push(...endpoints);
 
-              // If subdomain crawl is enabled, also look for subdomains inside the JS code
               if (this.config.subdomainCrawl) {
                 const jsSubdomains = this.extractSubdomainsFromText(jsText, seedUrl);
                 if (jsSubdomains.length > 0) {
-                  this.log('inf', `[Subdomain-Discovery] Found ${jsSubdomains.length} subdomains in ${jsItem.url}`);
                   discoveredInItem.push(...jsSubdomains);
                 }
               }
             }
           } catch {}
-        }
+        });
+        await Promise.allSettled(jsPromises);
       }
     }
 

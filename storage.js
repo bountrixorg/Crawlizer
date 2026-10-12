@@ -234,7 +234,20 @@ class KatanaStorage {
         }
 
         if (filters.type && filters.type !== 'all') {
-          results = results.filter(item => item.type === filters.type || item.type.startsWith(filters.type));
+          const ft = filters.type.toLowerCase();
+          results = results.filter(item => {
+            const it = (item.type || '').toLowerCase();
+            if (ft === 'subdomain') return it.includes('subdomain');
+            if (ft === 'button-click') return it.includes('button') || it.includes('click');
+            if (ft === 'js-endpoint') return it.includes('endpoint') || it.includes('regex') || it.includes('comment') || it.includes('hydration');
+            if (ft === 'network-api') return it.includes('network') || it.includes('api') || it.includes('xhr') || it.includes('fetch');
+            if (ft === 'script-bundle') return it.includes('script') || it.includes('bundle') || it.includes('js');
+            if (ft === 'html-link') return it.includes('link') || it.includes('dom') || it.includes('anchor') || it.includes('html');
+            if (ft === 'form-action') return it.includes('form');
+            if (ft === 'robots.txt') return it.includes('robots');
+            if (ft === 'sitemap') return it.includes('sitemap');
+            return it.includes(ft);
+          });
         }
 
         if (filters.scope && filters.scope !== 'all') {

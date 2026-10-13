@@ -531,8 +531,8 @@ class KatanaCrawlerEngine {
    * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
    * or complete, preventing waiting for slow trackers/ads/media!
    */
-  async navigateTabAndWait(tabId, url, timeoutMs = 4500) {
-    return new Promise(async (resolve) => {
+  async navigateTabAndWait(tabId, url, timeoutMs = 5000) {
+    return new Promise((resolve) => {
       let isResolved = false;
       let timer = null;
       let pollInterval = null;
@@ -540,145 +540,93 @@ class KatanaCrawlerEngine {
       let onRemovedListener = null;
 
       const finish = () => {
-        if (!isResolved) {
-          isResolved = true;
-          if (timer) clearTimeout(timer);
-          if (pollInterval) clearInterval(pollInterval);
-          if (onUpdatedListener) {
-            chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-          }
-          if (onRemovedListener) {
-            chrome.tabs.onRemoved.removeListener(onRemovedListener);
-          }
-          resolve(null);
-        }
+        if (isResolved) return;
+        isResolved = true;
+        if (timer) clearTimeout(timer);
+        if (pollInterval) clearInterval(pollInterval);
+        if (onUpdatedListener) chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+        if (onRemovedListener) chrome.tabs.onRemoved.removeListener(onRemovedListener);
+        resolve(null);
       };
 
-      // Tab was closed by user
+      // Tab closed by user
       onRemovedListener = (removedTabId) => {
-        if (removedTabId === tabId) {
-          finish();
-        }
+        if (removedTabId === tabId) finish();
       };
       chrome.tabs.onRemoved.addListener(onRemovedListener);
 
-      // Get initial tab URL before navigation
-      let initialUrl = '';
-      try {
-        const curTab = await chrome.tabs.get(tabId);
-        initialUrl = curTab?.url || '';
-      } catch {
-        finish();
-        return;
-      }
+      // Hard timeout
+      const maxWait = Math.min(Math.max(timeoutMs || 5000, 3000), 8000);
+      timer = setTimeout(finish, maxWait);
 
-      const initialCanonical = this.canonicalUrl(initialUrl);
-      const targetCanonical = this.canonicalUrl(url);
-      const isSamePageNav = Boolean(initialCanonical && targetCanonical && initialCanonical === targetCanonical);
-
+      // Track whether navigation was actually initiated
       let navStarted = false;
+      let navStartTime = null;
 
       onUpdatedListener = (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
 
         if (changeInfo.status === 'loading') {
           navStarted = true;
+          navStartTime = Date.now();
         }
 
-        if (changeInfo.status === 'complete') {
-          const currentUrl = tab?.url || '';
-          if (!currentUrl || currentUrl === 'about:blank') return;
-
-          const currentCanonical = this.canonicalUrl(currentUrl);
-
-          // If navigating from an existing page to a different page, ensure it is not the old URL
-          if (!isSamePageNav && initialCanonical && currentCanonical === initialCanonical) {
-            return;
-          }
-
-          if (navStarted || isSamePageNav || (currentCanonical && currentCanonical !== initialCanonical)) {
-            finish();
-          }
+        if (changeInfo.status === 'complete' && navStarted) {
+          const tabUrl = tab?.url || '';
+          // Ignore about:blank completions — the real page hasn't loaded yet
+          if (tabUrl === 'about:blank' || tabUrl.startsWith('chrome://')) return;
+          finish();
         }
       };
       chrome.tabs.onUpdated.addListener(onUpdatedListener);
 
-      try {
-        await chrome.tabs.update(tabId, { url });
-      } catch {
-        finish();
-        return;
-      }
+      // Initiate navigation — register listener BEFORE calling tabs.update
+      // so we never miss the 'loading' event
+      chrome.tabs.update(tabId, { url }).then(() => {
+        // After we've issued the navigate command, start polling as a fallback
+        // in case the onUpdated events were missed (can happen if tab was already
+        // at the same URL or if Chrome fires events before listener was added)
+        let pollTicks = 0;
+        pollInterval = setInterval(async () => {
+          pollTicks++;
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            if (!tab) { finish(); return; }
 
-      // Fast-poll document.readyState after giving Chrome initial time to begin navigation
-      let pollTicks = 0;
-      let consecutiveErrors = 0;
+            const tabUrl = tab.url || '';
+            if (tabUrl === 'about:blank' || tabUrl.startsWith('chrome://')) return;
 
-      pollInterval = setInterval(async () => {
-        pollTicks++;
-
-        // Fast-path: check chrome.tabs.get status directly
-        try {
-          const tab = await chrome.tabs.get(tabId);
-          if (tab && tab.status === 'complete') {
-            const currentCanonical = this.canonicalUrl(tab.url);
-            if (currentCanonical && currentCanonical !== 'about:blank') {
-              if (isSamePageNav || navStarted || currentCanonical !== initialCanonical) {
+            if (tab.status === 'complete') {
+              // Only finish from poll if navStarted OR if enough time has passed
+              // (prevents falsely completing on stale state before nav fired)
+              if (navStarted || pollTicks >= 5) {
                 finish();
-                return;
               }
             }
+          } catch {
+            // Tab might have navigated to a cross-origin page where get() fails briefly
+            if (navStarted) {
+              // Try scripting to confirm page is ready
+              try {
+                const res = await chrome.scripting.executeScript({
+                  target: { tabId },
+                  func: () => document.readyState
+                });
+                const state = res?.[0]?.result;
+                if (state === 'interactive' || state === 'complete') {
+                  finish();
+                }
+              } catch { /* Still loading */ }
+            }
           }
-        } catch {}
-
-        try {
-          const res = await chrome.scripting.executeScript({
-            target: { tabId },
-            func: () => ({
-              href: window.location.href,
-              state: document.readyState
-            })
-          });
-          const cur = res?.[0]?.result;
-          if (!cur) return;
-
-          consecutiveErrors = 0;
-
-          // Tab is still on about:blank or internal page; wait for target to load
-          if (cur.href === 'about:blank' || cur.href.startsWith('chrome://')) {
-            return;
-          }
-
-          const curCanonical = this.canonicalUrl(cur.href);
-
-          // If navigating from an existing page to a different page, wait until left initialUrl
-          if (!isSamePageNav && initialCanonical && curCanonical === initialCanonical) {
-            return;
-          }
-
-          if (isSamePageNav && !navStarted && pollTicks < 2) {
-            return;
-          }
-
-          // DOM is interactive or complete on the new page!
-          if (cur.state === 'interactive' || cur.state === 'complete') {
-            finish();
-          }
-        } catch {
-          navStarted = true;
-          consecutiveErrors++;
-          // If script execution fails consecutively after nav started, page may have frame/CSP restriction; finish cleanly
-          if (pollTicks > 6 && consecutiveErrors >= 3) {
-            finish();
-          }
-        }
-      }, 150);
-
-      // Max hard timeout: prevents hanging indefinitely on slow tracking pixels/ads
-      const maxWait = Math.min(Math.max(timeoutMs || 4000, 2000), 5000);
-      timer = setTimeout(finish, maxWait);
+        }, 200);
+      }).catch(() => {
+        // Navigation failed entirely (tab closed, invalid URL, etc.)
+        finish();
+      });
     });
   }
+
 
   /**
    * In-tab content inspection script
@@ -1037,8 +985,27 @@ class KatanaCrawlerEngine {
     }
 
     if (tabData && tabData.pageUrl === 'about:blank' && url !== 'about:blank') {
-      this.log('inf', `[Browser Tab] Tab still on about:blank, falling back to background HTTP spider for ${url}`);
+      this.log('inf', `[Browser Tab] Tab still on about:blank, retrying navigation for ${url}...`);
       tabData = null;
+
+      // Retry navigation once with a longer timeout
+      try {
+        await this.navigateTabAndWait(tab.id, url, 7000);
+        await new Promise(r => setTimeout(r, 600));
+        const retryResults = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: KatanaCrawlerEngine.inTabExtractionScript
+        });
+        const retryData = retryResults?.[0]?.result;
+        if (retryData && retryData.pageUrl !== 'about:blank') {
+          tabData = retryData;
+          this.log('inf', `[Browser Tab] Retry navigation succeeded for ${url}`);
+        } else {
+          this.log('wrn', `[Browser Tab] Retry navigation still on about:blank for ${url}, falling back to HTTP spider`);
+        }
+      } catch (err) {
+        this.log('wrn', `[Browser Tab] Retry navigation failed for ${url}: ${err.message}`);
+      }
     }
 
     // 4. Check for CAPTCHA / Bot Verification
@@ -1134,6 +1101,27 @@ class KatanaCrawlerEngine {
             discoveredSupplyChain.push(...this.supplyChainScanner.scan(bodyText, url, 'html'));
           }
           this.log('inf', `[Engine Fallback] Extracted ${fallbackUrls.length} links via background spider for ${url}`);
+
+          // ── EARLY ENQUEUE: Fallback path ─────────────────────────────────
+          for (const d of discoveredInItem) {
+            if (!d.url || this.shouldIgnoreExtension(d.url)) continue;
+            const canonical = this.canonicalUrl(d.url);
+            if (!canonical) continue;
+            if (this.isInScope(canonical, effectiveSeedUrl) &&
+                depth < this.config.maxDepth &&
+                this.isNavigableInTab(canonical) &&
+                !this.visitedUrls.has(canonical) &&
+                !this.enqueuedUrls.has(canonical)) {
+              this.enqueuedUrls.add(canonical);
+              this.queue.push({
+                url: canonical,
+                seedUrl: effectiveSeedUrl,
+                depth: depth + 1,
+                targetId: null
+              });
+              this.log('inf', `[Early Queue-FB] [Depth ${depth + 1}/${this.config.maxDepth}] ${canonical}`);
+            }
+          }
         }
       } catch (err) {
         this.log('wrn', `Fallback fetch failed for ${url}: ${err.message}`);

@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const miniApis = document.getElementById('mini-apis');
   const miniSubs = document.getElementById('mini-subs');
   const miniSecrets = document.getElementById('mini-secrets');
+  const miniPkgs = document.getElementById('mini-pkgs');
 
   const fileInput = document.getElementById('popup-file-input');
   const dropZone = document.getElementById('drop-zone');
@@ -128,6 +129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       miniApis.textContent = countApis;
       miniSubs.textContent = countSubs;
       if (miniSecrets) miniSecrets.textContent = (stats.totalSecrets || 0).toLocaleString();
+      if (miniPkgs) miniPkgs.textContent = (stats.totalSupplyChain || 0).toLocaleString();
 
     } catch (e) {
       console.error('Failed to update popup stats:', e);

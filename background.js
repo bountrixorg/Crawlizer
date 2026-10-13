@@ -614,15 +614,15 @@ class MessageHandler {
     try {
       switch (ecosystem) {
         case 'pypi': {
-          const res = await this.fetchWithTimeout(`https://pypi.org/pypi/${name}/json`);
+          const res = await this.fetchWithTimeout(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`);
           return res.ok;
         }
         case 'rubygems': {
-          const res = await this.fetchWithTimeout(`https://rubygems.org/api/v1/gems/${name}.json`);
+          const res = await this.fetchWithTimeout(`https://rubygems.org/api/v1/gems/${encodeURIComponent(name)}.json`);
           return res.ok;
         }
         case 'nuget': {
-          const normalized = name.toLowerCase();
+          const normalized = encodeURIComponent(name.toLowerCase());
           const res = await this.fetchWithTimeout(`https://api.nuget.org/v3-flatcontainer/${normalized}/index.json`);
           return res.ok;
         }
@@ -637,7 +637,7 @@ class MessageHandler {
           return Boolean(data.response && data.response.numFound > 0);
         }
         case 'composer': {
-          const res = await this.fetchWithTimeout(`https://repo.packagist.org/p2/${name}.json`);
+          const res = await this.fetchWithTimeout(`https://repo.packagist.org/p2/${encodeURIComponent(name).replace(/%2F/g, '/')}.json`);
           return res.ok;
         }
         case 'golang': {
@@ -646,7 +646,7 @@ class MessageHandler {
           return res.ok;
         }
         case 'crates': {
-          const res = await this.fetchWithTimeout(`https://crates.io/api/v1/crates/${name}`);
+          const res = await this.fetchWithTimeout(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`);
           return res.ok;
         }
         default:

@@ -1440,11 +1440,13 @@ async function runAutoScan() {
         scanState.packages = partial.slice();
         const suspiciousPackages = scanState.packages.filter(p => p.suspicious);
         if (suspiciousPackages.length > 0 || scanState.exposedFiles.length > 0) {
-          chrome.runtime.sendMessage({
-            action: 'notifyRisks',
-            suspiciousPackages,
-            exposedFiles: scanState.exposedFiles
-          });
+          try {
+            chrome.runtime.sendMessage({
+              action: 'notifyRisks',
+              suspiciousPackages,
+              exposedFiles: scanState.exposedFiles
+            }).catch(() => {});
+          } catch (e) {}
         }
       }, { maxPackages: CONFIG.MAX_ANALYSIS_PACKAGES }),
       scanState.packages.slice(),
@@ -1459,13 +1461,14 @@ async function runAutoScan() {
     finalizeScan(isOutOfTime());
 
     // 5. Report Results (Optional: Badge/Notification)
-    // 5. Report Results (Optional: Badge/Notification)
     if (suspiciousPackages.length > 0 || exposedFiles.length > 0) {
-      chrome.runtime.sendMessage({
-        action: 'notifyRisks',
-        suspiciousPackages,
-        exposedFiles
-      });
+      try {
+        chrome.runtime.sendMessage({
+          action: 'notifyRisks',
+          suspiciousPackages,
+          exposedFiles
+        }).catch(() => {});
+      } catch (e) {}
     }
 
   } catch (e) {
@@ -1474,7 +1477,9 @@ async function runAutoScan() {
     finalizeScan(true);
     Logger.error('Scan failed:', e);
   }
-}  function resetForRescan() {
+}
+
+function resetForRescan() {
   scanSessionId += 1;
   scanner = new PackageScanner();
   crawler = new WebCrawler(window.location.href);

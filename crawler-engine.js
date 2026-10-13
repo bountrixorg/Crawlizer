@@ -102,6 +102,16 @@ class KatanaCrawlerEngine {
       const candidateHost = candidateObj.hostname.replace(/^www\./i, '').toLowerCase();
       const seedHost = seedObj.hostname.replace(/^www\./i, '').toLowerCase();
 
+      // Custom regex scope mode takes highest priority if selected
+      if (this.config.scopeMode === 'regex' && this.config.scopeRegex) {
+        try {
+          const re = new RegExp(this.config.scopeRegex, 'i');
+          return re.test(candidateUrl);
+        } catch {
+          return false;
+        }
+      }
+
       // Subdomain Crawl Mode: If enabled, any URL matching the seed's apex domain (*.domain.com) is in-scope
       if (this.config.subdomainCrawl) {
         const candidateApex = this.getApexDomain(candidateObj.hostname).toLowerCase();
@@ -117,11 +127,6 @@ class KatanaCrawlerEngine {
 
       if (this.config.scopeMode === 'same-root') {
         return this.getApexDomain(candidateObj.hostname).toLowerCase() === this.getApexDomain(seedObj.hostname).toLowerCase();
-      }
-
-      if (this.config.scopeMode === 'regex' && this.config.scopeRegex) {
-        const re = new RegExp(this.config.scopeRegex, 'i');
-        return re.test(candidateUrl);
       }
 
       return candidateHost === seedHost;
@@ -514,6 +519,10 @@ class KatanaCrawlerEngine {
         }
       } catch {}
     }
+  }
+
+  async focusTab() {
+    return this.focusCrawlerTab();
   }
 
   /**
@@ -914,6 +923,9 @@ class KatanaCrawlerEngine {
           discoveredSupplyChain.push(...probed);
           for (const p of probed) {
             if (p.url) discoveredInItem.push({ url: p.url, type: 'config', sourceUrl: effectivePageUrl });
+            if (p.rawContent && this.secretScanner) {
+              discoveredSecrets.push(...this.secretScanner.scan(p.rawContent, p.url, 'config'));
+            }
           }
         }
       } catch (e) {}
@@ -1407,6 +1419,18 @@ class KatanaCrawlerEngine {
 
   resolveCaptchaManually() {
     this.isWaitingForCaptcha = false;
+    if (this.captchaResolver) {
+      this.captchaResolver();
+      this.captchaResolver = null;
+    }
+  }
+
+  skipCurrentTarget() {
+    this.isWaitingForCaptcha = false;
+    if (this.currentCaptchaTarget) {
+      this.log('wrn', `[SKIP] Skipped target ${this.currentCaptchaTarget.url} by user request`);
+      this.currentCaptchaTarget = null;
+    }
     if (this.captchaResolver) {
       this.captchaResolver();
       this.captchaResolver = null;

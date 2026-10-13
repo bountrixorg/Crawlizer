@@ -627,6 +627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderTargetsTable();
       refreshResultsTable();
       refreshSecretsTable();
+      refreshSupplyChainTable();
     }
   };
 
@@ -848,6 +849,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await renderTargetsTable();
       await refreshResultsTable();
       await refreshSecretsTable();
+      await refreshSupplyChainTable();
       engine.log('inf', 'All database storage wiped.');
     }
   });
@@ -971,9 +973,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update Donut Chart
     try {
       const urls = await storage.getDiscoveredUrls();
-      const htmlCount = urls.filter(u => u.type.includes('html')).length;
-      const jsCount = urls.filter(u => u.type.includes('js') || u.type.includes('bundle')).length;
-      const apiCount = urls.filter(u => u.type.includes('api')).length;
+      const htmlCount = urls.filter(u => (u.type || '').includes('html')).length;
+      const jsCount = urls.filter(u => (u.type || '').includes('js') || (u.type || '').includes('bundle')).length;
+      const apiCount = urls.filter(u => (u.type || '').includes('api')).length;
       drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
     } catch {}
   }
@@ -1053,11 +1055,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     let html = '';
     pageItems.forEach((item, idx) => {
       const rowNum = startIndex + idx + 1;
-      const typeClass = item.type.includes('subdomain') ? 'tag-subdomain' :
-                        item.type.includes('button') ? 'tag-btn-click' :
-                        item.type.includes('api') ? 'tag-network-api' :
-                        item.type.includes('js') ? 'tag-js-endpoint' : 'tag-html-link';
-      const scopeClass = item.scope === 'in-scope' ? 'tag-in-scope' : 'tag-out-of-scope';
+      const itemType = (item.type || '').toLowerCase();
+      const typeClass = itemType.includes('subdomain') ? 'tag-subdomain' :
+                        itemType.includes('button') ? 'tag-btn-click' :
+                        itemType.includes('api') ? 'tag-network-api' :
+                        itemType.includes('js') ? 'tag-js-endpoint' : 'tag-html-link';
+      const scopeClass = (item.scope || '') === 'in-scope' ? 'tag-in-scope' : 'tag-out-of-scope';
 
       html += `
         <tr>
@@ -2332,7 +2335,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (btnExportSupplyHtml) {
-    btnExportSupplyHtml.addEventListener('click', () => {
+    btnExportSupplyHtml.addEventListener('click', async () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        const stored = await storage.getSupplyChainFindings();
+        if (stored.length > 0) {
+          supplyState.packages = stored.filter(f => f.type === 'package');
+          supplyState.exposedFiles = stored.filter(f => f.type === 'exposed-file');
+        }
+      }
       if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
         alert('No supply chain findings to export.');
         return;
@@ -2344,7 +2354,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (btnExportSupplyJson) {
-    btnExportSupplyJson.addEventListener('click', () => {
+    btnExportSupplyJson.addEventListener('click', async () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        const stored = await storage.getSupplyChainFindings();
+        if (stored.length > 0) {
+          supplyState.packages = stored.filter(f => f.type === 'package');
+          supplyState.exposedFiles = stored.filter(f => f.type === 'exposed-file');
+        }
+      }
       if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
         alert('No supply chain findings to export.');
         return;
@@ -2362,7 +2379,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (btnExportSupplyCsv) {
-    btnExportSupplyCsv.addEventListener('click', () => {
+    btnExportSupplyCsv.addEventListener('click', async () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        const stored = await storage.getSupplyChainFindings();
+        if (stored.length > 0) {
+          supplyState.packages = stored.filter(f => f.type === 'package');
+          supplyState.exposedFiles = stored.filter(f => f.type === 'exposed-file');
+        }
+      }
       if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
         alert('No supply chain findings to export.');
         return;
@@ -2381,6 +2405,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (btnCopySupplyBad) {
     btnCopySupplyBad.addEventListener('click', async () => {
+      if (supplyState.packages.length === 0) {
+        const stored = await storage.getSupplyChainFindings();
+        if (stored.length > 0) {
+          supplyState.packages = stored.filter(f => f.type === 'package');
+          supplyState.exposedFiles = stored.filter(f => f.type === 'exposed-file');
+        }
+      }
       const bad = supplyState.packages.filter(p => p.isUnregistered);
       if (bad.length === 0) {
         alert('No unregistered / dependency confusion packages found to copy.');

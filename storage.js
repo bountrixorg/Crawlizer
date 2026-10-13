@@ -186,6 +186,12 @@ class KatanaStorage {
             store.put(record);
             this.knownSecretMap.set(match, record);
           }
+          resolve();
+        };
+
+        req.onerror = () => resolve();
+      });
+    }
 
     if (this.db.objectStoreNames.contains('supply_chain')) {
       await new Promise((resolve) => {
@@ -623,7 +629,8 @@ class KatanaStorage {
       crawledTargets: targets.filter(t => t.status === 'completed').length,
       failedTargets: targets.filter(t => t.status === 'failed').length,
       totalDiscovered: totalDiscovered,
-      totalSecrets: totalSecrets
+      totalSecrets: totalSecrets,
+      totalSupplyChain: this.knownSupplyChainMap.size
     };
 
     return stats;
@@ -765,8 +772,9 @@ class KatanaStorage {
           );
         }
 
-        if (filters.ecosystem && filters.ecosystem !== 'all') {
-          results = results.filter(item => (item.ecosystem || '').toLowerCase() === filters.ecosystem.toLowerCase());
+        const ecoFilter = (filters.ecosystem || filters.eco || '').toLowerCase();
+        if (ecoFilter && ecoFilter !== 'all') {
+          results = results.filter(item => (item.ecosystem || '').toLowerCase() === ecoFilter);
         }
 
         if (filters.severity && filters.severity !== 'all') {

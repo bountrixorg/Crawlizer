@@ -3,767 +3,853 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crawlizer - Endpoint Crawler & URL Spider</title>
+  <title>CRAWLIZER — Cyberpunk Web Crawler & Spider</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="katana-app">
-  <!-- Ambient Background Glows -->
-  <div class="ambient-glow glow-1"></div>
-  <div class="ambient-glow glow-2"></div>
+<body class="hacker-app">
+  <!-- Subtle Scanline & Grid Overlays -->
+  <div class="scanlines-overlay"></div>
+  <div class="grid-overlay"></div>
+  <canvas id="matrix-canvas"></canvas>
 
-  <!-- Top Navigation Bar -->
-  <header class="app-header">
-    <div class="header-left">
-      <div class="brand">
-        <div class="brand-icon-wrapper">
-          <img src="icons/icon48.png" alt="Crawlizer Logo" class="brand-logo" width="30" height="30">
-          <div class="brand-glow"></div>
-        </div>
-        <div class="brand-text">
-          <div class="brand-title">
-            <span>CRAWLIZER</span>
-            <span class="version-tag">v1.2</span>
+  <div class="app-layout">
+    <!-- Collapsible Left Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-header">
+        <a href="#" class="sidebar-brand">
+          <div class="sidebar-logo-box">
+            <img src="icons/icon48.png" alt="Crawlizer" width="26" height="26">
           </div>
-          <span class="sub-text">NEXT-GEN WEB CRAWLER & SPIDER</span>
-        </div>
-      </div>
-      <div class="status-pill" id="status-pill">
-        <span class="status-indicator-dot" id="header-status-dot"></span>
-        <span class="status-label" id="header-status-label">READY</span>
-      </div>
-    </div>
-
-    <div class="header-right">
-      <div class="control-actions">
-        <button id="btn-focus-tab" class="btn btn-glass" title="Switch to the single crawler browser tab" style="display: none;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-            <line x1="8" y1="21" x2="16" y2="21"/>
-            <line x1="12" y1="17" x2="12" y2="21"/>
+          <div class="sidebar-brand-text">
+            <span class="brand-title">CRAWLIZER</span>
+            <span class="brand-badge">SPIDER_v1.2 // ROOT</span>
+          </div>
+        </a>
+        <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar (Ctrl+B)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
-          <span>Focus Crawler Tab</span>
-        </button>
-        <button id="btn-start" class="btn btn-primary btn-glow">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <span>Start Crawling</span>
-        </button>
-        <button id="btn-pause" class="btn btn-amber" style="display: none;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="4" width="4" height="16"/>
-            <rect x="14" y="4" width="4" height="16"/>
-          </svg>
-          <span>Pause</span>
-        </button>
-        <button id="btn-resume" class="btn btn-cyan" style="display: none;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <span>Resume</span>
-        </button>
-        <button id="btn-stop" class="btn btn-danger" disabled>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="5" y="5" width="14" height="14"/>
-          </svg>
-          <span>Stop</span>
         </button>
       </div>
 
-      <div class="header-divider"></div>
-
-      <div class="export-dropdown">
-        <button id="btn-export-menu" class="btn btn-glass">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          <span>Export</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="dropdown-menu" id="export-menu">
-          <div class="dropdown-item" id="export-txt">
-            <div class="dropdown-item-header">
-              <span class="item-title">Export as TXT (.txt)</span>
-              <span class="badge-mini">Katana</span>
-            </div>
-            <span class="item-desc">One clean URL per line for httpx, nuclei, ffuf</span>
-          </div>
-          <div class="dropdown-item" id="export-json">
-            <div class="dropdown-item-header">
-              <span class="item-title">Export as JSON (.json)</span>
-              <span class="badge-mini">Full</span>
-            </div>
-            <span class="item-desc">Structured metadata, source, scope, timestamps</span>
-          </div>
-          <div class="dropdown-item" id="export-csv">
-            <div class="dropdown-item-header">
-              <span class="item-title">Export as CSV (.csv)</span>
-              <span class="badge-mini">Table</span>
-            </div>
-            <span class="item-desc">Spreadsheet ready table with all columns</span>
-          </div>
-          <div class="dropdown-divider"></div>
-          <div class="dropdown-item" id="copy-clipboard">
-            <div class="dropdown-item-header">
-              <span class="item-title">Copy All to Clipboard</span>
-              <span class="badge-mini">Quick</span>
-            </div>
-            <span class="item-desc">Copies all discovered URLs directly</span>
-          </div>
-        </div>
-      </div>
-
-      <button id="btn-clear-db" class="btn btn-icon-glass text-danger" title="Clear All Stored Data">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-      </button>
-    </div>
-  </header>
-
-  <!-- CAPTCHA / BOT CHALLENGE BANNER -->
-  <div class="captcha-banner" id="captcha-banner" style="display: none;">
-    <div class="captcha-banner-left">
-      <div class="captcha-icon-pulse">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-      </div>
-      <div class="captcha-text">
-        <div class="captcha-title-row">
-          <h4 id="captcha-type-title">CAPTCHA / Challenge Detected!</h4>
-          <span class="badge-pulse">PAUSED</span>
-        </div>
-        <p>Target: <span id="captcha-target-url" class="font-mono">https://...</span></p>
-        <small>The crawler tab is waiting for verification. Solve the challenge in the single tab, then continue.</small>
-      </div>
-    </div>
-    <div class="captcha-banner-actions">
-      <button id="btn-captcha-focus" class="btn btn-amber">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        </svg>
-        <span>Open / Focus Tab</span>
-      </button>
-      <button id="btn-captcha-solved" class="btn btn-primary">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-        <span>I Solved It, Continue</span>
-      </button>
-      <button id="btn-captcha-skip" class="btn btn-glass">
-        <span>Skip Target</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Sleek Metric Tiles Grid -->
-  <section class="metrics-grid">
-    <div class="metric-card">
-      <div class="metric-header">
-        <span class="metric-title">TOTAL SEEDS</span>
-        <div class="metric-icon-box">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-        </div>
-      </div>
-      <div class="metric-value" id="metric-targets">0</div>
-      <div class="metric-footer" id="metric-pending">0 Pending</div>
-    </div>
-
-    <div class="metric-card">
-      <div class="metric-header">
-        <span class="metric-title">CRAWLED</span>
-        <div class="metric-icon-box text-cyan">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-      </div>
-      <div class="metric-value" id="metric-crawled">0</div>
-      <div class="metric-footer" id="metric-progress-percent">0% Completed</div>
-    </div>
-
-    <div class="metric-card highlight-glow-cyan">
-      <div class="metric-header">
-        <span class="metric-title">DISCOVERED URLS</span>
-        <div class="metric-icon-box text-neon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </div>
-      </div>
-      <div class="metric-value text-neon" id="metric-discovered">0</div>
-      <div class="metric-footer text-neon-sub" id="metric-new-session">+0 In Current Run</div>
-    </div>
-
-    <div class="metric-card">
-      <div class="metric-header">
-        <span class="metric-title">ACTIVE QUEUE</span>
-        <div class="metric-icon-box">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        </div>
-      </div>
-      <div class="metric-value" id="metric-queue">0</div>
-      <div class="metric-footer" id="metric-active-workers">Single Tab Mode</div>
-    </div>
-
-    <div class="metric-card">
-      <div class="metric-header">
-        <span class="metric-title">SPEED / RPS</span>
-        <div class="metric-icon-box text-cyan">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-      </div>
-      <div class="metric-value font-mono" id="metric-rps">0.0</div>
-      <div class="metric-footer">Req / Second</div>
-    </div>
-
-    <div class="metric-card highlight-glow-amber">
-      <div class="metric-header">
-        <span class="metric-title">SCAN DURATION</span>
-        <div class="metric-icon-box text-amber">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-      </div>
-      <div class="metric-value font-mono text-amber" id="metric-duration">00:00:00</div>
-      <div class="metric-footer" id="metric-duration-status">Total Scan Time</div>
-    </div>
-
-    <div class="metric-card highlight-glow-purple">
-      <div class="metric-header">
-        <span class="metric-title">SUBDOMAINS</span>
-        <div class="metric-icon-box text-purple">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        </div>
-      </div>
-      <div class="metric-value text-purple" id="metric-subdomains">0</div>
-      <div class="metric-footer">Unique Hosts</div>
-    </div>
-
-    <div class="metric-card highlight-glow-emerald">
-      <div class="metric-header">
-        <span class="metric-title">DUPES FILTERED</span>
-        <div class="metric-icon-box text-emerald">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        </div>
-      </div>
-      <div class="metric-value text-emerald" id="metric-dupes">0</div>
-      <div class="metric-footer">Strict Canonical</div>
-    </div>
-
-    <div class="metric-card highlight-glow-rose">
-      <div class="metric-header">
-        <span class="metric-title">SECRETS FOUND</span>
-        <div class="metric-icon-box text-rose">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
-        </div>
-      </div>
-      <div class="metric-value text-rose font-mono" id="metric-secrets">0</div>
-      <div class="metric-footer" id="metric-secrets-breakdown">Sensitive Findings</div>
-    </div>
-
-    <div class="metric-card">
-      <div class="metric-header">
-        <span class="metric-title">ERRORS</span>
-        <div class="metric-icon-box text-danger">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-      </div>
-      <div class="metric-value error-text" id="metric-errors">0</div>
-      <div class="metric-footer">Timeouts / Dead</div>
-    </div>
-  </section>
-
-  <!-- Sleek Neon Progress Bar -->
-  <div class="progress-bar-container">
-    <div class="progress-bar-fill" id="progress-bar-fill"></div>
-  </div>
-
-  <!-- Modern Segmented Tabs Navigation -->
-  <div class="tab-nav-wrapper">
-    <nav class="nav-tabs">
-      <button class="nav-tab active" data-tab="tab-upload">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <span>Targets & Configuration</span>
-      </button>
-      <button class="nav-tab" data-tab="tab-results">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        <span>Discovered Endpoints</span>
-        <span class="tab-badge" id="tab-discovered-count">0</span>
-      </button>
-      <button class="nav-tab" data-tab="tab-secrets">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
-        <span>Secrets & Findings</span>
-        <span class="tab-badge badge-rose" id="tab-secrets-count">0</span>
-      </button>
-      <button class="nav-tab" data-tab="tab-terminal">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        <span>Crawlizer Live Stream</span>
-      </button>
-    </nav>
-  </div>
-
-  <!-- Main Content Layout -->
-  <main class="main-content">
-    <!-- TAB 1: TARGETS & CONFIGURATION -->
-    <div class="tab-pane active" id="tab-upload">
-      <div class="grid-2col">
-        <!-- Target Upload Glass Panel -->
-        <div class="glass-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <div class="panel-icon-badge">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              </div>
-              <div>
-                <h3>Upload Target Seed URLs</h3>
-                <p class="panel-sub">Upload .txt file (e.g. alive.txt, subdomains, routes)</p>
-              </div>
-            </div>
-            <span class="badge-pill" id="loaded-seeds-badge">0 Ready</span>
-          </div>
-
-          <div class="panel-body">
-            <!-- Sleek Cyber Drop Zone -->
-            <div class="drop-zone" id="drop-zone">
-              <input type="file" id="file-input" accept=".txt" class="file-input">
-              <div class="drop-zone-content">
-                <div class="upload-icon-circle">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                </div>
-                <div class="drop-zone-text">
-                  <strong>Click or Drag & Drop .txt file</strong>
-                  <span>Supports alive.txt, raw URLs, or subdomain lists</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="or-divider"><span>OR PASTE URLS MANUALLY</span></div>
-
-            <textarea id="target-textarea" class="target-textarea font-mono" placeholder="http://1.ram.m2m.telekom.com:8774&#10;http://116.203.208.253:41241&#10;https://example.com" rows="5"></textarea>
-
-            <div class="target-actions">
-              <button id="btn-add-pasted" class="btn btn-glass">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>Add Pasted Targets</span>
-              </button>
-              <button id="btn-load-demo" class="btn btn-glass" title="Load sample targets from workspace">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
-                <span>Load Sample alive.txt</span>
-              </button>
-              <button id="btn-clear-targets" class="btn btn-ghost-danger">
-                <span>Clear Targets</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Crawler Configuration Glass Panel -->
-        <div class="glass-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <div class="panel-icon-badge text-cyan">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              </div>
-              <div>
-                <h3>Spider & Scope Configuration</h3>
-                <p class="panel-sub">Configure crawler engine parameters & heuristics</p>
-              </div>
-            </div>
-            <span class="badge-pill text-cyan">Katana Core</span>
-          </div>
-
-          <div class="panel-body form-grid">
-            <!-- Execution Mode -->
-            <div class="form-group">
-              <label for="cfg-mode">Execution Engine Mode</label>
-              <div class="select-wrapper">
-                <select id="cfg-mode" class="form-control">
-                  <option value="single-tab" selected>Single-Tab Browser (Executes JS, Intercepts Network & Solves CAPTCHAs)</option>
-                  <option value="fast-fetch">Fast Background Fetch (Multi-threaded HTTP only)</option>
-                </select>
-              </div>
-              <small class="form-hint">Single-Tab mode opens 1 browser tab, executes client-side scripts, extracts live DOM and network calls, and allows solving CAPTCHAs!</small>
-            </div>
-
-            <!-- Scope Mode -->
-            <div class="form-group">
-              <label for="cfg-scope">Crawl Scope Boundary</label>
-              <div class="select-wrapper">
-                <select id="cfg-scope" class="form-control">
-                  <option value="same-domain" selected>Same Domain (Strict Hostname)</option>
-                  <option value="same-root">Same Apex Domain (*.domain.com)</option>
-                  <option value="regex">Custom In-Scope Regex</option>
-                  <option value="all">Unconstrained (Explore All Found URLs)</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group" id="regex-group" style="display: none;">
-              <label for="cfg-scope-regex">Scope Regex Pattern</label>
-              <input type="text" id="cfg-scope-regex" class="form-control font-mono" placeholder="^https?://.*\.target\.com">
-            </div>
-
-            <!-- Numeric Row -->
-            <div class="form-row">
-              <div class="form-group" id="concurrency-group" style="display: none;">
-                <label for="cfg-concurrency">Concurrency</label>
-                <input type="number" id="cfg-concurrency" class="form-control font-mono" value="10" min="1" max="50">
-              </div>
-
-              <div class="form-group">
-                <label for="cfg-tab-delay">JS Wait Delay (ms)</label>
-                <input type="number" id="cfg-tab-delay" class="form-control font-mono" value="400" min="100" max="10000" step="100">
-              </div>
-
-              <div class="form-group">
-                <label for="cfg-depth">Max Crawl Depth</label>
-                <input type="number" id="cfg-depth" class="form-control font-mono" value="3" min="1" max="10">
-              </div>
-
-              <div class="form-group">
-                <label for="cfg-timeout">Timeout (Sec)</label>
-                <input type="number" id="cfg-timeout" class="form-control font-mono" value="6" min="2" max="60">
-              </div>
-            </div>
-
-            <!-- Modern Feature Switches -->
-            <div class="switches-container">
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Subdomain Mode (*.example.com)</strong>
-                  <span>Find & crawl all subdomains matching the target root domain</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-subdomain-crawl" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Open Found Pages in Tab</strong>
-                  <span>Recursively navigate single tab to discovered endpoints (excludes static .js/.css)</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-open-in-tab" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Auto-Click Buttons & Explore</strong>
-                  <span>Simulate real clicks on buttons, tabs, and menus to reveal dynamic routes & APIs</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-click-buttons" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Deep JavaScript Crawl</strong>
-                  <span>Fetch external .js bundles and extract endpoints using LinkFinder & Katana regex</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-crawl-js" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Robots.txt & Sitemaps</strong>
-                  <span>Inspect /robots.txt and /sitemap.xml for hidden application routes</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-robots-sitemap" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="switch-row">
-                <div class="switch-info">
-                  <strong>Filter Static Media</strong>
-                  <span>Skip crawling image, font, audio, and video binary files</span>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="cfg-ignore-media" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="cfg-user-agent">User Agent Header</label>
-              <input type="text" id="cfg-user-agent" class="form-control font-mono text-xs" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Katana/1.2 (ProjectDiscovery Spider)">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Seed Targets Queue Table -->
-      <div class="glass-panel mt-20">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h3>Loaded Target Seeds Queue</h3>
-            <span class="text-muted" id="targets-table-count">0 items</span>
-          </div>
-        </div>
-        <div class="table-wrapper scrollable-table">
-          <table class="data-table" id="targets-table">
-            <thead>
-              <tr>
-                <th width="60">#</th>
-                <th>Seed URL</th>
-                <th width="120">Status</th>
-                <th width="120">Discovered</th>
-                <th width="180">Crawled At</th>
-              </tr>
-            </thead>
-            <tbody id="targets-tbody">
-              <tr>
-                <td colspan="5" class="empty-state">No targets loaded yet. Upload a .txt file or paste URLs above.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 2: DISCOVERED ENDPOINTS EXPLORER -->
-    <div class="tab-pane" id="tab-results">
-      <div class="glass-panel">
-        <div class="filter-toolbar">
-          <div class="search-input-wrapper">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Recon Modules</div>
+        
+        <button class="nav-item active" data-tab="tab-overview">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
-            <input type="text" id="table-search" placeholder="Filter URL, endpoint path, domain, or parameters...">
-          </div>
+          </span>
+          <span class="nav-label">Overview & Charts</span>
+        </button>
 
-          <div class="filter-group">
-            <label>Type:</label>
-            <div class="select-wrapper">
-              <select id="filter-type" class="filter-select">
-                <option value="all">All Types</option>
-                <option value="subdomain">Subdomains (*.domain.com)</option>
-                <option value="button-click">Button-Triggered URLs</option>
-                <option value="js-endpoint">JS Endpoints (LinkFinder)</option>
-                <option value="network-api">Network APIs (XHR/Fetch)</option>
-                <option value="script-bundle">Script Bundles</option>
-                <option value="html-link">HTML Links (href)</option>
-                <option value="form-action">Form Actions</option>
-                <option value="robots.txt">Robots.txt</option>
-                <option value="sitemap">Sitemaps</option>
-              </select>
-            </div>
-          </div>
+        <button class="nav-item" data-tab="tab-upload">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </span>
+          <span class="nav-label">Targets & Config</span>
+        </button>
 
-          <div class="filter-group">
-            <label>Scope:</label>
-            <div class="select-wrapper">
-              <select id="filter-scope" class="filter-select">
-                <option value="all">All Scopes</option>
-                <option value="in-scope">In-Scope Only</option>
-                <option value="out-of-scope">Out-of-Scope</option>
-              </select>
-            </div>
-          </div>
+        <button class="nav-item" data-tab="tab-results">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </span>
+          <span class="nav-label">Discovered URLs</span>
+          <span class="nav-badge" id="tab-discovered-count">0</span>
+        </button>
 
-          <div class="filter-group">
-            <label>Ext:</label>
-            <div class="select-wrapper">
-              <select id="filter-ext" class="filter-select">
-                <option value="all">Any Extension</option>
-                <option value=".js">.js</option>
-                <option value=".json">.json</option>
-                <option value=".php">.php</option>
-                <option value=".action">.action</option>
-                <option value=".aspx">.aspx</option>
-                <option value=".xml">.xml</option>
-                <option value=".txt">.txt</option>
-              </select>
-            </div>
-          </div>
+        <button class="nav-item" data-tab="tab-secrets">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"></path>
+              <circle cx="7.5" cy="16.5" r="1.5"></circle>
+            </svg>
+          </span>
+          <span class="nav-label">Secrets & Threats</span>
+          <span class="nav-badge badge-magenta" id="tab-secrets-count">0</span>
+        </button>
 
-          <div class="filter-results-count" id="filter-count">
-            Showing 0 of 0 URLs
-          </div>
-        </div>
+        <button class="nav-item" data-tab="tab-terminal">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </span>
+          <span class="nav-label">Terminal Feed</span>
+        </button>
+      </nav>
 
-        <div class="table-wrapper">
-          <table class="data-table" id="results-table">
-            <thead>
-              <tr>
-                <th width="50">#</th>
-                <th>Discovered URL / Endpoint</th>
-                <th width="140">Type</th>
-                <th>Source (Referer)</th>
-                <th width="100">Scope</th>
-                <th width="80">Action</th>
-              </tr>
-            </thead>
-            <tbody id="results-tbody">
-              <tr>
-                <td colspan="6" class="empty-state">No URLs discovered yet. Upload a list and start crawling!</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination Controls -->
-        <div class="pagination-bar">
-          <div class="pagination-info" id="pagination-info">Page 1 of 1</div>
-          <div class="pagination-controls">
-            <button id="btn-page-prev" class="btn btn-glass" disabled>Previous</button>
-            <span id="current-page-display" class="page-display font-mono">1</span>
-            <button id="btn-page-next" class="btn btn-glass" disabled>Next</button>
-          </div>
-          <div class="page-size-selector">
-            <label>Per page:</label>
-            <div class="select-wrapper">
-              <select id="select-page-size">
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-                <option value="250">250</option>
-                <option value="500">500</option>
-              </select>
-            </div>
+      <div class="sidebar-footer">
+        <div class="operator-box">
+          <div class="operator-avatar">OP</div>
+          <div class="operator-info">
+            <span class="operator-name">root@crawlizer</span>
+            <span class="operator-role">SYSTEM_ACTIVE</span>
           </div>
         </div>
       </div>
-    </div>
+    </aside>
 
-    <!-- TAB 3: SECRETS & SENSITIVE FINDINGS -->
-    <div class="tab-pane" id="tab-secrets">
-      <div class="glass-panel">
-        <div class="panel-header" style="margin-bottom: 16px;">
-          <div class="panel-title-group">
-            <div class="panel-icon-badge" style="background: rgba(255, 0, 68, 0.16); color: var(--red-neon); border-color: rgba(255, 0, 68, 0.4);">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
-            </div>
-            <div>
-              <h3>Secrets & Sensitive Findings</h3>
-              <p class="panel-sub">Real-time detection of API tokens, private keys, cloud credentials & source maps across HTML, JS, CSS, and .map</p>
-            </div>
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Top Navigation Bar -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <div class="prompt-breadcrumb">
+            <span class="prompt-symbol">$</span>
+            <span class="prompt-path">crawlizer/</span>
+            <span class="prompt-typing" id="topbar-typing-target">active-mission</span>
+            <span class="cursor-blink"></span>
           </div>
-          <div class="header-actions">
-            <button id="btn-export-secrets-json" class="btn btn-xs btn-glass">Export JSON</button>
-            <button id="btn-export-secrets-csv" class="btn btn-xs btn-glass">Export CSV</button>
-            <button id="btn-copy-secrets" class="btn btn-xs btn-glass">Copy All</button>
-            <button id="btn-clear-secrets" class="btn btn-xs btn-icon-glass" title="Clear all secrets findings">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+
+          <!-- Command Palette Search Trigger -->
+          <div class="cmd-palette-trigger" id="btn-open-cmd-palette">
+            <span class="cmd-prompt-glyph">&gt;_</span>
+            <span class="cmd-trigger-text">Command palette...</span>
+            <span class="cmd-kbd">Ctrl+K</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="status-pill" id="status-pill">
+            <span class="status-indicator-dot" id="header-status-dot"></span>
+            <span class="status-label" id="header-status-label">READY</span>
+          </div>
+
+          <button id="btn-toggle-matrix" class="btn btn-glass" title="Toggle Matrix Rain Mode">
+            <span>[01] Matrix</span>
+          </button>
+
+          <button id="btn-focus-tab" class="btn btn-glass" title="Focus Single Crawler Tab" style="display: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span>Focus Tab</span>
+          </button>
+
+          <button id="btn-start" class="btn btn-primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Start Crawl</span>
+          </button>
+
+          <button id="btn-pause" class="btn btn-amber" style="display: none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <span>Pause</span>
+          </button>
+
+          <button id="btn-resume" class="btn btn-primary" style="display: none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Resume</span>
+          </button>
+
+          <button id="btn-stop" class="btn btn-danger" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14"></rect>
+            </svg>
+            <span>Stop</span>
+          </button>
+
+          <div class="topbar-divider"></div>
+
+          <!-- Export Dropdown -->
+          <div class="export-dropdown">
+            <button id="btn-export-menu" class="btn btn-glass">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Export</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
+            <div class="dropdown-menu" id="export-menu">
+              <div class="dropdown-item" id="export-txt">
+                <div class="dropdown-item-header">
+                  <span class="item-title">Export Clean URLs (.txt)</span>
+                </div>
+                <span class="item-desc">One endpoint per line for httpx, nuclei, ffuf</span>
+              </div>
+              <div class="dropdown-item" id="export-json">
+                <div class="dropdown-item-header">
+                  <span class="item-title">Export Full JSON (.json)</span>
+                </div>
+                <span class="item-desc">Endpoints, sources, timestamps, and parameters</span>
+              </div>
+              <div class="dropdown-item" id="export-csv">
+                <div class="dropdown-item-header">
+                  <span class="item-title">Export CSV Table (.csv)</span>
+                </div>
+                <span class="item-desc">Tabular format for Excel or Google Sheets</span>
+              </div>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-item" id="copy-clipboard">
+                <div class="dropdown-item-header">
+                  <span class="item-title">Copy All to Clipboard</span>
+                </div>
+                <span class="item-desc">Instantly copy discovered URL list</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="filter-toolbar">
-          <div class="search-input-wrapper">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <button id="btn-clear-db" class="btn btn-glass btn-icon" title="Wipe Database">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             </svg>
-            <input type="text" id="secrets-search" placeholder="Search finding name, token value, source URL, or code context...">
-          </div>
-
-          <div class="filter-group">
-            <label>Severity:</label>
-            <div class="select-wrapper">
-              <select id="secrets-filter-severity" class="filter-select">
-                <option value="all">All Severities</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="info">Info / Assets</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label>Source:</label>
-            <div class="select-wrapper">
-              <select id="secrets-filter-source" class="filter-select">
-                <option value="all">All Sources</option>
-                <option value="html">HTML Source</option>
-                <option value="rendered-js">Rendered DOM JS</option>
-                <option value="js-bundle">External JS Bundle</option>
-                <option value="css">CSS / Styles</option>
-                <option value="source-map">Source Map (.map)</option>
-                <option value="html-comment">HTML Comments</option>
-              </select>
-            </div>
-          </div>
-
-          <span class="filter-stats" id="secrets-count-label">0 findings</span>
+          </button>
         </div>
+      </header>
 
-        <div class="table-wrapper scrollable-table">
-          <table class="data-table" id="secrets-table">
-            <thead>
-              <tr>
-                <th width="48">#</th>
-                <th width="110">Severity</th>
-                <th width="200">Finding Type</th>
-                <th width="320">Detected Secret / Value</th>
-                <th width="110">Locations</th>
-                <th>Discovered Location(s) & Code Context</th>
-                <th width="110">Discovered</th>
-              </tr>
-            </thead>
-            <tbody id="secrets-tbody">
-              <tr>
-                <td colspan="7" class="empty-state">No sensitive credentials detected yet. Launch a crawl to start scanning HTML, JS, CSS, and Source Maps!</td>
-              </tr>
-            </tbody>
-          </table>
+      <!-- Tactical Progress Line -->
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+      </div>
+
+      <!-- CAPTCHA / BOT CHALLENGE BANNER -->
+      <div class="captcha-banner" id="captcha-banner" style="display: none;">
+        <div class="captcha-banner-left">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <h4 id="captcha-type-title">BOT CHALLENGE / CAPTCHA DETECTED</h4>
+            <p style="font-size: 11px; margin-top: 2px;">Target: <span id="captcha-target-url" class="font-mono">https://...</span></p>
+          </div>
+        </div>
+        <div class="captcha-banner-actions">
+          <button id="btn-captcha-focus" class="btn btn-amber">Focus Tab</button>
+          <button id="btn-captcha-solved" class="btn btn-primary">Solved, Continue</button>
+          <button id="btn-captcha-skip" class="btn btn-glass">Skip Target</button>
         </div>
       </div>
-    </div>
 
-    <!-- TAB 4: CRAWLIZER TERMINAL LOGS -->
-    <div class="tab-pane" id="tab-terminal">
-      <div class="terminal-container">
-        <div class="terminal-header">
-          <div class="terminal-dots">
-            <span class="dot red"></span>
-            <span class="dot yellow"></span>
-            <span class="dot green"></span>
+      <!-- Content Container -->
+      <div class="content-wrapper">
+        <!-- Stat Cards Grid with Mini Sparklines -->
+        <section class="stat-cards-grid">
+          <!-- Card 1: Seeds -->
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">TOTAL SEEDS</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-targets">0</div>
+              <svg class="sparkline-svg" id="sparkline-targets" viewBox="0 0 72 28">
+                <path d="M2,24 L14,20 L26,22 L38,15 L50,18 L62,10 L70,8" stroke="#00f0ff"/>
+              </svg>
+            </div>
+            <div class="stat-footer" id="metric-pending">0 Pending in Queue</div>
           </div>
-          <div class="terminal-title font-mono">crawlizer-engine@browser — live stream</div>
-          <div class="terminal-actions">
-            <label class="checkbox-container text-xs">
-              <input type="checkbox" id="terminal-autoscroll" checked>
-              <span class="checkmark"></span>
-              <span>Auto-scroll</span>
-            </label>
-            <button id="btn-clear-logs" class="btn btn-xs btn-glass">Clear</button>
+
+          <!-- Card 2: Crawled -->
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">CRAWLED</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-crawled">0</div>
+              <svg class="sparkline-svg" id="sparkline-crawled" viewBox="0 0 72 28">
+                <path d="M2,26 L14,22 L26,18 L38,20 L50,12 L62,14 L70,6" stroke="#39ff14"/>
+              </svg>
+            </div>
+            <div class="stat-footer" id="metric-progress-percent">0% Completed</div>
+          </div>
+
+          <!-- Card 3: Discovered (Neon Cyan Highlight) -->
+          <div class="stat-card card-cyan">
+            <div class="stat-card-header">
+              <span class="stat-label">DISCOVERED URLS</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-discovered">0</div>
+              <svg class="sparkline-svg" id="sparkline-discovered" viewBox="0 0 72 28">
+                <path d="M2,24 L14,18 L26,12 L38,16 L50,8 L62,4 L70,2" stroke="#00f0ff"/>
+              </svg>
+            </div>
+            <div class="stat-footer" id="metric-new-session">+0 Discovered Run</div>
+          </div>
+
+          <!-- Card 4: Speed / RPS -->
+          <div class="stat-card card-green">
+            <div class="stat-card-header">
+              <span class="stat-label">SPEED / RPS</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value font-mono" id="metric-rps">0.0</div>
+              <svg class="sparkline-svg" id="sparkline-rps" viewBox="0 0 72 28">
+                <path d="M2,20 L14,16 L26,22 L38,8 L50,14 L62,6 L70,4" stroke="#39ff14"/>
+              </svg>
+            </div>
+            <div class="stat-footer">Req / Second</div>
+          </div>
+
+          <!-- Card 5: Duration -->
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">SCAN DURATION</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value font-mono" id="metric-duration">00:00:00</div>
+            </div>
+            <div class="stat-footer" id="metric-duration-status">Total Session Time</div>
+          </div>
+
+          <!-- Card 6: Unique Hosts / Subdomains -->
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">SUBDOMAINS</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-subdomains">0</div>
+            </div>
+            <div class="stat-footer">Unique Hosts Found</div>
+          </div>
+
+          <!-- Card 7: Secrets Found (Neon Magenta Highlight) -->
+          <div class="stat-card card-magenta">
+            <div class="stat-card-header">
+              <span class="stat-label">SECRETS FOUND</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-secrets">0</div>
+              <svg class="sparkline-svg" id="sparkline-secrets" viewBox="0 0 72 28">
+                <path d="M2,26 L14,26 L26,20 L38,20 L50,14 L62,8 L70,4" stroke="#ff2bd6"/>
+              </svg>
+            </div>
+            <div class="stat-footer" id="metric-secrets-breakdown">Sensitive Findings</div>
+          </div>
+
+          <!-- Card 8: Dead / Filtered -->
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">DUPES / DEAD</span>
+              <div class="stat-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              </div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="metric-dupes">0</div>
+            </div>
+            <div class="stat-footer">Strict Canonical Filter</div>
+          </div>
+
+          <!-- Hidden storage values for JS updates -->
+          <div style="display: none;">
+            <span id="metric-queue">0</span>
+            <span id="metric-active-workers">Single Tab</span>
+            <span id="metric-errors">0</span>
+          </div>
+        </section>
+
+        <!-- TAB 1: OVERVIEW & LIVE CHARTS -->
+        <div class="tab-pane active" id="tab-overview">
+          <div class="charts-grid">
+            <!-- Live Throughput Chart -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div class="chart-title-group">
+                  <h3 class="chart-title">Real-time Crawl Speed & Throughput</h3>
+                  <span class="chart-badge">LIVE_METRICS</span>
+                </div>
+                <span class="font-mono text-xs" style="color: var(--neon-cyan);">Updates / sec</span>
+              </div>
+              <div class="chart-canvas-wrapper">
+                <canvas id="crawl-rate-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Endpoint Breakdown Donut Chart -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div class="chart-title-group">
+                  <h3 class="chart-title">Asset & Protocol Breakdown</h3>
+                  <span class="chart-badge">CLASSIFIER</span>
+                </div>
+              </div>
+              <div class="chart-canvas-wrapper" style="height: 150px;">
+                <canvas id="types-donut-chart"></canvas>
+              </div>
+              <div class="donut-legend">
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-cyan);"></span> HTML Pages</div>
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-green);"></span> JS Endpoints</div>
+                <div class="legend-item"><span class="legend-dot" style="background: #38bdf8;"></span> APIs / XHR</div>
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-magenta);"></span> Secrets Found</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="terminal-body font-mono" id="terminal-body">
-          <div class="log-line banner font-mono">
+
+        <!-- TAB 2: TARGETS & CONFIGURATION -->
+        <div class="tab-pane" id="tab-upload">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Upload Panel -->
+            <div class="glass-panel">
+              <div class="panel-header">
+                <div class="panel-title-group">
+                  <div class="panel-icon-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div>
+                    <h3>Upload Seed Targets</h3>
+                    <p class="panel-sub">Upload .txt file (e.g. alive.txt, subdomains, routes)</p>
+                  </div>
+                </div>
+                <span class="nav-badge" id="loaded-seeds-badge">0 Ready</span>
+              </div>
+              <div class="panel-body">
+                <div class="drop-zone" id="drop-zone">
+                  <input type="file" id="file-input" accept=".txt" class="file-input">
+                  <div class="upload-icon-circle">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                  </div>
+                  <strong>Click or Drag & Drop .txt file</strong>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Supports alive.txt, raw URLs, or subdomain lists</div>
+                </div>
+
+                <div class="or-divider"><span>OR PASTE URLS MANUALLY</span></div>
+
+                <textarea id="target-textarea" class="target-textarea font-mono" placeholder="https://example.com&#10;https://api.example.com" rows="4"></textarea>
+
+                <div class="target-actions">
+                  <button id="btn-add-pasted" class="btn btn-glass">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Add Pasted Targets</span>
+                  </button>
+                  <button id="btn-load-demo" class="btn btn-glass">Load Sample alive.txt</button>
+                  <button id="btn-clear-targets" class="btn btn-glass" style="color: var(--neon-red);">Clear Targets</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Spider Config Panel -->
+            <div class="glass-panel">
+              <div class="panel-header">
+                <div class="panel-title-group">
+                  <div class="panel-icon-badge" style="color: var(--neon-green); border-color: var(--border-glow-green);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </div>
+                  <div>
+                    <h3>Spider & Scope Parameters</h3>
+                    <p class="panel-sub">Crawler heuristics & engine settings</p>
+                  </div>
+                </div>
+                <span class="nav-badge" style="color: var(--neon-green); border-color: var(--border-glow-green);">CRAWLIZER_CORE</span>
+              </div>
+              <div class="panel-body form-grid">
+                <div class="form-group">
+                  <label for="cfg-mode">Execution Engine Mode</label>
+                  <div class="select-wrapper">
+                    <select id="cfg-mode" class="form-control">
+                      <option value="single-tab" selected>Single-Tab Browser (Executes JS, Intercepts Network & Solves CAPTCHAs)</option>
+                      <option value="fast-fetch">Fast Background Fetch (Multi-threaded HTTP only)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cfg-scope">Crawl Scope Boundary</label>
+                  <div class="select-wrapper">
+                    <select id="cfg-scope" class="form-control">
+                      <option value="same-domain" selected>Same Domain (Strict Hostname)</option>
+                      <option value="same-root">Same Apex Domain (*.domain.com)</option>
+                      <option value="regex">Custom In-Scope Regex</option>
+                      <option value="all">Unconstrained (Explore All Found URLs)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group" id="regex-group" style="display: none;">
+                  <label for="cfg-scope-regex">Scope Regex Pattern</label>
+                  <input type="text" id="cfg-scope-regex" class="form-control font-mono" placeholder="^https?://.*\.target\.com">
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group" id="concurrency-group" style="display: none;">
+                    <label for="cfg-concurrency">Concurrency</label>
+                    <input type="number" id="cfg-concurrency" class="form-control font-mono" value="10" min="1" max="50">
+                  </div>
+                  <div class="form-group">
+                    <label for="cfg-tab-delay">JS Wait Delay (ms)</label>
+                    <input type="number" id="cfg-tab-delay" class="form-control font-mono" value="400" min="100" max="10000" step="100">
+                  </div>
+                  <div class="form-group">
+                    <label for="cfg-depth">Max Depth</label>
+                    <input type="number" id="cfg-depth" class="form-control font-mono" value="3" min="1" max="10">
+                  </div>
+                  <div class="form-group">
+                    <label for="cfg-timeout">Timeout (Sec)</label>
+                    <input type="number" id="cfg-timeout" class="form-control font-mono" value="6" min="2" max="60">
+                  </div>
+                </div>
+
+                <div class="switches-container">
+                  <div class="switch-row">
+                    <div class="switch-info">
+                      <strong>Subdomain Crawling (*.target.com)</strong>
+                      <span>Discover and spider apex subdomains</span>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="cfg-subdomain-crawl" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="switch-row">
+                    <div class="switch-info">
+                      <strong>Auto-Click DOM Buttons & Menus</strong>
+                      <span>Trigger interactive buttons to reveal dynamic routes & APIs</span>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="cfg-click-buttons" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="switch-row">
+                    <div class="switch-info">
+                      <strong>Deep JavaScript Bundle Crawl</strong>
+                      <span>Inspect .js source bundles using LinkFinder heuristics</span>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="cfg-crawl-js" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="switch-row">
+                    <div class="switch-info">
+                      <strong>Robots.txt & Sitemap Inspection</strong>
+                      <span>Query hidden routes from /robots.txt and /sitemap.xml</span>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="cfg-robots-sitemap" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  <div style="display: none;">
+                    <input type="checkbox" id="cfg-open-in-tab" checked>
+                    <input type="checkbox" id="cfg-ignore-media" checked>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cfg-user-agent">User Agent Header</label>
+                  <input type="text" id="cfg-user-agent" class="form-control font-mono" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Crawlizer/1.2 (ProjectDiscovery Spider)">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seeds Table -->
+          <div class="glass-panel" style="margin-top: 20px;">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h3>Loaded Seed Targets Queue</h3>
+                <span class="nav-badge" id="targets-table-count">0 items</span>
+              </div>
+            </div>
+            <div class="table-wrapper scrollable-table">
+              <table class="data-table" id="targets-table">
+                <thead>
+                  <tr>
+                    <th width="60">#</th>
+                    <th>Seed URL</th>
+                    <th width="120">Status</th>
+                    <th width="120">Discovered</th>
+                    <th width="180">Crawled At</th>
+                  </tr>
+                </thead>
+                <tbody id="targets-tbody">
+                  <tr>
+                    <td colspan="5" class="empty-state">No targets loaded yet. Upload a .txt file or paste URLs above.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: DISCOVERED ENDPOINTS EXPLORER -->
+        <div class="tab-pane" id="tab-results">
+          <div class="glass-panel">
+            <div class="filter-toolbar">
+              <div class="search-input-wrapper">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="table-search" placeholder="Filter URL, endpoint path, domain, or parameters...">
+              </div>
+
+              <div class="filter-group">
+                <label>Type:</label>
+                <div class="select-wrapper">
+                  <select id="filter-type" class="filter-select">
+                    <option value="all">All Types</option>
+                    <option value="subdomain">Subdomains (*.domain.com)</option>
+                    <option value="button-click">Button Clicks</option>
+                    <option value="js-endpoint">JS Endpoints</option>
+                    <option value="network-api">Network APIs (XHR/Fetch)</option>
+                    <option value="script-bundle">Script Bundles</option>
+                    <option value="html-link">HTML Links</option>
+                    <option value="robots.txt">Robots.txt</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Scope:</label>
+                <div class="select-wrapper">
+                  <select id="filter-scope" class="filter-select">
+                    <option value="all">All Scopes</option>
+                    <option value="in-scope">In-Scope Only</option>
+                    <option value="out-of-scope">Out-of-Scope</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Ext:</label>
+                <div class="select-wrapper">
+                  <select id="filter-ext" class="filter-select">
+                    <option value="all">Any Extension</option>
+                    <option value=".js">.js</option>
+                    <option value=".json">.json</option>
+                    <option value=".php">.php</option>
+                    <option value=".action">.action</option>
+                    <option value=".aspx">.aspx</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-results-count" id="filter-count">Showing 0 of 0 URLs</div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table" id="results-table">
+                <thead>
+                  <tr>
+                    <th width="50">#</th>
+                    <th>Discovered URL / Endpoint</th>
+                    <th width="140">Type</th>
+                    <th>Source (Referer)</th>
+                    <th width="100">Scope</th>
+                    <th width="80">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="results-tbody">
+                  <tr>
+                    <td colspan="6" class="empty-state">No URLs discovered yet. Launch a crawl session to explore endpoints!</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="pagination-bar">
+              <div class="pagination-info" id="pagination-info">Page 1 of 1</div>
+              <div class="pagination-controls">
+                <button id="btn-page-prev" class="btn btn-glass" disabled>Previous</button>
+                <span id="current-page-display" class="page-display font-mono">1</span>
+                <button id="btn-page-next" class="btn btn-glass" disabled>Next</button>
+              </div>
+              <div class="page-size-selector">
+                <label>Per page:</label>
+                <div class="select-wrapper">
+                  <select id="select-page-size" class="filter-select">
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="250">250</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: SECRETS & THREAT FINDINGS (EXPANDED FULL-HEIGHT) -->
+        <div class="tab-pane" id="tab-secrets">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <div class="panel-icon-badge" style="color: var(--neon-magenta); border-color: var(--border-glow-magenta); background: var(--neon-magenta-badge);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+                </div>
+                <div>
+                  <h3>Secrets & Threat Findings</h3>
+                  <p class="panel-sub">Real-time detection of API tokens, private keys, cloud credentials & source maps</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button id="btn-export-secrets-json" class="btn btn-glass">Export JSON</button>
+                <button id="btn-export-secrets-csv" class="btn btn-glass">Export CSV</button>
+                <button id="btn-copy-secrets" class="btn btn-glass">Copy All</button>
+                <button id="btn-clear-secrets" class="btn btn-glass btn-icon" title="Clear all secrets">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="filter-toolbar">
+              <div class="search-input-wrapper">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="secrets-search" placeholder="Search finding rule, token value, or URL context...">
+              </div>
+
+              <div class="filter-group">
+                <label>Severity:</label>
+                <div class="select-wrapper">
+                  <select id="secrets-filter-severity" class="filter-select">
+                    <option value="all">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="info">Info</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Source:</label>
+                <div class="select-wrapper">
+                  <select id="secrets-filter-source" class="filter-select">
+                    <option value="all">All Sources</option>
+                    <option value="html">HTML Source</option>
+                    <option value="rendered-js">Rendered DOM JS</option>
+                    <option value="js-bundle">External JS Bundle</option>
+                    <option value="css">CSS / Styles</option>
+                    <option value="source-map">Source Map (.map)</option>
+                  </select>
+                </div>
+              </div>
+
+              <span class="filter-results-count" id="secrets-count-label">0 findings</span>
+            </div>
+
+            <div class="table-wrapper scrollable-table">
+              <table class="data-table" id="secrets-table">
+                <thead>
+                  <tr>
+                    <th width="48">#</th>
+                    <th width="110">Severity</th>
+                    <th width="200">Finding Type</th>
+                    <th width="320">Detected Secret / Value</th>
+                    <th width="110">Locations</th>
+                    <th>Discovered Location(s) & Code Context</th>
+                    <th width="110">Discovered</th>
+                  </tr>
+                </thead>
+                <tbody id="secrets-tbody">
+                  <tr>
+                    <td colspan="7" class="empty-state">No sensitive credentials detected yet. Launch a crawl to scan HTML, JS, CSS, and Source Maps!</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 5: LIVE TERMINAL FEED -->
+        <div class="tab-pane" id="tab-terminal">
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <div class="terminal-title font-mono">crawlizer-engine@browser — live stream</div>
+              <div class="terminal-actions">
+                <label class="checkbox-container">
+                  <input type="checkbox" id="terminal-autoscroll" checked>
+                  <span>Auto-scroll</span>
+                </label>
+                <button id="btn-clear-logs" class="btn btn-glass" style="padding: 4px 10px; font-size: 11px;">Clear</button>
+              </div>
+            </div>
+            <div class="terminal-body font-mono" id="terminal-body">
+              <div class="log-line banner font-mono">
    ______                     ___zer
   / ____/________ __      __/ (_)___  ___  _____
  / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
 / /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
 \____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.0
-Crawlizer Engine — Next-Gen Deep Web &amp; Secret Spider
+Crawlizer Engine — Cyberpunk Deep Web &amp; Secret Recon
+              </div>
+              <div class="log-line info font-mono">[INF] Storage and heuristics engine initialized. Ready for targets.</div>
+            </div>
           </div>
-          <div class="log-line info font-mono">[INF] Storage and database initialized. Ready to load targets.</div>
         </div>
       </div>
-    </div>
-  </main>
+    </main>
+  </div>
 
+  <!-- Global Command Palette Modal (Ctrl+K) -->
+  <div class="cmd-palette-backdrop" id="cmd-palette-backdrop">
+    <div class="cmd-palette-modal">
+      <div class="cmd-input-row">
+        <span class="cmd-input-prompt">&gt;_</span>
+        <input type="text" id="cmd-palette-input" class="cmd-input-field" placeholder="Type a command or jump to module..." autofocus>
+        <span class="cmd-kbd">ESC to close</span>
+      </div>
+      <div class="cmd-results-list" id="cmd-results-list">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Inclusions -->
   <script src="secret-scanner.js"></script>
   <script src="storage.js"></script>
   <script src="crawler-engine.js"></script>

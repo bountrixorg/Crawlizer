@@ -1,5 +1,6 @@
 /**
- * Katana Web Crawler - Dashboard UI Controller
+ * CRAWLIZER — Cyberpunk Web Crawler Dashboard Controller
+ * Modern Hacker UI with Collapsible Sidebar, Command Palette, Charts & Live Stream
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -33,6 +34,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnStop = document.getElementById('btn-stop');
   const btnClearDb = document.getElementById('btn-clear-db');
 
+  // Sidebar Elements
+  const appSidebar = document.getElementById('app-sidebar');
+  const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
+  const topbarTypingTarget = document.getElementById('topbar-typing-target');
+
   // CAPTCHA Banner
   const captchaBanner = document.getElementById('captcha-banner');
   const captchaTypeTitle = document.getElementById('captcha-type-title');
@@ -49,12 +55,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const exportCsv = document.getElementById('export-csv');
   const copyClipboard = document.getElementById('copy-clipboard');
 
-  // Tabs
-  const navTabs = document.querySelectorAll('.nav-tab');
+  // Navigation Items / Tabs
+  const navItems = document.querySelectorAll('.nav-item, .nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
   const tabDiscoveredCount = document.getElementById('tab-discovered-count');
 
-  // Tab 1: Upload & Config
+  // Tab 2: Upload & Config
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('file-input');
   const targetTextarea = document.getElementById('target-textarea');
@@ -83,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cfgIgnoreMedia = document.getElementById('cfg-ignore-media');
   const cfgUserAgent = document.getElementById('cfg-user-agent');
 
-  // Tab 2: Results & Table
+  // Tab 3: Results & Table
   const tableSearch = document.getElementById('table-search');
   const filterType = document.getElementById('filter-type');
   const filterScope = document.getElementById('filter-scope');
@@ -96,7 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const currentPageDisplay = document.getElementById('current-page-display');
   const selectPageSize = document.getElementById('select-page-size');
 
-  // Tab 3: Terminal
+  // Tab 5: Terminal
   const terminalBody = document.getElementById('terminal-body');
   const terminalAutoscroll = document.getElementById('terminal-autoscroll');
   const btnClearLogs = document.getElementById('btn-clear-logs');
@@ -115,237 +121,431 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnCopySecrets = document.getElementById('btn-copy-secrets');
   const btnClearSecrets = document.getElementById('btn-clear-secrets');
 
+  // Command Palette & Matrix Elements
+  const btnOpenCmdPalette = document.getElementById('btn-open-cmd-palette');
+  const cmdPaletteBackdrop = document.getElementById('cmd-palette-backdrop');
+  const cmdPaletteInput = document.getElementById('cmd-palette-input');
+  const cmdResultsList = document.getElementById('cmd-results-list');
+  const btnToggleMatrix = document.getElementById('btn-toggle-matrix');
+  const matrixCanvas = document.getElementById('matrix-canvas');
+
+  // Local Pagination State
   let currentPage = 1;
   let pageSize = 50;
   let cachedResults = [];
   let cachedSecrets = [];
 
   // ==========================================
-  // Initialization
+  // Sidebar Collapse / Expand
+  // ==========================================
+  if (btnSidebarToggle && appSidebar) {
+    btnSidebarToggle.addEventListener('click', () => {
+      appSidebar.classList.toggle('collapsed');
+      localStorage.setItem('crawlizer_sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+    });
+
+    if (localStorage.getItem('crawlizer_sidebar_collapsed') === 'true') {
+      appSidebar.classList.add('collapsed');
+    }
+  }
+
+  // Ctrl+B shortcut to toggle sidebar
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      if (appSidebar) {
+        appSidebar.classList.toggle('collapsed');
+        localStorage.setItem('crawlizer_sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+      }
+    }
+  });
+
+  // ==========================================
+  // Breadcrumb Typing Animation
+  // ==========================================
+  let typingTimeout = null;
+  function typeBreadcrumbText(text) {
+    if (!topbarTypingTarget) return;
+    clearTimeout(typingTimeout);
+    topbarTypingTarget.textContent = '';
+    let i = 0;
+    function step() {
+      if (i < text.length) {
+        topbarTypingTarget.textContent += text.charAt(i);
+        i++;
+        typingTimeout = setTimeout(step, 25);
+      }
+    }
+    step();
+  }
+
+  // ==========================================
+  // Matrix Rain Background Animation
+  // ==========================================
+  let matrixInterval = null;
+  function initMatrixRain() {
+    if (!matrixCanvas) return;
+    const ctx = matrixCanvas.getContext('2d');
+    let width = (matrixCanvas.width = window.innerWidth);
+    let height = (matrixCanvas.height = window.innerHeight);
+
+    window.addEventListener('resize', () => {
+      width = matrixCanvas.width = window.innerWidth;
+      height = matrixCanvas.height = window.innerHeight;
+    });
+
+    const chars = '0123456789ABCDEFアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+    const fontSize = 14;
+    const columns = Math.floor(width / fontSize);
+    const drops = Array(columns).fill(1);
+
+    function draw() {
+      ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = `${fontSize}px monospace`;
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars.charAt(Math.floor(Math.random() * chars.length));
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+        if (drops[i] * fontSize > height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+
+    if (btnToggleMatrix) {
+      btnToggleMatrix.addEventListener('click', () => {
+        const isActive = matrixCanvas.classList.toggle('active');
+        if (isActive) {
+          btnToggleMatrix.style.borderColor = 'var(--neon-green)';
+          btnToggleMatrix.style.color = 'var(--neon-green)';
+          matrixInterval = setInterval(draw, 45);
+        } else {
+          btnToggleMatrix.style.borderColor = '';
+          btnToggleMatrix.style.color = '';
+          clearInterval(matrixInterval);
+          ctx.clearRect(0, 0, width, height);
+        }
+      });
+    }
+  }
+  initMatrixRain();
+
+  // ==========================================
+  // Real-time Canvas Charts (Throughput & Donut)
+  // ==========================================
+  const crawlRateCanvas = document.getElementById('crawl-rate-chart');
+  const typesDonutCanvas = document.getElementById('types-donut-chart');
+  let rpsHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+  function drawRpsChart() {
+    if (!crawlRateCanvas) return;
+    const ctx = crawlRateCanvas.getContext('2d');
+    const w = (crawlRateCanvas.width = crawlRateCanvas.clientWidth);
+    const h = (crawlRateCanvas.height = crawlRateCanvas.clientHeight);
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw dark cyber gridlines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < h; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    const maxVal = Math.max(10, ...rpsHistory);
+    const stepX = w / (rpsHistory.length - 1);
+
+    // Area path
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    rpsHistory.forEach((val, i) => {
+      const x = i * stepX;
+      const y = h - (val / maxVal) * (h - 20) - 10;
+      if (i === 0) ctx.lineTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(w, h);
+    ctx.closePath();
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, h);
+    gradient.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
+    gradient.addColorStop(1, 'rgba(0, 240, 255, 0.01)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Line stroke with neon cyan glow
+    ctx.beginPath();
+    rpsHistory.forEach((val, i) => {
+      const x = i * stepX;
+      const y = h - (val / maxVal) * (h - 20) - 10;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#00f0ff';
+    ctx.shadowBlur = 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawDonutChart(counts) {
+    if (!typesDonutCanvas) return;
+    const ctx = typesDonutCanvas.getContext('2d');
+    const w = (typesDonutCanvas.width = typesDonutCanvas.clientWidth);
+    const h = (typesDonutCanvas.height = typesDonutCanvas.clientHeight);
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(cx, cy) - 12;
+    const innerRadius = radius * 0.62;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const data = [
+      { label: 'HTML', val: counts.html || 1, color: '#00f0ff' },
+      { label: 'JS', val: counts.js || 1, color: '#39ff14' },
+      { label: 'APIs', val: counts.api || 1, color: '#38bdf8' },
+      { label: 'Secrets', val: counts.secrets || 1, color: '#ff2bd6' }
+    ];
+
+    const total = data.reduce((acc, d) => acc + d.val, 0);
+    let startAngle = -Math.PI / 2;
+
+    data.forEach(slice => {
+      const sliceAngle = (slice.val / total) * 2 * Math.PI;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
+      ctx.arc(cx, cy, innerRadius, startAngle + sliceAngle, startAngle, true);
+      ctx.closePath();
+      ctx.fillStyle = slice.color;
+      ctx.shadowColor = slice.color;
+      ctx.shadowBlur = 8;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      startAngle += sliceAngle;
+    });
+
+    // Center hole text
+    ctx.fillStyle = '#f0f6fc';
+    ctx.font = 'bold 13px JetBrains Mono';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${total > 4 ? total : 0}`, cx, cy);
+  }
+
+  // Update SVG sparklines
+  function updateSparkline(svgId, currentVal, strokeColor) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    const path = svg.querySelector('path');
+    if (!path) return;
+    // Generate organic reactive wave
+    const v = Math.min(24, Math.max(4, Math.round(currentVal % 20) + 4));
+    path.setAttribute('d', `M2,24 L14,${28 - v} L26,${18 + Math.round(v/3)} L38,${24 - v} L50,14 L62,${26 - v} L70,${24 - Math.round(v/1.5)}`);
+  }
+
+  // ==========================================
+  // Command Palette (Ctrl+K)
+  // ==========================================
+  const commands = [
+    { title: 'Overview & Live Charts', icon: '📊', shortcut: 'TAB 1', action: () => switchTab('tab-overview') },
+    { title: 'Targets & Spider Configuration', icon: '🎯', shortcut: 'TAB 2', action: () => switchTab('tab-upload') },
+    { title: 'Discovered Endpoints Explorer', icon: '⚡', shortcut: 'TAB 3', action: () => switchTab('tab-results') },
+    { title: 'Secrets & Threat Findings', icon: '🗡️', shortcut: 'TAB 4', action: () => switchTab('tab-secrets') },
+    { title: 'Live Stream Terminal Feed', icon: '💻', shortcut: 'TAB 5', action: () => switchTab('tab-terminal') },
+    { title: 'Start / Resume Crawl Engine', icon: '▶️', shortcut: 'START', action: () => btnStart.click() },
+    { title: 'Pause Crawl Session', icon: '⏸️', shortcut: 'PAUSE', action: () => btnPause.click() },
+    { title: 'Stop Crawl Session', icon: '⏹️', shortcut: 'STOP', action: () => btnStop.click() },
+    { title: 'Export Discovered URLs (JSON)', icon: '📦', shortcut: 'EXP', action: () => exportJson.click() },
+    { title: 'Export Discovered URLs (CSV)', icon: '📄', shortcut: 'CSV', action: () => exportCsv.click() },
+    { title: 'Export Discovered URLs (TXT)', icon: '📝', shortcut: 'TXT', action: () => exportTxt.click() },
+    { title: 'Toggle Matrix Rain Effect', icon: '01', shortcut: 'RAIN', action: () => btnToggleMatrix && btnToggleMatrix.click() },
+    { title: 'Clear Stored Database', icon: '🗑️', shortcut: 'WIPE', action: () => btnClearDb.click() }
+  ];
+
+  function openCommandPalette() {
+    if (!cmdPaletteBackdrop) return;
+    cmdPaletteBackdrop.classList.add('open');
+    if (cmdPaletteInput) {
+      cmdPaletteInput.value = '';
+      cmdPaletteInput.focus();
+    }
+    renderCommandList('');
+  }
+
+  function closeCommandPalette() {
+    if (!cmdPaletteBackdrop) return;
+    cmdPaletteBackdrop.classList.remove('open');
+  }
+
+  function renderCommandList(query) {
+    if (!cmdResultsList) return;
+    const q = query.toLowerCase().trim();
+    const filtered = commands.filter(c => c.title.toLowerCase().includes(q) || c.shortcut.toLowerCase().includes(q));
+
+    if (filtered.length === 0) {
+      cmdResultsList.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); font-style: italic;">No matching commands found.</div>`;
+      return;
+    }
+
+    cmdResultsList.innerHTML = filtered.map((c, i) => `
+      <div class="cmd-item ${i === 0 ? 'selected' : ''}" data-idx="${i}">
+        <div class="cmd-item-left">
+          <span>${c.icon}</span>
+          <span>${c.title}</span>
+        </div>
+        <span class="cmd-item-shortcut">${c.shortcut}</span>
+      </div>
+    `).join('');
+
+    cmdResultsList.querySelectorAll('.cmd-item').forEach((item, idx) => {
+      item.addEventListener('click', () => {
+        closeCommandPalette();
+        filtered[idx].action();
+      });
+    });
+  }
+
+  if (btnOpenCmdPalette) {
+    btnOpenCmdPalette.addEventListener('click', openCommandPalette);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (cmdPaletteBackdrop && cmdPaletteBackdrop.classList.contains('open')) {
+        closeCommandPalette();
+      } else {
+        openCommandPalette();
+      }
+    } else if (e.key === 'Escape' && cmdPaletteBackdrop && cmdPaletteBackdrop.classList.contains('open')) {
+      closeCommandPalette();
+    }
+  });
+
+  if (cmdPaletteBackdrop) {
+    cmdPaletteBackdrop.addEventListener('click', (e) => {
+      if (e.target === cmdPaletteBackdrop) closeCommandPalette();
+    });
+  }
+
+  if (cmdPaletteInput) {
+    cmdPaletteInput.addEventListener('input', () => {
+      renderCommandList(cmdPaletteInput.value);
+    });
+    cmdPaletteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const selected = cmdResultsList.querySelector('.cmd-item.selected');
+        if (selected) {
+          selected.click();
+        }
+      }
+    });
+  }
+
+  // ==========================================
+  // Tab Switching
+  // ==========================================
+  function switchTab(tabId) {
+    navItems.forEach(t => {
+      if (t.dataset.tab === tabId) t.classList.add('active');
+      else t.classList.remove('active');
+    });
+
+    tabPanes.forEach(p => {
+      if (p.id === tabId) p.classList.add('active');
+      else p.classList.remove('active');
+    });
+
+    const labelMap = {
+      'tab-overview': 'mission/telemetry-overview',
+      'tab-upload': 'mission/target-configuration',
+      'tab-results': 'mission/discovered-endpoints',
+      'tab-secrets': 'mission/secret-findings',
+      'tab-terminal': 'mission/live-terminal'
+    };
+    typeBreadcrumbText(labelMap[tabId] || 'mission/active');
+
+    if (tabId === 'tab-results') {
+      refreshResultsTable();
+    } else if (tabId === 'tab-secrets') {
+      refreshSecretsTable();
+    } else if (tabId === 'tab-overview') {
+      drawRpsChart();
+    }
+  }
+
+  navItems.forEach(tab => {
+    tab.addEventListener('click', () => {
+      switchTab(tab.dataset.tab);
+    });
+  });
+
+  // ==========================================
+  // Crawler Engine Event Hookups
   // ==========================================
   await storage.init();
   await refreshMetrics();
   await renderTargetsTable();
   await refreshResultsTable();
   await refreshSecretsTable();
+  drawRpsChart();
+  typeBreadcrumbText('mission/telemetry-overview');
 
-  // Auto-persist configuration whenever user toggles any switch or changes an input
-  async function persistCurrentConfig() {
-    try {
-      const config = {
-        mode: cfgMode.value,
-        scopeMode: cfgScope.value,
-        scopeRegex: cfgScopeRegex.value.trim(),
-        tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 400,
-        concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
-        maxDepth: parseInt(cfgDepth.value, 10) || 3,
-        timeout: (parseInt(cfgTimeout.value, 10) || 6) * 1000,
-        subdomainCrawl: cfgSubdomainCrawl.checked,
-        openFoundUrlsInTab: cfgOpenInTab.checked,
-        autoClickButtons: cfgClickButtons.checked,
-        crawlJavascript: cfgCrawlJs.checked,
-        parseRobotsAndSitemaps: cfgRobotsSitemap.checked,
-        userAgent: cfgUserAgent.value.trim()
-      };
-      await storage.saveSetting('crawler_config', config);
-
-      if (chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          katana_singletab: (cfgMode.value === 'single-tab'),
-          katana_subdomains: cfgSubdomainCrawl.checked,
-          katana_clicker: cfgClickButtons.checked
-        });
-      }
-    } catch (e) {
-      console.warn('Failed to auto-persist config:', e);
-    }
-  }
-
-  // Load saved settings if any
-  let savedConfig = await storage.getSetting('crawler_config');
-  if (!savedConfig && chrome && chrome.storage && chrome.storage.local) {
-    const local = await new Promise(r => chrome.storage.local.get(['katana_singletab', 'katana_subdomains', 'katana_clicker'], r));
-    if (local && (local.katana_subdomains !== undefined || local.katana_singletab !== undefined)) {
-      savedConfig = {
-        subdomainCrawl: local.katana_subdomains !== undefined ? local.katana_subdomains : true,
-        mode: local.katana_singletab === false ? 'fast-fetch' : 'single-tab',
-        autoClickButtons: local.katana_clicker !== undefined ? local.katana_clicker : true
-      };
-    }
-  }
-
-  if (savedConfig) {
-    if (savedConfig.mode) cfgMode.value = savedConfig.mode;
-    if (savedConfig.scopeMode) cfgScope.value = savedConfig.scopeMode;
-    if (savedConfig.scopeRegex) cfgScopeRegex.value = savedConfig.scopeRegex;
-    if (savedConfig.tabRenderDelay) cfgTabDelay.value = savedConfig.tabRenderDelay;
-    if (savedConfig.concurrency) cfgConcurrency.value = savedConfig.concurrency;
-    if (savedConfig.maxDepth) cfgDepth.value = savedConfig.maxDepth;
-    if (savedConfig.timeout) cfgTimeout.value = savedConfig.timeout / 1000;
-    if (savedConfig.subdomainCrawl !== undefined) {
-      cfgSubdomainCrawl.checked = Boolean(savedConfig.subdomainCrawl);
-    } else {
-      cfgSubdomainCrawl.checked = true;
-    }
-    if (savedConfig.openFoundUrlsInTab !== undefined) cfgOpenInTab.checked = Boolean(savedConfig.openFoundUrlsInTab);
-    if (savedConfig.autoClickButtons !== undefined) cfgClickButtons.checked = Boolean(savedConfig.autoClickButtons);
-    if (savedConfig.crawlJavascript !== undefined) cfgCrawlJs.checked = Boolean(savedConfig.crawlJavascript);
-    if (savedConfig.parseRobotsAndSitemaps !== undefined) cfgRobotsSitemap.checked = Boolean(savedConfig.parseRobotsAndSitemaps);
-    if (savedConfig.userAgent) cfgUserAgent.value = savedConfig.userAgent;
-    toggleModeGroup();
-    toggleRegexGroup();
-  } else {
-    // Brand new state: keep Subdomain Crawl enabled by default
-    cfgSubdomainCrawl.checked = true;
-    await persistCurrentConfig();
-  }
-
-  // Attach immediate auto-save listeners to all config controls
-  [cfgMode, cfgScope, cfgScopeRegex, cfgTabDelay, cfgConcurrency, cfgDepth, cfgTimeout, 
-   cfgSubdomainCrawl, cfgOpenInTab, cfgClickButtons, cfgCrawlJs, cfgRobotsSitemap, cfgUserAgent].forEach(el => {
-    if (el) {
-      el.addEventListener('change', persistCurrentConfig);
-    }
-  });
-
-  function toggleModeGroup() {
-    if (cfgMode.value === 'single-tab') {
-      concurrencyGroup.style.display = 'none';
-      btnFocusTab.style.display = engine.crawlerTabId ? 'inline-flex' : 'none';
-      metricActiveWorkers.textContent = 'Single Tab Mode';
-    } else {
-      concurrencyGroup.style.display = 'flex';
-      btnFocusTab.style.display = 'none';
-      metricActiveWorkers.textContent = `${cfgConcurrency.value} Threads`;
-    }
-  }
-  cfgMode.addEventListener('change', toggleModeGroup);
-
-  // Focus Crawler Tab button
-  btnFocusTab.addEventListener('click', async () => {
-    await engine.focusCrawlerTab();
-  });
-
-  // ==========================================
-  // CAPTCHA Handlers
-  // ==========================================
-  engine.onCaptchaDetected = (target) => {
-    captchaTypeTitle.textContent = `${target.challengeType || 'Bot Challenge'} Detected!`;
-    captchaTargetUrl.textContent = target.url;
-    captchaBanner.style.display = 'flex';
-    btnFocusTab.style.display = 'inline-flex';
-  };
-
-  engine.onCaptchaResolved = () => {
-    captchaBanner.style.display = 'none';
-  };
-
-  btnCaptchaFocus.addEventListener('click', async () => {
-    await engine.focusCrawlerTab();
-  });
-
-  btnCaptchaSolved.addEventListener('click', () => {
-    engine.resolveCaptchaManually();
-  });
-
-  btnCaptchaSkip.addEventListener('click', () => {
-    engine.resolveCaptchaManually();
-  });
-
-  // ==========================================
-  // Engine Hooks
-  // ==========================================
-  engine.onLog = ({ timestamp, level, message, details }) => {
-    const line = document.createElement('div');
-    line.className = `log-line font-mono ${level === 'err' ? 'error' : level === 'wrn' ? 'warn' : 'info'}`;
-    const prefix = level === 'err' ? '[ERR]' : level === 'wrn' ? '[WRN]' : '[INF]';
-    line.textContent = `[${timestamp}] ${prefix} ${message} ${details ? '(' + details + ')' : ''}`;
-    terminalBody.appendChild(line);
-
-    if (terminalAutoscroll.checked) {
-      terminalBody.scrollTop = terminalBody.scrollHeight;
-    }
-  };
-
-  engine.onProgress = ({ crawled, queueLength, activeWorkers, totalDiscovered, duplicatesFiltered, subdomainsCount, errors, rps }) => {
-    metricCrawled.textContent = crawled;
-    metricQueue.textContent = queueLength;
-    if (cfgMode.value === 'single-tab') {
-      metricActiveWorkers.textContent = '1 Active Tab';
-    } else {
-      metricActiveWorkers.textContent = `${activeWorkers} Active Threads`;
-    }
-    metricNewSession.textContent = `+${totalDiscovered} In Current Run`;
-    metricRps.textContent = rps;
-    metricErrors.textContent = errors;
-    if (metricSubdomains) metricSubdomains.textContent = subdomainsCount || 0;
-    if (metricDupes) metricDupes.textContent = duplicatesFiltered || 0;
-
-    const totalTargets = parseInt(metricTargets.textContent, 10) || 0;
-    const progress = totalTargets > 0 ? Math.min(100, Math.round((crawled / totalTargets) * 100)) : 0;
-    metricProgressPercent.textContent = `${progress}% Completed`;
-    progressBarFill.style.width = `${progress}%`;
-  };
-
-  engine.onUrlFound = async () => {
-    const stats = await storage.getStats();
-    metricDiscovered.textContent = stats.totalDiscovered;
-    tabDiscoveredCount.textContent = stats.totalDiscovered;
-
-    const activeTab = document.querySelector('.nav-tab.active')?.dataset.tab;
-    if (activeTab === 'tab-results') {
-      debouncedRefreshResults();
-    }
-  };
-
-  // ==========================================
-  // Live Scan Duration Timer
-  // ==========================================
   let scanTimerInterval = null;
   let totalElapsedSeconds = 0;
-  let isTimerPaused = false;
-
-  function formatTime(totalSeconds) {
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    const pad = (n) => String(n).padStart(2, '0');
-    if (hrs > 0) {
-      return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
-    }
-    return `00:${pad(mins)}:${pad(secs)}`;
-  }
 
   function startScanTimer() {
-    stopScanTimer(false);
+    clearInterval(scanTimerInterval);
     totalElapsedSeconds = 0;
-    isTimerPaused = false;
-    if (metricDuration) metricDuration.textContent = '00:00:00';
-    if (metricDurationStatus) metricDurationStatus.textContent = 'Running live';
+    metricDuration.textContent = '00:00:00';
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Live Session';
 
     scanTimerInterval = setInterval(() => {
-      if (!isTimerPaused) {
-        totalElapsedSeconds++;
-        const formatted = formatTime(totalElapsedSeconds);
-        if (metricDuration) metricDuration.textContent = formatted;
-        if (headerStatusLabel && (headerStatusLabel.textContent.startsWith('CRAWLING') || headerStatusLabel.textContent.startsWith('RUNNING'))) {
-          headerStatusLabel.textContent = `CRAWLING (${formatted.slice(3)})`;
-        }
-      }
+      totalElapsedSeconds++;
+      const hrs = String(Math.floor(totalElapsedSeconds / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((totalElapsedSeconds % 3600) / 60)).padStart(2, '0');
+      const secs = String(totalElapsedSeconds % 60).padStart(2, '0');
+      metricDuration.textContent = `${hrs}:${mins}:${secs}`;
+
+      // Update RPS Chart dynamically
+      const currentRps = parseFloat(metricRps.textContent) || 0;
+      rpsHistory.shift();
+      rpsHistory.push(currentRps);
+      drawRpsChart();
     }, 1000);
   }
 
   function pauseScanTimer() {
-    isTimerPaused = true;
-    if (metricDurationStatus) metricDurationStatus.textContent = 'Paused';
+    if (scanTimerInterval) {
+      clearInterval(scanTimerInterval);
+      scanTimerInterval = null;
+    }
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Paused Session';
   }
 
   function resumeScanTimer() {
-    isTimerPaused = false;
-    if (metricDurationStatus) metricDurationStatus.textContent = 'Running live';
+    if (!scanTimerInterval) {
+      scanTimerInterval = setInterval(() => {
+        totalElapsedSeconds++;
+        const hrs = String(Math.floor(totalElapsedSeconds / 3600)).padStart(2, '0');
+        const mins = String(Math.floor((totalElapsedSeconds % 3600) / 60)).padStart(2, '0');
+        const secs = String(totalElapsedSeconds % 60).padStart(2, '0');
+        metricDuration.textContent = `${hrs}:${mins}:${secs}`;
+      }, 1000);
+    }
+    if (metricDurationStatus) metricDurationStatus.textContent = 'Live Session';
   }
 
-  function stopScanTimer(updateSummary = true) {
+  function stopScanTimer(updateSummary = false) {
     if (scanTimerInterval) {
       clearInterval(scanTimerInterval);
       scanTimerInterval = null;
@@ -358,14 +558,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  engine.onLog = (entry) => {
+    if (!terminalBody) return;
+    const div = document.createElement('div');
+    div.className = `log-line ${entry.level} font-mono`;
+    div.textContent = entry.message;
+    terminalBody.appendChild(div);
+    if (terminalAutoscroll.checked) {
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+  };
+
+  engine.onStatsUpdate = (stats) => {
+    metricTargets.textContent = stats.totalTargets;
+    metricCrawled.textContent = stats.crawledTargets;
+    metricDiscovered.textContent = stats.totalDiscovered;
+    metricRps.textContent = stats.rps;
+    metricSubdomains.textContent = stats.subdomains;
+    metricDupes.textContent = stats.duplicatesFiltered;
+    tabDiscoveredCount.textContent = stats.totalDiscovered;
+
+    const progress = stats.totalTargets > 0 ? Math.min(100, Math.round((stats.crawledTargets / stats.totalTargets) * 100)) : 0;
+    metricProgressPercent.textContent = `${progress}% Completed`;
+    progressBarFill.style.width = `${progress}%`;
+
+    // Sparklines reactivity
+    updateSparkline('sparkline-targets', stats.totalTargets, '#00f0ff');
+    updateSparkline('sparkline-crawled', stats.crawledTargets, '#39ff14');
+    updateSparkline('sparkline-discovered', stats.totalDiscovered, '#00f0ff');
+    updateSparkline('sparkline-rps', parseFloat(stats.rps) || 0, '#39ff14');
+  };
+
   engine.onStateChange = (state) => {
     headerStatusDot.className = 'status-indicator-dot';
     if (state === 'running') {
-      if (!scanTimerInterval) {
-        startScanTimer();
-      } else {
-        resumeScanTimer();
-      }
+      if (!scanTimerInterval) startScanTimer();
+      else resumeScanTimer();
       headerStatusDot.classList.add('running');
       headerStatusLabel.textContent = 'CRAWLING';
       btnStart.style.display = 'none';
@@ -396,30 +624,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  engine.onCaptchaDetected = (info) => {
+    captchaBanner.style.display = 'flex';
+    if (captchaTypeTitle) captchaTypeTitle.textContent = `${info.title || 'CAPTCHA / Challenge'} Detected!`;
+    if (captchaTargetUrl) captchaTargetUrl.textContent = info.url;
+  };
+
   engine.onSecretFound = () => {
     refreshMetrics();
     debouncedRefreshSecrets();
   };
 
   // ==========================================
-  // Tab Switching
+  // Crawler Controls
   // ==========================================
-  navTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      navTabs.forEach(t => t.classList.remove('active'));
-      tabPanes.forEach(p => p.classList.remove('active'));
-
-      tab.classList.add('active');
-      const targetPane = document.getElementById(tab.dataset.tab);
-      if (targetPane) targetPane.classList.add('active');
-
-      if (tab.dataset.tab === 'tab-results') {
-        refreshResultsTable();
-      } else if (tab.dataset.tab === 'tab-secrets') {
-        refreshSecretsTable();
-      }
-    });
+  btnStart.addEventListener('click', async () => {
+    await startCrawling();
   });
+
+  btnPause.addEventListener('click', () => {
+    engine.pause();
+  });
+
+  btnResume.addEventListener('click', () => {
+    engine.resume();
+  });
+
+  btnStop.addEventListener('click', () => {
+    engine.stop();
+  });
+
+  btnFocusTab.addEventListener('click', () => {
+    engine.focusTab();
+  });
+
+  btnCaptchaFocus.addEventListener('click', () => {
+    engine.focusTab();
+  });
+
+  btnCaptchaSolved.addEventListener('click', () => {
+    captchaBanner.style.display = 'none';
+    engine.resume();
+  });
+
+  btnCaptchaSkip.addEventListener('click', () => {
+    captchaBanner.style.display = 'none';
+    engine.skipCurrentTarget();
+  });
+
+  async function startCrawling() {
+    const config = {
+      mode: cfgMode.value,
+      scopeMode: cfgScope.value,
+      scopeRegex: cfgScopeRegex.value.trim(),
+      tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 400,
+      concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
+      maxDepth: parseInt(cfgDepth.value, 10) || 3,
+      timeout: (parseInt(cfgTimeout.value, 10) || 6) * 1000,
+      subdomainCrawl: cfgSubdomainCrawl.checked,
+      openFoundUrlsInTab: cfgOpenInTab.checked,
+      autoClickButtons: cfgClickButtons.checked,
+      crawlJavascript: cfgCrawlJs.checked,
+      parseRobotsAndSitemaps: cfgRobotsSitemap.checked,
+      userAgent: cfgUserAgent.value.trim()
+    };
+
+    engine.configure(config);
+    await storage.saveSetting('crawler_config', config);
+
+    let pending = await storage.getPendingTargets();
+    if (pending.length === 0) {
+      const allTargets = await storage.getAllTargets();
+      if (allTargets.length > 0) {
+        engine.log('inf', `Re-activating ${allTargets.length} seed targets for new crawl session...`);
+        const tx = storage.db.transaction('targets', 'readwrite');
+        const store = tx.objectStore('targets');
+        for (const t of allTargets) {
+          t.status = 'pending';
+          store.put(t);
+        }
+        await new Promise(r => { tx.oncomplete = r; });
+        pending = await storage.getPendingTargets();
+      }
+    }
+
+    if (pending.length === 0) {
+      alert('No pending targets to crawl. Please upload a .txt file or paste seed URLs.');
+      switchTab('tab-upload');
+      return;
+    }
+
+    await engine.start(pending);
+  }
 
   // ==========================================
   // Target Upload & Text Input
@@ -450,59 +746,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   async function processTextFile(file) {
-    try {
-      engine.log('inf', `Processing uploaded file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
-      const text = await file.text();
-      const urls = parseUrlText(text);
-
-      if (urls.length === 0) {
-        alert('No valid URLs found in file.');
-        return;
-      }
-
-      await storage.addTargets(urls);
-      engine.log('inf', `Successfully imported ${urls.length} targets into crawler database`);
-      await refreshMetrics();
-      await renderTargetsTable();
-    } catch (err) {
-      console.error(err);
-      engine.log('err', `Error reading file: ${err.message}`);
+    const text = await file.text();
+    const urls = parseUrlText(text);
+    if (urls.length === 0) {
+      alert('No valid URLs found in file.');
+      return;
     }
+    await storage.addTargets(urls);
+    engine.log('inf', `Loaded ${urls.length} targets from ${file.name}`);
+    await refreshMetrics();
+    await renderTargetsTable();
   }
 
   btnAddPasted.addEventListener('click', async () => {
     const text = targetTextarea.value.trim();
     if (!text) return;
-
     const urls = parseUrlText(text);
     if (urls.length === 0) {
-      alert('Please enter at least one valid URL.');
+      alert('No valid URLs found in textarea.');
       return;
     }
-
     await storage.addTargets(urls);
     targetTextarea.value = '';
-    engine.log('inf', `Added ${urls.length} pasted URLs to targets queue`);
+    engine.log('inf', `Added ${urls.length} pasted seed targets`);
     await refreshMetrics();
     await renderTargetsTable();
   });
 
-  // Load sample targets from workspace
   btnLoadDemo.addEventListener('click', async () => {
     const sample = [
-      'http://1.ram.m2m.telekom.com:8774',
-      'http://1000044548-media-production.obs.eu-de.otc.t-systems.com:5080',
-      'http://116.203.208.253:41241',
-      'http://116.203.208.253:4430',
-      'http://13.ram.m2m.telekom.com:8774',
-      'http://164.30.44.18:5080',
-      'http://164.30.44.19:5080',
-      'http://164.30.44.20:5080',
-      'http://164.30.44.21:5080',
-      'http://164.30.45.18:5080'
+      'https://example.com',
+      'https://httpbin.org',
+      'https://api.github.com'
     ];
     await storage.addTargets(sample);
-    engine.log('inf', `Loaded ${sample.length} sample targets from alive.txt`);
+    engine.log('inf', `Loaded ${sample.length} sample targets`);
     await refreshMetrics();
     await renderTargetsTable();
   });
@@ -524,85 +802,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       .filter(line => line.length > 0 && !line.startsWith('#'));
   }
 
-  // ==========================================
-  // Crawler Controls
-  // ==========================================
-  btnStart.addEventListener('click', async () => {
-    await startCrawling();
-  });
-
-  btnPause.addEventListener('click', () => {
-    engine.pause();
-  });
-
-  btnResume.addEventListener('click', () => {
-    engine.resume();
-  });
-
-  btnStop.addEventListener('click', () => {
-    engine.stop();
-  });
-
-  async function startCrawling() {
-    const config = {
-      mode: cfgMode.value,
-      scopeMode: cfgScope.value,
-      scopeRegex: cfgScopeRegex.value.trim(),
-      tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 2000,
-      concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
-      maxDepth: parseInt(cfgDepth.value, 10) || 3,
-      timeout: (parseInt(cfgTimeout.value, 10) || 15) * 1000,
-      subdomainCrawl: cfgSubdomainCrawl.checked,
-      openFoundUrlsInTab: cfgOpenInTab.checked,
-      autoClickButtons: cfgClickButtons.checked,
-      crawlJavascript: cfgCrawlJs.checked,
-      parseRobotsAndSitemaps: cfgRobotsSitemap.checked,
-      userAgent: cfgUserAgent.value.trim()
-    };
-
-    engine.configure(config);
-    await storage.saveSetting('crawler_config', config);
-
-    let pending = await storage.getPendingTargets();
-    if (pending.length === 0) {
-      // If all targets were already marked completed in a previous run, automatically re-activate them!
-      const allTargets = await storage.getAllTargets();
-      if (allTargets.length > 0) {
-        engine.log('inf', `Re-activating ${allTargets.length} seed targets for new crawl session...`);
-        const tx = storage.db.transaction('targets', 'readwrite');
-        const store = tx.objectStore('targets');
-        for (const t of allTargets) {
-          t.status = 'pending';
-          store.put(t);
-        }
-        await new Promise(r => { tx.oncomplete = r; });
-        pending = await storage.getPendingTargets();
-      }
-    }
-
-    if (pending.length === 0) {
-      alert('No pending targets to crawl. Please upload a .txt file or paste seed URLs.');
-      return;
-    }
-
-    const terminalTab = document.querySelector('[data-tab="tab-terminal"]');
-    if (terminalTab) terminalTab.click();
-
-    await engine.start(pending);
-  }
-
-  function toggleRegexGroup() {
+  cfgScope.addEventListener('change', () => {
     regexGroup.style.display = cfgScope.value === 'regex' ? 'flex' : 'none';
-  }
-  cfgScope.addEventListener('change', toggleRegexGroup);
+  });
 
   btnClearDb.addEventListener('click', async () => {
-    if (confirm('Are you sure you want to completely clear all targets and discovered URLs?')) {
+    if (confirm('Are you sure you want to completely wipe all targets and discovered data?')) {
       await storage.clearAll();
       await refreshMetrics();
       await renderTargetsTable();
       await refreshResultsTable();
-      engine.log('inf', 'All database storage cleared');
+      await refreshSecretsTable();
+      engine.log('inf', 'All database storage wiped.');
     }
   });
 
@@ -686,11 +897,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function refreshMetrics() {
     const stats = await storage.getStats();
     metricTargets.textContent = stats.totalTargets;
-    metricPending.textContent = `${stats.pendingTargets} Pending`;
+    metricPending.textContent = `${stats.pendingTargets} Pending in Queue`;
     metricCrawled.textContent = stats.crawledTargets;
     metricDiscovered.textContent = stats.totalDiscovered;
     tabDiscoveredCount.textContent = stats.totalDiscovered;
-    loadedSeedsBadge.textContent = `${stats.totalTargets} Seeds Ready`;
+    loadedSeedsBadge.textContent = `${stats.totalTargets} Ready`;
 
     const totalSec = stats.totalSecrets || 0;
     if (metricSecrets) metricSecrets.textContent = totalSec;
@@ -712,6 +923,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const progress = stats.totalTargets > 0 ? Math.min(100, Math.round((stats.crawledTargets / stats.totalTargets) * 100)) : 0;
     metricProgressPercent.textContent = `${progress}% Completed`;
     progressBarFill.style.width = `${progress}%`;
+
+    // Update Donut Chart
+    try {
+      const urls = await storage.getDiscoveredUrls();
+      const htmlCount = urls.filter(u => u.type.includes('html')).length;
+      const jsCount = urls.filter(u => u.type.includes('js') || u.type.includes('bundle')).length;
+      const apiCount = urls.filter(u => u.type.includes('api')).length;
+      drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
+    } catch {}
   }
 
   async function renderTargetsTable() {
@@ -725,14 +945,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let rowsHtml = '';
     targets.slice(0, 100).forEach((t, idx) => {
-      const statusColor = t.status === 'completed' ? '#00ff88' : t.status === 'crawling' ? '#00ff88' : t.status === 'failed' ? '#ff0044' : '#94a3b8';
+      const statusColor = t.status === 'completed' ? 'var(--neon-green)' : t.status === 'crawling' ? 'var(--neon-cyan)' : t.status === 'failed' ? 'var(--neon-red)' : '#8b949e';
       const crawledTime = t.crawledAt ? new Date(t.crawledAt).toLocaleTimeString() : '-';
 
       rowsHtml += `
         <tr>
           <td>${idx + 1}</td>
           <td class="url-cell"><a href="${escapeHtml(t.url)}" target="_blank">${escapeHtml(t.url)}</a></td>
-          <td><span style="color: ${statusColor}; font-weight: 600; text-transform: uppercase; font-size: 11px;">${t.status}</span></td>
+          <td><span style="color: ${statusColor}; font-weight: 700; text-transform: uppercase; font-size: 11px; font-family: var(--font-mono);">${t.status}</span></td>
           <td>${t.discoveredCount || 0}</td>
           <td>${crawledTime}</td>
         </tr>
@@ -765,7 +985,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     cachedResults = await storage.getDiscoveredUrls(filters);
     filterCount.textContent = `Showing ${cachedResults.length} URLs`;
-
     renderResultsPage();
   }
 
@@ -793,11 +1012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const typeClass = item.type.includes('subdomain') ? 'tag-subdomain' :
                         item.type.includes('button') ? 'tag-btn-click' :
                         item.type.includes('api') ? 'tag-network-api' :
-                        item.type.includes('bundle') ? 'tag-script-bundle' :
-                        item.type.includes('js') ? 'tag-js-endpoint' :
-                        item.type.includes('script') ? 'tag-script-src' :
-                        item.type.includes('form') ? 'tag-form' :
-                        item.type.includes('robot') ? 'tag-robots' : 'tag-html-link';
+                        item.type.includes('js') ? 'tag-js-endpoint' : 'tag-html-link';
       const scopeClass = item.scope === 'in-scope' ? 'tag-in-scope' : 'tag-out-of-scope';
 
       html += `
@@ -807,10 +1022,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             <a href="${escapeHtml(item.url)}" target="_blank" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>
           </td>
           <td><span class="badge-tag ${typeClass}">${escapeHtml(item.type)}</span></td>
-          <td class="source-cell" title="${escapeHtml(item.sourceUrl || '')}">${escapeHtml(item.sourceUrl || '-')}</td>
+          <td class="source-cell font-mono text-xs" style="color: var(--text-muted);" title="${escapeHtml(item.sourceUrl || '')}">${escapeHtml(item.sourceUrl || '-')}</td>
           <td><span class="badge-tag ${scopeClass}">${escapeHtml(item.scope)}</span></td>
           <td>
-            <button class="btn btn-xs btn-outline copy-row-btn" data-url="${escapeHtml(item.url)}" title="Copy URL">
+            <button class="btn btn-glass copy-row-btn" style="padding: 3px 8px; font-size: 11px;" data-url="${escapeHtml(item.url)}" title="Copy URL">
               Copy
             </button>
           </td>
@@ -894,41 +1109,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (secretsCountLabel) {
       secretsCountLabel.textContent = `${cachedSecrets.length} findings`;
     }
-
     renderSecretsTable(cachedSecrets);
   }
 
   function formatSourceTag(type) {
     const t = (type || 'html').toLowerCase();
     let label = t.toUpperCase();
-    let tagClass = 'tag-html';
-    if (t.includes('rendered') || t === 'rendered-js') {
-      label = 'DOM JS';
-      tagClass = 'tag-rendered-js';
-    } else if (t.includes('bundle') || t === 'js-bundle') {
+    let tagClass = 'tag-html-link';
+    if (t.includes('bundle') || t.includes('js')) {
       label = 'JS BUNDLE';
-      tagClass = 'tag-js-bundle';
-    } else if (t === 'css') {
-      label = 'CSS';
-      tagClass = 'tag-css';
-    } else if (t.includes('map') || t === 'source-map') {
+      tagClass = 'tag-js-endpoint';
+    } else if (t.includes('map')) {
       label = '.MAP';
-      tagClass = 'tag-source-map';
-    } else if (t.includes('comment') || t === 'html-comment') {
-      label = 'COMMENT';
-      tagClass = 'tag-html-comment';
+      tagClass = 'tag-subdomain';
     }
-    return `<span class="secret-src-tag ${tagClass}">${label}</span>`;
+    return `<span class="badge-tag ${tagClass}">${label}</span>`;
   }
 
   function renderSourceItem(src) {
     return `
       <div class="secret-location-item">
-        <div class="secret-location-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
           ${formatSourceTag(src.type)}
-          <a href="${escapeHtml(src.url)}" target="_blank" class="url-link text-xs" style="color: var(--green-neon); word-break: break-all;">${escapeHtml(src.url)}</a>
+          <a href="${escapeHtml(src.url)}" target="_blank" class="url-cell text-xs" style="color: var(--neon-cyan);">${escapeHtml(src.url)}</a>
         </div>
-        ${src.context ? `<div class="secret-context-snippet">${escapeHtml(src.context)}</div>` : ''}
+        ${src.context ? `<div class="secret-context-snippet font-mono">${escapeHtml(src.context)}</div>` : ''}
       </div>
     `;
   }
@@ -937,12 +1142,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!secretsTbody) return;
 
     if (!secrets || secrets.length === 0) {
-      secretsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching secrets or findings found. Run a crawl or adjust filters above.</td></tr>`;
+      secretsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching sensitive credentials detected. Launch a crawl to scan!</td></tr>`;
       if (secretsCountLabel) secretsCountLabel.textContent = `0 findings`;
       return;
     }
 
-    // STRICT IN-MEMORY CONSOLIDATION: Absolutely impossible for duplicate secret keys to ever render
+    // Strict in-memory consolidation: prevents duplicate keys from ever displaying
     const uniqueMap = new Map();
     for (const s of secrets) {
       if (!s || !s.match) continue;
@@ -977,18 +1182,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     let rowsHtml = '';
     dedupedSecrets.forEach((s, idx) => {
       const sevClass = s.severity === 'critical' ? 'badge-sev-critical' :
-                       s.severity === 'high' ? 'badge-sev-high' :
-                       s.severity === 'medium' ? 'badge-sev-medium' : 'badge-sev-info';
+                        s.severity === 'high' ? 'badge-sev-high' :
+                        s.severity === 'medium' ? 'badge-sev-medium' : 'badge-sev-info';
 
       const sources = Array.isArray(s.sources) && s.sources.length > 0
         ? s.sources
         : (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType || 'html', context: s.context || '' }] : []);
 
       const locCount = sources.length;
-      const countBadgeClass = locCount > 1 ? 'secret-loc-count-badge multi' : 'secret-loc-count-badge';
-      const countBadge = `<span class="${countBadgeClass}">${locCount} ${locCount === 1 ? 'location' : 'locations'}</span>`;
+      const countBadge = `<span class="secret-loc-count-badge">${locCount} ${locCount === 1 ? 'loc' : 'locs'}</span>`;
 
-      // Render location list with accordion toggle if > 2 locations
       const initialSources = sources.slice(0, 2);
       const remainingSources = sources.slice(2);
 
@@ -1003,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           locationsHtml += renderSourceItem(src);
         });
         locationsHtml += `</div>`;
-        locationsHtml += `<button class="secret-more-toggle" data-count="${remainingSources.length}">+ ${remainingSources.length} more location(s)</button>`;
+        locationsHtml += `<button class="btn btn-glass secret-more-toggle" style="padding: 2px 8px; font-size: 10px; align-self: flex-start; margin-top: 4px;" data-count="${remainingSources.length}">+ ${remainingSources.length} more location(s)</button>`;
       }
       locationsHtml += `</div>`;
 
@@ -1015,8 +1218,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           <td>${idx + 1}</td>
           <td><span class="badge-sev ${sevClass}">${s.severity || 'info'}</span></td>
           <td>
-            <strong style="color: var(--text-primary);">${escapeHtml(s.ruleName)}</strong>
-            ${s.category ? `<div class="text-xs" style="color: var(--text-muted); margin-top: 2px;">${escapeHtml(s.category)}</div>` : ''}
+            <strong style="color: var(--text-main); font-family: var(--font-sans);">${escapeHtml(s.ruleName)}</strong>
+            ${s.category ? `<div class="text-xs" style="color: var(--text-muted); margin-top: 2px; font-family: var(--font-mono);">${escapeHtml(s.category)}</div>` : ''}
           </td>
           <td>
             <div class="secret-value-box">
@@ -1037,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     secretsTbody.innerHTML = rowsHtml;
   }
 
-  // Interactive secret table event delegation (copy, show/hide, expand locations)
+  // Event delegation for secrets table interactions
   if (secretsTbody) {
     secretsTbody.addEventListener('click', async (e) => {
       const copyBtn = e.target.closest('.secret-copy-btn');
@@ -1089,15 +1292,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  if (secretsSearch) {
-    secretsSearch.addEventListener('input', debouncedRefreshSecrets);
-  }
-  if (secretsFilterSeverity) {
-    secretsFilterSeverity.addEventListener('change', refreshSecretsTable);
-  }
-  if (secretsFilterSource) {
-    secretsFilterSource.addEventListener('change', refreshSecretsTable);
-  }
+  if (secretsSearch) secretsSearch.addEventListener('input', debouncedRefreshSecrets);
+  if (secretsFilterSeverity) secretsFilterSeverity.addEventListener('change', refreshSecretsTable);
+  if (secretsFilterSource) secretsFilterSource.addEventListener('change', refreshSecretsTable);
 
   if (btnExportSecretsJson) {
     btnExportSecretsJson.addEventListener('click', async () => {
@@ -1106,18 +1303,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to export.');
         return;
       }
-      const exportData = secrets.map(s => ({
-        ruleName: s.ruleName,
-        severity: s.severity,
-        category: s.category,
-        secret: s.match,
-        locationsCount: (s.sources || []).length,
-        sources: s.sources || (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType, context: s.context }] : []),
-        firstDiscoveredAt: s.firstDiscoveredAt || s.discoveredAt,
-        lastDiscoveredAt: s.lastDiscoveredAt || s.discoveredAt
-      }));
-      downloadFile(JSON.stringify(exportData, null, 2), 'crawlizer-secrets.json', 'application/json');
-      engine.log('inf', `Exported ${secrets.length} unique findings to crawlizer-secrets.json`);
+      downloadFile(JSON.stringify(secrets, null, 2), 'crawlizer-secrets.json', 'application/json');
+      engine.log('inf', `Exported ${secrets.length} findings to crawlizer-secrets.json`);
     });
   }
 
@@ -1128,18 +1315,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to export.');
         return;
       }
-      let csv = 'Rule,Severity,Category,Secret,LocationCount,SourceURLs,FirstDiscoveredAt,LastDiscoveredAt\n';
+      let csv = 'Rule,Severity,Category,Secret,LocationCount,SourceURLs\n';
       secrets.forEach(s => {
         const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
-        const sources = Array.isArray(s.sources) && s.sources.length > 0 ? s.sources : (s.sourceUrl ? [{ url: s.sourceUrl, type: s.sourceType }] : []);
-        const locCount = sources.length;
-        const urlsJoined = sources.map(src => `[${(src.type || 'asset').toUpperCase()}] ${src.url}`).join('; ');
-        const firstDate = (s.firstDiscoveredAt || s.discoveredAt) ? new Date(s.firstDiscoveredAt || s.discoveredAt).toISOString() : '';
-        const lastDate = (s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt) ? new Date(s.lastDiscoveredAt || s.firstDiscoveredAt || s.discoveredAt).toISOString() : '';
-        csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${locCount},${esc(urlsJoined)},${esc(firstDate)},${esc(lastDate)}\n`;
+        const sources = Array.isArray(s.sources) && s.sources.length > 0 ? s.sources : (s.sourceUrl ? [{ url: s.sourceUrl }] : []);
+        const urlsJoined = sources.map(src => src.url).join('; ');
+        csv += `${esc(s.ruleName)},${esc(s.severity)},${esc(s.category)},${esc(s.match)},${sources.length},${esc(urlsJoined)}\n`;
       });
       downloadFile(csv, 'crawlizer-secrets.csv', 'text/csv');
-      engine.log('inf', `Exported ${secrets.length} unique findings to crawlizer-secrets.csv`);
+      engine.log('inf', `Exported ${secrets.length} findings to crawlizer-secrets.csv`);
     });
   }
 
@@ -1150,23 +1334,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('No secrets found to copy.');
         return;
       }
-      const text = secrets.map(s => {
-        const sources = Array.isArray(s.sources) && s.sources.length > 0 ? s.sources : (s.sourceUrl ? [{ url: s.sourceUrl }] : []);
-        const urlsStr = sources.map(loc => loc.url).join(', ');
-        return `[${(s.severity || 'INFO').toUpperCase()}] ${s.ruleName}: ${s.match} (Found in ${sources.length} location(s): ${urlsStr})`;
-      }).join('\n');
+      const text = secrets.map(s => `[${(s.severity || 'INFO').toUpperCase()}] ${s.ruleName}: ${s.match}`).join('\n');
       await navigator.clipboard.writeText(text);
-      alert(`Copied ${secrets.length} unique secrets to clipboard!`);
+      alert(`Copied ${secrets.length} findings to clipboard!`);
     });
   }
 
   if (btnClearSecrets) {
     btnClearSecrets.addEventListener('click', async () => {
-      if (confirm('Are you sure you want to clear all discovered secrets findings?')) {
+      if (confirm('Clear all secrets findings?')) {
         await storage.clearSecrets();
         await refreshMetrics();
         await refreshSecretsTable();
-        engine.log('inf', 'All secrets findings cleared from database.');
+        engine.log('inf', 'All secrets cleared from database.');
       }
     });
   }
@@ -1178,7 +1358,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('autostart') === 'true') {
-    engine.log('inf', 'Auto-start parameter detected, launching crawl...');
     setTimeout(startCrawling, 500);
   }
 });

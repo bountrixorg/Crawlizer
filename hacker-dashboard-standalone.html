@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRAWLIZER // CYBERPUNK RECON DASHBOARD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* ==========================================================================
+       THEME CONFIGURATION — TWEAK YOUR COLOR PALETTE EASILY HERE
+       ========================================================================== */
+    :root {
+      /* Dark Canvas & Backgrounds */
+      --bg-deep: #0a0e14;
+      --bg-sidebar: rgba(10, 14, 20, 0.94);
+      --bg-topbar: rgba(10, 14, 20, 0.88);
+      --bg-surface: rgba(13, 20, 30, 0.72);
+      --bg-surface-elevated: rgba(17, 26, 39, 0.88);
+      --bg-card: rgba(14, 22, 33, 0.68);
+      --bg-card-hover: rgba(18, 30, 46, 0.85);
+      --bg-input: rgba(6, 10, 16, 0.95);
+      --bg-modal: rgba(10, 15, 23, 0.96);
+
+      /* Neon Hacker Accents */
+      --neon-cyan: #00f0ff;
+      --neon-cyan-glow: rgba(0, 240, 255, 0.35);
+      --neon-cyan-badge: rgba(0, 240, 255, 0.14);
+
+      --neon-green: #39ff14;
+      --neon-green-glow: rgba(57, 255, 20, 0.35);
+      --neon-green-badge: rgba(57, 255, 20, 0.14);
+
+      --neon-magenta: #ff2bd6;
+      --neon-magenta-glow: rgba(255, 43, 214, 0.35);
+      --neon-magenta-badge: rgba(255, 43, 214, 0.14);
+
+      --neon-amber: #ffb800;
+      --neon-amber-glow: rgba(255, 184, 0, 0.35);
+      --neon-red: #ff3366;
+      --neon-red-glow: rgba(255, 51, 102, 0.4);
+
+      /* High-Contrast Typography */
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --text-dim: #484f58;
+
+      /* Borders & Shadows */
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-glow-cyan: rgba(0, 240, 255, 0.32);
+      --border-glow-green: rgba(57, 255, 20, 0.32);
+      --border-glow-magenta: rgba(255, 43, 214, 0.35);
+
+      /* Fonts */
+      --font-sans: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+      /* 8px System Border Radius */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #060a0f; }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.25); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan-glow); }
+
+    body.hacker-app {
+      background-color: var(--bg-deep);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      position: relative;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Scanline & Cyber Matrix Overlays */
+    .scanlines-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 998;
+      opacity: 0.55;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background-image: 
+        linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #matrix-canvas {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.2;
+      display: none;
+    }
+    #matrix-canvas.active { display: block; }
+
+    /* Layout Structure */
+    .app-layout {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+      position: relative;
+      z-index: 10;
+    }
+
+    /* Left Sidebar */
+    .app-sidebar {
+      width: 250px;
+      min-width: 250px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle);
+      backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 110;
+    }
+    .app-sidebar.collapsed { width: 72px; min-width: 72px; }
+
+    .sidebar-header {
+      padding: 18px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      overflow: hidden;
+    }
+
+    .sidebar-logo-box {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      background: rgba(0, 240, 255, 0.12);
+      border: 1px solid var(--border-glow-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 15px;
+      color: var(--neon-cyan);
+      box-shadow: 0 0 16px var(--neon-cyan-glow);
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand-text {
+      display: flex;
+      flex-direction: column;
+      white-space: nowrap;
+    }
+    .app-sidebar.collapsed .sidebar-brand-text { display: none; }
+
+    .brand-title {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #ffffff 10%, var(--neon-cyan) 80%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-badge {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--neon-green);
+      letter-spacing: 1px;
+    }
+
+    .sidebar-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .sidebar-toggle-btn:hover {
+      color: var(--neon-cyan);
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 10px var(--neon-cyan-glow);
+    }
+    .app-sidebar.collapsed .sidebar-toggle-btn svg { transform: rotate(180deg); }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    .nav-section-title {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      padding: 8px 10px 4px 10px;
+      text-transform: uppercase;
+    }
+    .app-sidebar.collapsed .nav-section-title { display: none; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      font-size: 12.5px;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.04); }
+    .nav-item.active {
+      color: var(--neon-cyan);
+      background: linear-gradient(90deg, rgba(0, 240, 255, 0.12), rgba(0, 240, 255, 0.02));
+      border: 1px solid var(--border-glow-cyan);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.18);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 15%; height: 70%; width: 3px;
+      background: var(--neon-cyan);
+      border-radius: 0 3px 3px 0;
+      box-shadow: 0 0 10px var(--neon-cyan);
+    }
+    .nav-item[data-tab="tab-secrets"].active {
+      color: var(--neon-magenta);
+      background: linear-gradient(90deg, rgba(255, 43, 214, 0.14), rgba(255, 43, 214, 0.02));
+      border: 1px solid var(--border-glow-magenta);
+      box-shadow: 0 0 14px var(--neon-magenta-glow);
+    }
+    .nav-item[data-tab="tab-secrets"].active::before {
+      background: var(--neon-magenta);
+      box-shadow: 0 0 10px var(--neon-magenta);
+    }
+
+    .nav-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .nav-label { flex: 1; white-space: nowrap; }
+    .app-sidebar.collapsed .nav-label { display: none; }
+
+    .nav-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: var(--neon-cyan-badge);
+      color: var(--neon-cyan);
+      border: 1px solid var(--border-glow-cyan);
+    }
+    .nav-badge.badge-magenta {
+      background: var(--neon-magenta-badge);
+      color: var(--neon-magenta);
+      border-color: var(--border-glow-magenta);
+      box-shadow: 0 0 8px var(--neon-magenta-glow);
+    }
+    .app-sidebar.collapsed .nav-badge { display: none; }
+
+    .sidebar-footer {
+      padding: 14px 12px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .operator-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      border: 1px solid var(--neon-cyan);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-weight: 800; font-size: 11px;
+      color: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan-glow);
+      flex-shrink: 0;
+    }
+    .operator-info { display: flex; flex-direction: column; white-space: nowrap; }
+    .app-sidebar.collapsed .operator-info { display: none; }
+    .operator-name { font-size: 11px; font-weight: 700; font-family: var(--font-mono); color: var(--text-main); }
+    .operator-role { font-size: 9.5px; font-family: var(--font-mono); color: var(--neon-green); }
+
+    /* Main Area & Top Bar */
+    .app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 100vh;
+    }
+
+    .app-topbar {
+      height: 64px;
+      background: var(--bg-topbar);
+      border-bottom: 1px solid var(--border-subtle);
+      backdrop-filter: blur(20px);
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-left { display: flex; align-items: center; gap: 18px; }
+    .prompt-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--neon-green);
+    }
+    .prompt-symbol { color: var(--neon-green); font-weight: 800; text-shadow: 0 0 8px var(--neon-green-glow); }
+    .prompt-path { color: var(--text-muted); }
+    .prompt-typing { color: var(--text-main); font-weight: 700; }
+    .cursor-blink {
+      display: inline-block;
+      width: 8px; height: 14px;
+      background: var(--neon-green);
+      box-shadow: 0 0 8px var(--neon-green);
+      animation: blink 1s step-end infinite;
+      vertical-align: middle;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .cmd-palette-trigger {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 7px 14px;
+      cursor: pointer;
+      width: 280px;
+      transition: all 0.2s ease;
+    }
+    .cmd-palette-trigger:hover {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 14px var(--neon-cyan-glow);
+    }
+    .cmd-prompt-glyph { font-family: var(--font-mono); color: var(--neon-cyan); font-weight: 700; }
+    .cmd-trigger-text { flex: 1; font-size: 11.5px; color: var(--text-muted); }
+    .cmd-kbd {
+      font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08); color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .status-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(6, 10, 16, 0.85); border: 1px solid var(--border-subtle);
+      padding: 5px 12px; border-radius: 20px;
+    }
+    .status-indicator-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--text-dim); transition: all 0.3s; }
+    .status-indicator-dot.running { background-color: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); animation: pulse 1.4s infinite; }
+    .status-label { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; font-family: var(--font-mono); color: var(--text-muted); }
+    @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.8; } 50% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.8; } }
+
+    /* Button System */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: var(--radius-md);
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      border: 1px solid transparent; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      white-space: nowrap; font-family: var(--font-sans);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--neon-cyan), #00a896);
+      color: #041014; border-color: rgba(0, 240, 255, 0.6);
+      box-shadow: 0 0 18px var(--neon-cyan-glow);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #33f3ff, #02c39a);
+      box-shadow: 0 0 28px rgba(0, 240, 255, 0.6); transform: translateY(-1px);
+    }
+    .btn-glass {
+      background: rgba(14, 22, 33, 0.7); border-color: var(--border-subtle);
+      color: var(--text-muted); backdrop-filter: blur(8px);
+    }
+    .btn-glass:hover {
+      background: rgba(22, 34, 52, 0.85); border-color: var(--neon-cyan);
+      color: var(--neon-cyan); box-shadow: 0 0 12px var(--neon-cyan-glow); transform: translateY(-1px);
+    }
+
+    /* Content Area & Widgets */
+    .content-wrapper { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; }
+    .progress-bar-container { height: 3px; background-color: rgba(8, 14, 22, 0.9); width: 100%; border-radius: 2px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green), var(--neon-magenta)); transition: width 0.3s ease; box-shadow: 0 0 14px var(--neon-cyan); }
+
+    /* Stat Cards with Mini Sparklines */
+    .stat-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .stat-card {
+      background: var(--bg-card); backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+      padding: 16px; display: flex; flex-direction: column; position: relative; overflow: hidden;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .stat-card:hover { background: var(--bg-card-hover); border-color: rgba(255, 255, 255, 0.16); transform: translateY(-2px); }
+    .stat-card.card-cyan { border-color: var(--border-glow-cyan); box-shadow: 0 0 20px rgba(0, 240, 255, 0.1); }
+    .stat-card.card-green { border-color: var(--border-glow-green); box-shadow: 0 0 20px rgba(57, 255, 20, 0.1); }
+    .stat-card.card-magenta { border-color: var(--border-glow-magenta); box-shadow: 0 0 24px rgba(255, 43, 214, 0.15); }
+
+    .stat-card-header { display: flex; align-items: center; justify-content: space-between; }
+    .stat-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase; }
+    .stat-icon {
+      width: 26px; height: 26px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.04);
+      display: flex; align-items: center; justify-content: center; color: var(--text-muted);
+    }
+    .card-cyan .stat-icon { color: var(--neon-cyan); background: var(--neon-cyan-badge); }
+    .card-green .stat-icon { color: var(--neon-green); background: var(--neon-green-badge); }
+    .card-magenta .stat-icon { color: var(--neon-magenta); background: var(--neon-magenta-badge); }
+
+    .stat-main-row { display: flex; align-items: flex-end; justify-content: space-between; margin: 10px 0 4px 0; }
+    .stat-value { font-family: var(--font-mono); font-size: 26px; font-weight: 800; color: var(--text-main); line-height: 1.1; }
+    .card-cyan .stat-value { color: var(--neon-cyan); text-shadow: 0 0 12px var(--neon-cyan-glow); }
+    .card-green .stat-value { color: var(--neon-green); text-shadow: 0 0 12px var(--neon-green-glow); }
+    .card-magenta .stat-value { color: var(--neon-magenta); text-shadow: 0 0 14px var(--neon-magenta-glow); }
+
+    .sparkline-svg { width: 72px; height: 28px; overflow: visible; }
+    .sparkline-svg path { fill: none; stroke-width: 2; stroke-linecap: round; }
+    .stat-footer { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+    /* Live Neon Charts */
+    .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .charts-grid { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--bg-card); backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+      padding: 20px; display: flex; flex-direction: column; gap: 16px;
+    }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; }
+    .chart-title { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; color: var(--text-main); }
+    .chart-badge {
+      font-family: var(--font-mono); font-size: 9.5px; padding: 2px 7px; border-radius: 4px;
+      background: var(--neon-cyan-badge); color: var(--neon-cyan); border: 1px solid var(--border-glow-cyan);
+    }
+    .chart-canvas-wrapper { position: relative; width: 100%; height: 220px; }
+    .chart-canvas-wrapper canvas { width: 100% !important; height: 100% !important; }
+    .donut-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* Tab Panes */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .glass-panel {
+      background: var(--bg-surface); backdrop-filter: blur(18px);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45); overflow: hidden;
+    }
+    .panel-header {
+      background: rgba(14, 22, 33, 0.65); border-bottom: 1px solid var(--border-subtle);
+      padding: 14px 20px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-title-group { display: flex; align-items: center; gap: 12px; }
+    .panel-body { padding: 20px; }
+
+    /* Tables */
+    .table-wrapper { overflow-x: auto; width: 100%; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .data-table th {
+      background: rgba(6, 10, 16, 0.96); color: var(--text-muted); font-weight: 700;
+      text-transform: uppercase; font-size: 10px; letter-spacing: 1px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle); font-family: var(--font-mono); text-align: left;
+    }
+    .data-table td { padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); color: var(--text-main); }
+    .data-table tr:hover td { background: rgba(0, 240, 255, 0.04); }
+    .url-cell { font-family: var(--font-mono); font-size: 12px; color: var(--neon-cyan); word-break: break-all; }
+    .badge-tag { display: inline-block; padding: 3px 8px; border-radius: var(--radius-sm); font-size: 10px; font-family: var(--font-mono); font-weight: 600; }
+    .tag-html { background: var(--neon-cyan-badge); color: var(--neon-cyan); border: 1px solid var(--border-glow-cyan); }
+    .tag-js { background: var(--neon-green-badge); color: var(--neon-green); border: 1px solid var(--border-glow-green); }
+    .tag-api { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); }
+    .tag-sub { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); }
+
+    /* Terminal View */
+    .terminal-container {
+      background: #05080c; border: 1px solid var(--border-glow-cyan); border-radius: var(--radius-lg);
+      overflow: hidden; display: flex; flex-direction: column; height: 500px;
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 20px var(--neon-cyan-glow);
+    }
+    .terminal-header {
+      background: #090e15; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .terminal-dots { display: flex; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.red { background-color: var(--neon-red); }
+    .dot.yellow { background-color: var(--neon-amber); }
+    .dot.green { background-color: var(--neon-green); }
+    .terminal-body { flex: 1; padding: 20px; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+    .log-line { margin-bottom: 4px; font-family: var(--font-mono); }
+    .log-line.banner { color: var(--neon-cyan); text-shadow: 0 0 10px var(--neon-cyan-glow); margin-bottom: 12px; }
+    .log-line.info { color: #a5f3fc; }
+    .log-line.warn { color: var(--neon-amber); }
+    .log-line.error { color: var(--neon-red); }
+
+    /* Command Palette Modal */
+    .cmd-palette-backdrop {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(3, 6, 10, 0.75); backdrop-filter: blur(12px);
+      z-index: 999; display: none; align-items: flex-start; justify-content: center; padding-top: 14vh;
+    }
+    .cmd-palette-backdrop.open { display: flex; }
+    .cmd-palette-modal {
+      width: 580px; max-width: 90vw; background: var(--bg-modal); border: 1px solid var(--border-glow-cyan);
+      border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px var(--neon-cyan-glow);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .cmd-input-row { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+    .cmd-input-prompt { font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: var(--neon-cyan); }
+    .cmd-input-field { flex: 1; background: transparent; border: none; font-family: var(--font-mono); font-size: 14px; color: var(--text-main); outline: none; }
+    .cmd-results-list { max-height: 320px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .cmd-item {
+      display: flex; align-items: center; justify-content: space-between; padding: 10px 14px;
+      border-radius: var(--radius-md); cursor: pointer; color: var(--text-muted); font-size: 13px;
+    }
+    .cmd-item:hover, .cmd-item.selected { background: rgba(0, 240, 255, 0.1); color: var(--neon-cyan); }
+  </style>
+</head>
+<body class="hacker-app">
+  <div class="scanlines-overlay"></div>
+  <div class="grid-overlay"></div>
+  <canvas id="matrix-canvas"></canvas>
+
+  <div class="app-layout">
+    <!-- Collapsible Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-header">
+        <a href="#" class="sidebar-brand">
+          <div class="sidebar-logo-box">CZ</div>
+          <div class="sidebar-brand-text">
+            <span class="brand-title">CRAWLIZER</span>
+            <span class="brand-badge">CYBER_RECON // v1.2</span>
+          </div>
+        </a>
+        <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar (Ctrl+B)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Navigation Modules</div>
+        
+        <button class="nav-item active" data-tab="tab-overview">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </span>
+          <span class="nav-label">Overview & Charts</span>
+        </button>
+
+        <button class="nav-item" data-tab="tab-endpoints">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <span class="nav-label">Discovered URLs</span>
+          <span class="nav-badge" id="demo-endpoints-badge">1,248</span>
+        </button>
+
+        <button class="nav-item" data-tab="tab-secrets">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1-1l-3 3m-1-1l-4 4m-1-1l-5 5a2.83 2.83 0 0 0 4 4l5-5m-1-1l4-4m-1-1l3-3m-1-1l2-2"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+          </span>
+          <span class="nav-label">Secrets & Threats</span>
+          <span class="nav-badge badge-magenta" id="demo-secrets-badge">14</span>
+        </button>
+
+        <button class="nav-item" data-tab="tab-terminal">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </span>
+          <span class="nav-label">Terminal Feed</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="operator-avatar">OP</div>
+        <div class="operator-info">
+          <span class="operator-name">root@crawlizer</span>
+          <span class="operator-role">SYSTEM_ACTIVE</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <div class="prompt-breadcrumb">
+            <span class="prompt-symbol">$</span>
+            <span class="prompt-path">recon/</span>
+            <span class="prompt-typing" id="breadcrumb-typing">active-mission</span>
+            <span class="cursor-blink"></span>
+          </div>
+
+          <div class="cmd-palette-trigger" id="btn-open-palette">
+            <span class="cmd-prompt-glyph">&gt;_</span>
+            <span class="cmd-trigger-text">Command palette...</span>
+            <span class="cmd-kbd">Ctrl+K</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="status-pill">
+            <span class="status-indicator-dot running"></span>
+            <span class="status-label">CRAWLING</span>
+          </div>
+
+          <button id="btn-matrix-toggle" class="btn btn-glass">[01] Matrix</button>
+          <button id="btn-demo-start" class="btn btn-primary">Start Crawl</button>
+        </div>
+      </header>
+
+      <div class="content-wrapper">
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width: 68%;"></div>
+        </div>
+
+        <!-- Stat Cards Grid -->
+        <section class="stat-cards-grid">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">TOTAL SEEDS</span>
+              <div class="stat-icon">🎯</div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="demo-stat-seeds">142</div>
+              <svg class="sparkline-svg" viewBox="0 0 72 28"><path d="M2,24 L14,20 L26,22 L38,15 L50,18 L62,10 L70,8" stroke="#00f0ff"/></svg>
+            </div>
+            <div class="stat-footer">Target queue loaded</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-label">CRAWLED</span>
+              <div class="stat-icon">⚡</div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="demo-stat-crawled">98</div>
+              <svg class="sparkline-svg" viewBox="0 0 72 28"><path d="M2,26 L14,22 L26,18 L38,20 L50,12 L62,14 L70,6" stroke="#39ff14"/></svg>
+            </div>
+            <div class="stat-footer">69% Completed</div>
+          </div>
+
+          <div class="stat-card card-cyan">
+            <div class="stat-card-header">
+              <span class="stat-label">DISCOVERED URLS</span>
+              <div class="stat-icon">🔍</div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="demo-stat-urls">1,248</div>
+              <svg class="sparkline-svg" viewBox="0 0 72 28"><path d="M2,24 L14,18 L26,12 L38,16 L50,8 L62,4 L70,2" stroke="#00f0ff"/></svg>
+            </div>
+            <div class="stat-footer">+312 in current run</div>
+          </div>
+
+          <div class="stat-card card-green">
+            <div class="stat-card-header">
+              <span class="stat-label">SPEED / RPS</span>
+              <div class="stat-icon">📈</div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="demo-stat-rps">14.8</div>
+              <svg class="sparkline-svg" viewBox="0 0 72 28"><path d="M2,20 L14,16 L26,22 L38,8 L50,14 L62,6 L70,4" stroke="#39ff14"/></svg>
+            </div>
+            <div class="stat-footer">Req / Second</div>
+          </div>
+
+          <div class="stat-card card-magenta">
+            <div class="stat-card-header">
+              <span class="stat-label">SECRETS FOUND</span>
+              <div class="stat-icon">🗡️</div>
+            </div>
+            <div class="stat-main-row">
+              <div class="stat-value" id="demo-stat-secrets">14</div>
+              <svg class="sparkline-svg" viewBox="0 0 72 28"><path d="M2,26 L14,26 L26,20 L38,20 L50,14 L62,8 L70,4" stroke="#ff2bd6"/></svg>
+            </div>
+            <div class="stat-footer">3 Critical, 5 High</div>
+          </div>
+        </section>
+
+        <!-- TAB 1: OVERVIEW & LIVE CHARTS -->
+        <div class="tab-pane active" id="tab-overview">
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Real-time Crawl Speed & Throughput</h3>
+                <span class="chart-badge">LIVE_METRICS</span>
+              </div>
+              <div class="chart-canvas-wrapper">
+                <canvas id="standalone-rate-chart"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Asset & Protocol Breakdown</h3>
+                <span class="chart-badge">CLASSIFIER</span>
+              </div>
+              <div class="chart-canvas-wrapper" style="height: 150px;">
+                <canvas id="standalone-donut-chart"></canvas>
+              </div>
+              <div class="donut-legend">
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-cyan);"></span> HTML Pages (58%)</div>
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-green);"></span> JS Endpoints (24%)</div>
+                <div class="legend-item"><span class="legend-dot" style="background: #38bdf8;"></span> APIs / XHR (15%)</div>
+                <div class="legend-item"><span class="legend-dot" style="background: var(--neon-magenta);"></span> Secrets Found (3%)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: DISCOVERED ENDPOINTS -->
+        <div class="tab-pane" id="tab-endpoints">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h3>Discovered Target Endpoints</h3>
+              </div>
+              <span class="nav-badge">1,248 Found</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Discovered Endpoint URL</th>
+                    <th>Type</th>
+                    <th>Source Referer</th>
+                    <th>Scope</th>
+                  </tr>
+                </thead>
+                <tbody id="demo-endpoints-tbody">
+                  <!-- PLACEHOLDER ROWS -->
+                  <tr>
+                    <td>1</td>
+                    <td class="url-cell">https://target.corp/api/v2/auth/sessions</td>
+                    <td><span class="badge-tag tag-api">NETWORK-API</span></td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/app.js</td>
+                    <td><span class="badge-tag tag-js">IN-SCOPE</span></td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td class="url-cell">https://target.corp/dashboard/admin/users</td>
+                    <td><span class="badge-tag tag-html">HTML-LINK</span></td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/index.html</td>
+                    <td><span class="badge-tag tag-js">IN-SCOPE</span></td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td class="url-cell">https://internal.target.corp/metrics</td>
+                    <td><span class="badge-tag tag-sub">SUBDOMAIN</span></td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/bundle.js</td>
+                    <td><span class="badge-tag tag-js">IN-SCOPE</span></td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td class="url-cell">https://target.corp/v1/graphql</td>
+                    <td><span class="badge-tag tag-api">NETWORK-API</span></td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/main.js</td>
+                    <td><span class="badge-tag tag-js">IN-SCOPE</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: SECRETS -->
+        <div class="tab-pane" id="tab-secrets">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h3 style="color: var(--neon-magenta);">Sensitive Credentials & Threat Detections</h3>
+              </div>
+              <span class="nav-badge badge-magenta">14 Detections</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Severity</th>
+                    <th>Rule / Finding</th>
+                    <th>Detected Value</th>
+                    <th>Discovered URL Context</th>
+                  </tr>
+                </thead>
+                <tbody id="demo-secrets-tbody">
+                  <!-- PLACEHOLDER ROWS -->
+                  <tr>
+                    <td>1</td>
+                    <td><span class="badge-tag" style="background: rgba(255, 51, 102, 0.2); color: var(--neon-red); border: 1px solid var(--neon-red);">CRITICAL</span></td>
+                    <td><strong>AWS Access Key ID</strong></td>
+                    <td class="url-cell" style="color: var(--neon-magenta);">AKIAIOSFODNN7EXAMPLE</td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/config.js</td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td><span class="badge-tag" style="background: rgba(249, 115, 22, 0.2); color: #fb923c; border: 1px solid #fb923c;">HIGH</span></td>
+                    <td><strong>Stripe Secret Key</strong></td>
+                    <td class="url-cell" style="color: var(--neon-magenta);">sk_live_51Hzxxxxxxxxxxxxxxxxxxx</td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/checkout.js</td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td><span class="badge-tag" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid #facc15;">MEDIUM</span></td>
+                    <td><strong>Google Cloud API Key</strong></td>
+                    <td class="url-cell" style="color: var(--neon-magenta);">AIzaSyD-xxxxxxxxxxxxxxxxxxxxxxx</td>
+                    <td style="color: var(--text-muted); font-family: var(--font-mono);">https://target.corp/maps.js</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: TERMINAL -->
+        <div class="tab-pane" id="tab-terminal">
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">crawlizer-engine@terminal — live feed</div>
+              <span class="nav-badge" style="color: var(--neon-green);">LIVE_LOGS</span>
+            </div>
+            <div class="terminal-body" id="standalone-terminal">
+              <div class="log-line banner">
+   ______                     ___zer
+  / ____/________ __      __/ (_)___  ___  _____
+ / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
+/ /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
+\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.0
+Crawlizer Engine — Cyberpunk Web Recon &amp; Threat Detection
+              </div>
+              <div class="log-line info">[INF] Storage and heuristic engine initialized.</div>
+              <div class="log-line info">[INF] Loaded 142 seed targets into crawler queue.</div>
+              <div class="log-line info">[INF] Single-tab sandbox started. Intercepting fetch / XHR networks...</div>
+              <div class="log-line warn">[WRN] Rate limit detected on /api/v1/search - applying 400ms exponential delay.</div>
+              <div class="log-line error">[CRIT] Detected AWS Access Key inside external bundle /config.js!</div>
+              <div class="log-line info">[INF] Crawled 98/142 targets. Current speed: 14.8 req/sec.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Command Palette Modal (Ctrl+K) -->
+  <div class="cmd-palette-backdrop" id="standalone-cmd-backdrop">
+    <div class="cmd-palette-modal">
+      <div class="cmd-input-row">
+        <span class="cmd-input-prompt">&gt;_</span>
+        <input type="text" id="standalone-cmd-input" class="cmd-input-field" placeholder="Type a command or jump to module..." autofocus>
+        <span class="cmd-kbd">ESC</span>
+      </div>
+      <div class="cmd-results-list" id="standalone-cmd-list"></div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       VANILLA JAVASCRIPT LOGIC & HOOKS
+       ========================================================================== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Sidebar Toggle Logic
+      const sidebar = document.getElementById('app-sidebar');
+      const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
+      if (btnSidebarToggle) {
+        btnSidebarToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+      }
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          sidebar.classList.toggle('collapsed');
+        }
+      });
+
+      // 2. Tab Navigation
+      const navItems = document.querySelectorAll('.nav-item');
+      const tabPanes = document.querySelectorAll('.tab-pane');
+      const breadcrumb = document.getElementById('breadcrumb-typing');
+
+      function switchTab(tabId) {
+        navItems.forEach(item => item.classList.toggle('active', item.dataset.tab === tabId));
+        tabPanes.forEach(pane => pane.classList.toggle('active', pane.id === tabId));
+        
+        // Typing breadcrumb animation
+        if (breadcrumb) {
+          breadcrumb.textContent = '';
+          const txt = `recon/${tabId.replace('tab-', '')}`;
+          let i = 0;
+          function type() {
+            if (i < txt.length) {
+              breadcrumb.textContent += txt.charAt(i++);
+              setTimeout(type, 20);
+            }
+          }
+          type();
+        }
+      }
+
+      navItems.forEach(item => {
+        item.addEventListener('click', () => switchTab(item.dataset.tab));
+      });
+
+      // 3. Matrix Rain Background Effect
+      const matrixCanvas = document.getElementById('matrix-canvas');
+      const btnMatrix = document.getElementById('btn-matrix-toggle');
+      let matrixInterval = null;
+
+      function initMatrix() {
+        if (!matrixCanvas) return;
+        const ctx = matrixCanvas.getContext('2d');
+        let width = matrixCanvas.width = window.innerWidth;
+        let height = matrixCanvas.height = window.innerHeight;
+        const chars = '0123456789ABCDEFアイウエオカキクケコサシスセソタチツテト';
+        const fontSize = 14;
+        const columns = Math.floor(width / fontSize);
+        const drops = Array(columns).fill(1);
+
+        function draw() {
+          ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = '#00f0ff';
+          ctx.font = `${fontSize}px monospace`;
+          for (let i = 0; i < drops.length; i++) {
+            const text = chars.charAt(Math.floor(Math.random() * chars.length));
+            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+            if (drops[i] * fontSize > height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+          }
+        }
+
+        btnMatrix.addEventListener('click', () => {
+          const active = matrixCanvas.classList.toggle('active');
+          if (active) {
+            btnMatrix.style.borderColor = 'var(--neon-green)';
+            btnMatrix.style.color = 'var(--neon-green)';
+            matrixInterval = setInterval(draw, 45);
+          } else {
+            btnMatrix.style.borderColor = '';
+            btnMatrix.style.color = '';
+            clearInterval(matrixInterval);
+            ctx.clearRect(0, 0, width, height);
+          }
+        });
+      }
+      initMatrix();
+
+      // 4. Real-time SVG / Canvas Charts
+      const rateCanvas = document.getElementById('standalone-rate-chart');
+      const donutCanvas = document.getElementById('standalone-donut-chart');
+      let dummyRpsData = [6, 8, 9, 12, 14, 13, 15, 17, 14, 16, 18, 15, 14, 16, 18, 20, 17, 16, 15, 14.8];
+
+      function renderThroughputChart() {
+        if (!rateCanvas) return;
+        const ctx = rateCanvas.getContext('2d');
+        const w = rateCanvas.width = rateCanvas.clientWidth;
+        const h = rateCanvas.height = rateCanvas.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+
+        // Gridlines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        for (let y = 0; y < h; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        const max = 25;
+        const stepX = w / (dummyRpsData.length - 1);
+
+        // Area Fill
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        dummyRpsData.forEach((v, i) => ctx.lineTo(i * stepX, h - (v / max) * (h - 20) - 10));
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
+        grad.addColorStop(1, 'rgba(0, 240, 255, 0.01)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Stroke Line
+        ctx.beginPath();
+        dummyRpsData.forEach((v, i) => {
+          if (i === 0) ctx.moveTo(0, h - (v / max) * (h - 20) - 10);
+          else ctx.lineTo(i * stepX, h - (v / max) * (h - 20) - 10);
+        });
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      renderThroughputChart();
+
+      function renderDonutChart() {
+        if (!donutCanvas) return;
+        const ctx = donutCanvas.getContext('2d');
+        const w = donutCanvas.width = donutCanvas.clientWidth;
+        const h = donutCanvas.height = donutCanvas.clientHeight;
+        const cx = w / 2; const cy = h / 2;
+        const r = Math.min(cx, cy) - 10;
+        const inner = r * 0.65;
+        ctx.clearRect(0, 0, w, h);
+
+        const slices = [
+          { val: 58, color: '#00f0ff' },
+          { val: 24, color: '#39ff14' },
+          { val: 15, color: '#38bdf8' },
+          { val: 3,  color: '#ff2bd6' }
+        ];
+
+        let start = -Math.PI / 2;
+        slices.forEach(s => {
+          const angle = (s.val / 100) * 2 * Math.PI;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, start, start + angle);
+          ctx.arc(cx, cy, inner, start + angle, start, true);
+          ctx.closePath();
+          ctx.fillStyle = s.color;
+          ctx.shadowColor = s.color;
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          start += angle;
+        });
+
+        ctx.fillStyle = '#f0f6fc';
+        ctx.font = 'bold 14px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('1,248', cx, cy);
+      }
+      renderDonutChart();
+
+      // 5. Command Palette (Ctrl+K)
+      const paletteBackdrop = document.getElementById('standalone-cmd-backdrop');
+      const paletteInput = document.getElementById('standalone-cmd-input');
+      const paletteList = document.getElementById('standalone-cmd-list');
+      const btnOpenPalette = document.getElementById('btn-open-palette');
+
+      const paletteCommands = [
+        { label: 'Overview & Real-time Charts', tab: 'tab-overview', icon: '📊' },
+        { label: 'Discovered Target URLs', tab: 'tab-endpoints', icon: '🔍' },
+        { label: 'Secrets & Threat Detections', tab: 'tab-secrets', icon: '🗡️' },
+        { label: 'Terminal Feed Live Stream', tab: 'tab-terminal', icon: '💻' },
+        { label: 'Toggle Matrix Rain Effect', action: () => btnMatrix.click(), icon: '01' }
+      ];
+
+      function openPalette() {
+        paletteBackdrop.classList.add('open');
+        paletteInput.value = '';
+        paletteInput.focus();
+        renderPalette('');
+      }
+
+      function closePalette() {
+        paletteBackdrop.classList.remove('open');
+      }
+
+      function renderPalette(query) {
+        const q = query.toLowerCase();
+        const filtered = paletteCommands.filter(c => c.label.toLowerCase().includes(q));
+        paletteList.innerHTML = filtered.map(c => `
+          <div class="cmd-item" data-tab="${c.tab || ''}">
+            <span>${c.icon} ${c.label}</span>
+            <span class="cmd-kbd">JUMP</span>
+          </div>
+        `).join('');
+
+        paletteList.querySelectorAll('.cmd-item').forEach((item, idx) => {
+          item.addEventListener('click', () => {
+            closePalette();
+            if (filtered[idx].tab) switchTab(filtered[idx].tab);
+            else if (filtered[idx].action) filtered[idx].action();
+          });
+        });
+      }
+
+      if (btnOpenPalette) btnOpenPalette.addEventListener('click', openPalette);
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          if (paletteBackdrop.classList.contains('open')) closePalette();
+          else openPalette();
+        } else if (e.key === 'Escape' && paletteBackdrop.classList.contains('open')) {
+          closePalette();
+        }
+      });
+      paletteBackdrop.addEventListener('click', (e) => {
+        if (e.target === paletteBackdrop) closePalette();
+      });
+      paletteInput.addEventListener('input', () => renderPalette(paletteInput.value));
+
+      // ==========================================
+      // PLUG IN REAL DATA HERE
+      // ==========================================
+      // To connect to real live data (e.g. WebSocket, fetch, or chrome.storage):
+      // window.updateDashboardStats = function(data) {
+      //   document.getElementById('demo-stat-seeds').textContent = data.seeds;
+      //   document.getElementById('demo-stat-crawled').textContent = data.crawled;
+      //   document.getElementById('demo-stat-urls').textContent = data.discovered;
+      //   document.getElementById('demo-stat-rps').textContent = data.rps;
+      //   document.getElementById('demo-stat-secrets').textContent = data.secrets;
+      // };
+    });
+  </script>
+</body>
+</html>

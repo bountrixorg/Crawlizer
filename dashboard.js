@@ -636,6 +636,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSparkline('sparkline-discovered', stats.totalDiscovered, '#00f0ff');
     updateSparkline('sparkline-rps', parseFloat(stats.rps) || 0, '#39ff14');
   };
+  engine.onProgress = engine.onStatsUpdate;
 
   engine.onStateChange = (state) => {
     headerStatusDot.className = 'status-indicator-dot';
@@ -675,7 +676,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   engine.onCaptchaDetected = (info) => {
     captchaBanner.style.display = 'flex';
-    if (captchaTypeTitle) captchaTypeTitle.textContent = `${info.title || 'CAPTCHA / Challenge'} Detected!`;
+    if (captchaTypeTitle) captchaTypeTitle.textContent = `${info.challengeType || info.title || 'CAPTCHA / Challenge'} Detected!`;
     if (captchaTargetUrl) captchaTargetUrl.textContent = info.url;
   };
 
@@ -690,27 +691,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const SUPPLY_CONFIG_NAMES = ['package.json', 'package-lock.json', '.npmrc', 'requirements.txt', '.env', 'yarn.lock', 'pnpm-lock.yaml', 'Pipfile', 'composer.json', 'pom.xml', 'go.mod', 'Cargo.toml'];
-  engine.onUrlFound = (urlObj) => {
-    if (!urlObj || !urlObj.url) return;
-    const lower = urlObj.url.toLowerCase();
-    for (const name of SUPPLY_CONFIG_NAMES) {
-      if (lower.endsWith(name) || lower.includes(`/${name}?`) || lower.includes(`/${name}#`)) {
-        if (!supplyState.exposedFiles.some(f => f.url === urlObj.url)) {
-          supplyState.exposedFiles.push({
-            url: urlObj.url,
-            path: `/${name}`,
-            status: 200,
-            contentType: 'config',
-            risk: 'HIGH'
-          });
-          updateSupplyStatsUI();
-          if (document.getElementById('tab-supply-chain')?.classList.contains('active')) {
-            renderSupplyTable();
+  engine.onUrlFound = (urlInput) => {
+    if (!urlInput) return;
+    const urlArray = Array.isArray(urlInput) ? urlInput : [urlInput];
+    let supplyUpdated = false;
+
+    for (const urlObj of urlArray) {
+      if (!urlObj || !urlObj.url) continue;
+      const lower = urlObj.url.toLowerCase();
+      for (const name of SUPPLY_CONFIG_NAMES) {
+        if (lower.endsWith(name) || lower.includes(`/${name}?`) || lower.includes(`/${name}#`)) {
+          if (!supplyState.exposedFiles.some(f => f.url === urlObj.url)) {
+            supplyState.exposedFiles.push({
+              url: urlObj.url,
+              path: `/${name}`,
+              status: 200,
+              contentType: 'config',
+              risk: 'HIGH'
+            });
+            supplyUpdated = true;
           }
+          break;
         }
-        break;
       }
     }
+
+    if (supplyUpdated) {
+      updateSupplyStatsUI();
+      if (document.getElementById('tab-supply-chain')?.classList.contains('active')) {
+        renderSupplyTable();
+      }
+    }
+
+    debouncedRefreshResultsTable();
   };
 
   // ==========================================
@@ -770,14 +783,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.configure(config);
     await storage.saveSetting('crawler_config', config);
 
+    // Reset any targets stuck in 'crawling' status from a previously aborted session
+    const allExistingTargets = await storage.getAllTargets();
+    const stuckCrawling = allExistingTargets.filter(t => t.status === 'crawling');
+    for (const s of stuckCrawling) {
+      await storage.updateTarget(s.id, { status: 'pending' });
+    }
+
     let pending = await storage.getPendingTargets();
-    if (pending.length === 0) {
-      const allTargets = await storage.getAllTargets();
-      if (allTargets.length > 0) {
-        engine.log('inf', `Re-activating ${allTargets.length} seed targets for new crawl session...`);
-        await storage.reactivateAllTargets();
-        pending = await storage.getPendingTargets();
-      }
+    if (pending.length === 0 && allExistingTargets.length > 0) {
+      engine.log('inf', `Re-activating ${allExistingTargets.length} seed targets for new crawl session...`);
+      await storage.reactivateAllTargets();
+      pending = await storage.getPendingTargets();
     }
 
     if (pending.length === 0) {

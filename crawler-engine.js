@@ -37,6 +37,7 @@ class KatanaCrawlerEngine {
     this.queue = [];
     this.enqueuedUrls = new Set(); // Strict queue deduplication set
     this.visitedUrls = new Set();  // Visited URLs set
+    this.sessionDiscoveredUrls = new Set(); // Session URL deduplication set
     this.subdomainsDiscovered = new Set(); // Unique discovered subdomains
     this.duplicatesFiltered = 0;   // Count of duplicate URLs filtered
     this.totalDiscoveredInSession = 0;
@@ -58,6 +59,7 @@ class KatanaCrawlerEngine {
     // Callbacks
     this.onLog = null;
     this.onProgress = null;
+    this.onStatsUpdate = null;
     this.onUrlFound = null;
     this.onSecretFound = null;
     this.onSupplyChainFinding = null;
@@ -529,49 +531,113 @@ class KatanaCrawlerEngine {
    * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
    * or complete, preventing waiting for slow trackers/ads/media!
    */
-  async navigateTabAndWait(tabId, url, timeoutMs = 5000) {
-    return new Promise((resolve) => {
+  async navigateTabAndWait(tabId, url, timeoutMs = 8000) {
+    return new Promise(async (resolve) => {
       let isResolved = false;
       let timer = null;
       let pollInterval = null;
+      let onUpdatedListener = null;
+      let onRemovedListener = null;
 
       const finish = () => {
         if (!isResolved) {
           isResolved = true;
           if (timer) clearTimeout(timer);
           if (pollInterval) clearInterval(pollInterval);
-          chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+          if (onUpdatedListener) {
+            chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+          }
+          if (onRemovedListener) {
+            chrome.tabs.onRemoved.removeListener(onRemovedListener);
+          }
           resolve(null);
         }
       };
 
-      const onUpdatedListener = (updatedTabId, changeInfo, tab) => {
-        if (updatedTabId === tabId) {
-          if (changeInfo.status === 'complete' || (tab && tab.status === 'complete')) {
+      // Tab was closed by user
+      onRemovedListener = (removedTabId) => {
+        if (removedTabId === tabId) {
+          finish();
+        }
+      };
+      chrome.tabs.onRemoved.addListener(onRemovedListener);
+
+      // Get initial tab URL before navigation
+      let initialUrl = '';
+      try {
+        const curTab = await chrome.tabs.get(tabId);
+        initialUrl = curTab?.url || '';
+      } catch {
+        finish();
+        return;
+      }
+
+      let navStarted = false;
+
+      onUpdatedListener = (updatedTabId, changeInfo, tab) => {
+        if (updatedTabId !== tabId) return;
+
+        if (changeInfo.status === 'loading') {
+          navStarted = true;
+        }
+
+        if (changeInfo.status === 'complete') {
+          const currentUrl = tab?.url || '';
+          if (currentUrl && currentUrl !== 'about:blank') {
             finish();
           }
         }
       };
+      chrome.tabs.onUpdated.addListener(onUpdatedListener);
 
-      // Fast-poll document.readyState every 200ms: proceed as soon as DOM is interactive!
+      try {
+        await chrome.tabs.update(tabId, { url });
+      } catch {
+        finish();
+        return;
+      }
+
+      // Fast-poll document.readyState after giving Chrome initial time to begin navigation
+      let pollTicks = 0;
       pollInterval = setInterval(async () => {
+        pollTicks++;
+        // Allow brief interval for initial navigation trigger
+        if (pollTicks < 2) return;
+
         try {
           const res = await chrome.scripting.executeScript({
             target: { tabId },
-            func: () => document.readyState
+            func: () => ({
+              href: window.location.href,
+              state: document.readyState
+            })
           });
-          const state = res?.[0]?.result;
-          if (state === 'interactive' || state === 'complete') {
+          const cur = res?.[0]?.result;
+          if (!cur) return;
+
+          // Tab is still on about:blank or internal page; wait for target to load
+          if (cur.href === 'about:blank' || cur.href.startsWith('chrome://')) {
+            return;
+          }
+
+          // If still on the old URL before navigation started, wait
+          if (initialUrl && initialUrl !== 'about:blank' && cur.href === initialUrl && !navStarted) {
+            return;
+          }
+
+          // DOM is interactive or complete
+          if (cur.state === 'interactive' || cur.state === 'complete') {
             finish();
           }
-        } catch {}
+        } catch {
+          // Script execution fails during navigation frame unloads/transitions
+          navStarted = true;
+        }
       }, 200);
 
-      // Max hard timeout: 5s max (prevents hanging on slow tracking pixels/ads)
-      timer = setTimeout(finish, Math.min(timeoutMs, 5000));
-
-      chrome.tabs.onUpdated.addListener(onUpdatedListener);
-      chrome.tabs.update(tabId, { url }).catch(finish);
+      // Max hard timeout: prevents hanging indefinitely on slow tracking pixels/ads
+      const maxWait = Math.min(Math.max(timeoutMs || 8000, 5000), 12000);
+      timer = setTimeout(finish, maxWait);
     });
   }
 
@@ -613,8 +679,8 @@ class KatanaCrawlerEngine {
 
     // Only flag true blocking challenge pages! NOT pages with invisible background reCAPTCHA widgets!
     const isBlockingCaptcha = (
-      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('robot')) &&
-      (document.querySelector('.g-recaptcha, .h-captcha') !== null || bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge'))
+      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
+      (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
     );
 
     if (isCloudflare) {
@@ -877,6 +943,11 @@ class KatanaCrawlerEngine {
       tabData = injectionResults?.[0]?.result;
     } catch (err) {
       this.log('wrn', `Could not inspect tab content for ${url}: ${err.message}`);
+    }
+
+    if (tabData && tabData.pageUrl === 'about:blank' && url !== 'about:blank') {
+      this.log('inf', `[Browser Tab] Tab still on about:blank, falling back to background HTTP spider for ${url}`);
+      tabData = null;
     }
 
     // 4. Check for CAPTCHA / Bot Verification
@@ -1269,10 +1340,11 @@ class KatanaCrawlerEngine {
       d.targetUrl = seedUrl;
       d.depth = depth;
 
-      // Strict Deduplication Check
-      if (this.visitedUrls.has(canonical) || this.storage.knownUrlSet.has(canonical)) {
+      // Deduplicate within the current crawl session
+      if (this.sessionDiscoveredUrls.has(canonical)) {
         this.duplicatesFiltered++;
       } else {
+        this.sessionDiscoveredUrls.add(canonical);
         processedDiscovered.push(d);
       }
 
@@ -1301,7 +1373,7 @@ class KatanaCrawlerEngine {
     this.updateProgress();
 
     const addedCount = await this.storage.addDiscoveredUrls(processedDiscovered);
-    this.totalDiscoveredInSession += addedCount;
+    this.totalDiscoveredInSession += processedDiscovered.length;
 
     // Persist discovered secrets to database & notify dashboard
     if (this.secretScanner && discoveredSecrets.length > 0) {
@@ -1377,11 +1449,25 @@ class KatanaCrawlerEngine {
    */
   async waitForCaptchaResolution(tabId) {
     return new Promise((resolve) => {
-      // Check every 2.5 seconds if the challenge page navigated or resolved
-      const interval = setInterval(async () => {
-        if (!this.isRunning || !this.isWaitingForCaptcha) {
-          clearInterval(interval);
+      let isResolved = false;
+      let safetyTimer = null;
+      let interval = null;
+
+      const finish = () => {
+        if (!isResolved) {
+          isResolved = true;
+          if (safetyTimer) clearTimeout(safetyTimer);
+          if (interval) clearInterval(interval);
+          this.isWaitingForCaptcha = false;
+          this.captchaResolver = null;
           resolve();
+        }
+      };
+
+      // Check every 2 seconds if the challenge page navigated or resolved
+      interval = setInterval(async () => {
+        if (!this.isRunning || !this.isWaitingForCaptcha) {
+          finish();
           return;
         }
 
@@ -1390,30 +1476,36 @@ class KatanaCrawlerEngine {
             target: { tabId },
             func: () => {
               const title = (document.title || '').toLowerCase();
+              const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
               const isCf = title.includes('just a moment') ||
                            title.includes('attention required!') ||
-                           document.querySelector('#challenge-form') !== null;
-              const isCaptcha = document.querySelector('.g-recaptcha, .h-captcha') !== null;
-              return isCf || isCaptcha;
+                           document.querySelector('#challenge-form') !== null ||
+                           document.querySelector('#cf-challenge-running') !== null;
+              const isBlocking = isCf || (
+                (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
+                (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
+              );
+              return isBlocking;
             }
           });
 
           const stillHasCaptcha = res?.[0]?.result;
           if (!stillHasCaptcha) {
-            clearInterval(interval);
-            resolve();
+            finish();
           }
         } catch {
           // If execution fails, tab may have navigated to normal page
-          clearInterval(interval);
-          resolve();
+          finish();
         }
-      }, 2500);
+      }, 2000);
 
-      this.captchaResolver = () => {
-        clearInterval(interval);
-        resolve();
-      };
+      // Auto-resume after 45s safety timeout so crawler never hangs indefinitely
+      safetyTimer = setTimeout(() => {
+        this.log('wrn', '[CAPTCHA] Resolution wait timed out after 45s. Automatically resuming crawl...');
+        finish();
+      }, 45000);
+
+      this.captchaResolver = finish;
     });
   }
 
@@ -1466,6 +1558,7 @@ class KatanaCrawlerEngine {
     this.queue = [];
     this.enqueuedUrls = new Set();
     this.visitedUrls = new Set();
+    this.sessionDiscoveredUrls = new Set();
     this.subdomainsDiscovered = new Set();
     this.duplicatesFiltered = 0;
 
@@ -1481,6 +1574,8 @@ class KatanaCrawlerEngine {
         });
       }
     }
+
+    this.updateProgress();
 
     if (this.config.mode === 'single-tab') {
       // Single tab crawler runner (strictly sequential on one browser tab)
@@ -1538,6 +1633,7 @@ class KatanaCrawlerEngine {
   }
 
   async runFetchWorker(workerId) {
+    let emptyChecks = 0;
     while (this.isRunning) {
       if (this.isPaused) {
         await new Promise(r => setTimeout(r, 400));
@@ -1545,11 +1641,17 @@ class KatanaCrawlerEngine {
       }
 
       if (this.queue.length === 0) {
-        if (this.activeWorkers === 0) break;
+        if (this.activeWorkers === 0) {
+          emptyChecks++;
+          if (emptyChecks >= 4) break; // Grace period before worker exits
+          await new Promise(r => setTimeout(r, 250));
+          continue;
+        }
         await new Promise(r => setTimeout(r, 200));
         continue;
       }
 
+      emptyChecks = 0;
       const item = this.queue.shift();
       if (!item) continue;
 
@@ -1601,7 +1703,10 @@ class KatanaCrawlerEngine {
       d.targetUrl = seedUrl;
       d.depth = depth;
 
-      if (!this.visitedUrls.has(canonical) && !this.storage.knownUrlSet.has(canonical)) {
+      if (this.sessionDiscoveredUrls.has(canonical)) {
+        this.duplicatesFiltered++;
+      } else {
+        this.sessionDiscoveredUrls.add(canonical);
         processed.push(d);
       }
 
@@ -1619,7 +1724,7 @@ class KatanaCrawlerEngine {
     }
 
     const added = await this.storage.addDiscoveredUrls(processed);
-    this.totalDiscoveredInSession += added;
+    this.totalDiscoveredInSession += processed.length;
     if (this.onUrlFound) this.onUrlFound(processed);
 
     // Secret scanning in Fast-Fetch mode
@@ -1696,20 +1801,28 @@ class KatanaCrawlerEngine {
   }
 
   updateProgress() {
-    if (this.onProgress) {
-      const elapsed = this.startTime ? (Date.now() - this.startTime) / 1000 : 0;
-      const rps = elapsed > 0 ? (this.crawledCount / elapsed).toFixed(1) : 0;
+    const elapsed = this.startTime ? (Date.now() - this.startTime) / 1000 : 0;
+    const rps = elapsed > 0 ? (this.crawledCount / elapsed).toFixed(1) : '0.0';
 
-      this.onProgress({
-        crawled: this.crawledCount,
-        queueLength: this.queue.length,
-        activeWorkers: this.activeWorkers,
-        totalDiscovered: this.totalDiscoveredInSession,
-        duplicatesFiltered: this.duplicatesFiltered,
-        subdomainsCount: this.subdomainsDiscovered.size,
-        errors: this.errorCount,
-        rps: rps
-      });
+    const progressData = {
+      crawled: this.crawledCount,
+      crawledTargets: this.crawledCount,
+      totalTargets: this.crawledCount + this.queue.length,
+      queueLength: this.queue.length,
+      activeWorkers: this.activeWorkers,
+      totalDiscovered: this.totalDiscoveredInSession,
+      duplicatesFiltered: this.duplicatesFiltered,
+      subdomainsCount: this.subdomainsDiscovered.size,
+      subdomains: this.subdomainsDiscovered.size,
+      errors: this.errorCount,
+      rps: rps
+    };
+
+    if (this.onProgress) {
+      this.onProgress(progressData);
+    }
+    if (this.onStatsUpdate) {
+      this.onStatsUpdate(progressData);
     }
   }
 }

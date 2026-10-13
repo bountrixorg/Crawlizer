@@ -245,8 +245,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   function drawRpsChart() {
     if (!crawlRateCanvas) return;
     const ctx = crawlRateCanvas.getContext('2d');
-    const w = (crawlRateCanvas.width = crawlRateCanvas.clientWidth);
-    const h = (crawlRateCanvas.height = crawlRateCanvas.clientHeight);
+    const w = (crawlRateCanvas.width = crawlRateCanvas.clientWidth || crawlRateCanvas.width || 300);
+    const h = (crawlRateCanvas.height = crawlRateCanvas.clientHeight || crawlRateCanvas.height || 120);
+    if (w <= 10 || h <= 10) return;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -261,7 +262,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const maxVal = Math.max(10, ...rpsHistory);
-    const stepX = w / (rpsHistory.length - 1);
+    const stepX = w / Math.max(1, rpsHistory.length - 1);
 
     // Area path
     ctx.beginPath();
@@ -297,15 +298,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     ctx.shadowBlur = 0;
   }
 
-  function drawDonutChart(counts) {
+  function drawDonutChart(counts = {}) {
     if (!typesDonutCanvas) return;
     const ctx = typesDonutCanvas.getContext('2d');
-    const w = (typesDonutCanvas.width = typesDonutCanvas.clientWidth);
-    const h = (typesDonutCanvas.height = typesDonutCanvas.clientHeight);
+    const w = (typesDonutCanvas.width = typesDonutCanvas.clientWidth || typesDonutCanvas.width || 200);
+    const h = (typesDonutCanvas.height = typesDonutCanvas.clientHeight || typesDonutCanvas.height || 200);
     const cx = w / 2;
     const cy = h / 2;
     const radius = Math.min(cx, cy) - 12;
-    const innerRadius = radius * 0.62;
+    if (radius <= 5) return;
+    const innerRadius = Math.max(1, radius * 0.62);
 
     ctx.clearRect(0, 0, w, h);
 
@@ -317,6 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     const total = data.reduce((acc, d) => acc + d.val, 0);
+    if (total <= 0) return;
     let startAngle = -Math.PI / 2;
 
     data.forEach(slice => {
@@ -495,16 +498,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ==========================================
-  // Crawler Engine Event Hookups
+  // Crawler Engine Event Hookups & Initial Telemetry Load
   // ==========================================
-  await storage.init();
-  await refreshMetrics();
-  await renderTargetsTable();
-  await refreshResultsTable();
-  await refreshSecretsTable();
-  await refreshSupplyChainTable();
-  drawRpsChart();
-  typeBreadcrumbText('mission/telemetry-overview');
+  async function initDashboardData() {
+    try {
+      if (storage && storage.init) {
+        await storage.init();
+      }
+
+      // Restore saved crawler configuration
+      try {
+        const savedConfig = await storage.getSetting('crawler_config');
+        if (savedConfig) {
+          if (savedConfig.mode && cfgMode) cfgMode.value = savedConfig.mode;
+          if (savedConfig.scopeMode && cfgScope) {
+            cfgScope.value = savedConfig.scopeMode;
+            if (regexGroup) regexGroup.style.display = savedConfig.scopeMode === 'regex' ? 'flex' : 'none';
+          }
+          if (savedConfig.scopeRegex && cfgScopeRegex) cfgScopeRegex.value = savedConfig.scopeRegex;
+          if (savedConfig.tabRenderDelay && cfgTabDelay) cfgTabDelay.value = savedConfig.tabRenderDelay;
+          if (savedConfig.concurrency && cfgConcurrency) cfgConcurrency.value = savedConfig.concurrency;
+          if (savedConfig.maxDepth && cfgDepth) cfgDepth.value = savedConfig.maxDepth;
+          if (savedConfig.timeout && cfgTimeout) cfgTimeout.value = Math.round(savedConfig.timeout / 1000);
+          if (savedConfig.subdomainCrawl !== undefined && cfgSubdomainCrawl) cfgSubdomainCrawl.checked = Boolean(savedConfig.subdomainCrawl);
+          if (savedConfig.openFoundUrlsInTab !== undefined && cfgOpenInTab) cfgOpenInTab.checked = Boolean(savedConfig.openFoundUrlsInTab);
+          if (savedConfig.autoClickButtons !== undefined && cfgClickButtons) cfgClickButtons.checked = Boolean(savedConfig.autoClickButtons);
+          if (savedConfig.crawlJavascript !== undefined && cfgCrawlJs) cfgCrawlJs.checked = Boolean(savedConfig.crawlJavascript);
+          if (savedConfig.parseRobotsAndSitemaps !== undefined && cfgRobotsSitemap) cfgRobotsSitemap.checked = Boolean(savedConfig.parseRobotsAndSitemaps);
+          if (savedConfig.userAgent && cfgUserAgent) cfgUserAgent.value = savedConfig.userAgent;
+        }
+      } catch (cfgErr) {
+        console.warn('Could not restore saved crawler_config:', cfgErr);
+      }
+
+      await refreshMetrics();
+      await renderTargetsTable();
+      await refreshResultsTable();
+      await refreshSecretsTable();
+      await refreshSupplyChainTable();
+    } catch (err) {
+      console.warn('Dashboard initial data loading error:', err);
+    }
+
+    try {
+      drawRpsChart();
+    } catch (e) {}
+    typeBreadcrumbText('mission/telemetry-overview');
+  }
+
+  initDashboardData();
 
   let scanTimerInterval = null;
   let totalElapsedSeconds = 0;
@@ -733,13 +775,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const allTargets = await storage.getAllTargets();
       if (allTargets.length > 0) {
         engine.log('inf', `Re-activating ${allTargets.length} seed targets for new crawl session...`);
-        const tx = storage.db.transaction('targets', 'readwrite');
-        const store = tx.objectStore('targets');
-        for (const t of allTargets) {
-          t.status = 'pending';
-          store.put(t);
-        }
-        await new Promise(r => { tx.oncomplete = r; });
+        await storage.reactivateAllTargets();
         pending = await storage.getPendingTargets();
       }
     }
@@ -823,13 +859,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnClearTargets.addEventListener('click', async () => {
     if (!confirm('Clear all targets from queue?')) return;
-    const tx = storage.db.transaction('targets', 'readwrite');
-    tx.objectStore('targets').clear();
-    tx.oncomplete = async () => {
-      await refreshMetrics();
-      await renderTargetsTable();
-      engine.log('inf', 'Cleared all target seeds');
-    };
+    await storage.clearTargets();
+    await refreshMetrics();
+    await renderTargetsTable();
+    engine.log('inf', 'Cleared all target seeds');
   });
 
   function parseUrlText(text) {
@@ -1835,15 +1868,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (supplyProgressWrap) {
       supplyProgressWrap.style.display = 'flex';
       if (supplyProgressFill) supplyProgressFill.style.width = '15%';
-      if (supplyProgressText) supplyProgressText.textContent = forceRescan ? 'Triggering full rescan on active tab...' : 'Querying active tab content script...';
+      if (supplyProgressText) supplyProgressText.textContent = forceRescan ? 'Triggering full rescan on active tab...' : 'Locating active web tab & querying scanner...';
     }
 
     try {
+      const restrictedPrefixes = ['chrome://', 'edge://', 'chrome-extension://', 'about:', 'view-source:'];
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tab = tabs[0];
-      if (!tab) {
-        if (supplyStatusTag) { supplyStatusTag.textContent = 'NO TAB'; supplyStatusTag.className = 'supply-status-tag'; }
-        if (supplyProgressText) supplyProgressText.textContent = 'No active browser tab found.';
+      let tab = tabs[0];
+
+      // If active tab is the dashboard itself or restricted, find a legitimate target web tab!
+      if (!tab || restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
+        // 1. Check if crawler engine has a live dedicated browser tab
+        if (engine && engine.crawlerTabId) {
+          try {
+            const cTab = await chrome.tabs.get(engine.crawlerTabId);
+            if (cTab && cTab.url && !restrictedPrefixes.some(p => cTab.url.startsWith(p))) {
+              tab = cTab;
+            }
+          } catch {}
+        }
+
+        // 2. Query all open tabs across windows to find any active or recent web target (http: or https:)
+        if (!tab || restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
+          const allTabs = await chrome.tabs.query({});
+          const webTabs = allTabs.filter(t => t.url && /^https?:\/\//i.test(t.url));
+          if (webTabs.length > 0) {
+            tab = webTabs.find(t => t.active) || webTabs[webTabs.length - 1];
+          }
+        }
+      }
+
+      if (!tab || restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'NO WEB TAB'; supplyStatusTag.className = 'supply-status-tag'; }
+        if (supplyProgressText) supplyProgressText.textContent = 'No target web tab found. Please open your target website in a browser tab or use the Manual Audit section below.';
+        setTimeout(() => { if (supplyProgressWrap) supplyProgressWrap.style.display = 'none'; }, 4000);
         return;
       }
 
@@ -1851,18 +1909,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       supplyState.targetUrl = tab.url || 'unknown';
       if (supplyTargetUrl) supplyTargetUrl.textContent = tab.url || '—';
 
-      // Check if restricted URL
-      const restrictedPrefixes = ['chrome://', 'edge://', 'chrome-extension://', 'about:', 'view-source:'];
-      if (restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
-        if (supplyStatusTag) { supplyStatusTag.textContent = 'RESTRICTED'; supplyStatusTag.className = 'supply-status-tag'; }
-        if (supplyProgressText) supplyProgressText.textContent = 'System & browser internal pages cannot be audited. Please open a target website.';
-        return;
-      }
-
       // Check content script connection or execute script dynamically
       let response = null;
       try {
-        response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'getScanStatus' });
+        response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'startScan' });
       } catch (err) {
         // Content script might not be injected yet if page was loaded prior to extension reload.
         if (chrome.scripting && chrome.scripting.executeScript) {
@@ -1874,7 +1924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             // Wait 600ms for init
             await new Promise(r => setTimeout(r, 600));
-            response = await chrome.tabs.sendMessage(tab.id, { action: 'getScanStatus' });
+            response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'startScan' });
           } catch (injectErr) {
             console.warn('Script injection failed:', injectErr);
           }
@@ -1900,9 +1950,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           finishSupplyAudit(true);
         }
       } else {
-        if (supplyStatusTag) { supplyStatusTag.textContent = 'READY'; supplyStatusTag.className = 'supply-status-tag clean'; }
-        if (supplyProgressText) supplyProgressText.textContent = 'Scanner connected. If results do not appear, refresh the target tab and retry.';
-        setTimeout(() => { if (supplyProgressWrap) supplyProgressWrap.style.display = 'none'; }, 2500);
+        let domainLabel = tab.url;
+        try { domainLabel = new URL(tab.url).hostname; } catch {}
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'SCANNING'; supplyStatusTag.className = 'supply-status-tag active'; }
+        if (supplyProgressText) supplyProgressText.textContent = `Connected to ${domainLabel}. Auditing page dependencies...`;
+        startPollingTabStatus(tab.id);
       }
     } catch (e) {
       console.error('scanActiveTabSupplyChain error:', e);
@@ -1928,8 +1980,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (response.stage) {
-      const pct = Math.max(10, Math.min(100, Math.round((response.stage.progress || 0) * 100)));
-      if (supplyProgressFill) supplyProgressFill.style.width = `${pct}%`;
+      const rawProg = response.stage.progress || 0;
+      const pct = rawProg <= 1 ? Math.round(rawProg * 100) : Math.round(rawProg);
+      const safePct = Math.max(5, Math.min(100, pct));
+      if (supplyProgressFill) supplyProgressFill.style.width = `${safePct}%`;
       if (supplyProgressText) supplyProgressText.textContent = response.stage.text || 'Auditing dependencies...';
     }
 

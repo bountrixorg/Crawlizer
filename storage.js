@@ -19,6 +19,15 @@ class KatanaStorage {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = new Promise((resolve, reject) => {
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          console.warn('KatanaStorage: IndexedDB open timed out after 4s; resolving with fallback state.');
+          resolved = true;
+          resolve(this.db);
+        }
+      }, 4000);
+
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onupgradeneeded = (event) => {
@@ -71,15 +80,41 @@ class KatanaStorage {
       };
 
       request.onsuccess = async (event) => {
+        clearTimeout(timeout);
         this.db = event.target.result;
-        await this.loadUrlCache();
-        resolve(this.db);
+        this.db.onversionchange = () => {
+          console.warn('KatanaStorage: IndexedDB versionchange requested, closing database connection.');
+          if (this.db) {
+            this.db.close();
+            this.db = null;
+          }
+          this.initPromise = null;
+        };
+
+        try {
+          await this.loadUrlCache();
+        } catch (e) {
+          console.warn('KatanaStorage: loadUrlCache failed:', e);
+        }
+
+        if (!resolved) {
+          resolved = true;
+          resolve(this.db);
+        }
+      };
+
+      request.onblocked = () => {
+        console.warn('KatanaStorage: IndexedDB upgrade blocked by another active connection.');
       };
 
       request.onerror = (event) => {
+        clearTimeout(timeout);
         console.error('IndexedDB open error:', event.target.error);
         this.initPromise = null;
-        reject(event.target.error);
+        if (!resolved) {
+          resolved = true;
+          reject(event.target.error);
+        }
       };
     });
 
@@ -281,6 +316,35 @@ class KatanaStorage {
     });
   }
 
+  async clearTargets() {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      if (!this.db || !this.db.objectStoreNames.contains('targets')) return resolve();
+      const tx = this.db.transaction('targets', 'readwrite');
+      tx.objectStore('targets').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async reactivateAllTargets() {
+    await this.init();
+    const all = await this.getAllTargets();
+    if (all.length === 0) return 0;
+    return new Promise((resolve, reject) => {
+      if (!this.db || !this.db.objectStoreNames.contains('targets')) return resolve(0);
+      const tx = this.db.transaction('targets', 'readwrite');
+      const store = tx.objectStore('targets');
+      for (const t of all) {
+        t.status = 'pending';
+        t.error = null;
+        store.put(t);
+      }
+      tx.oncomplete = () => resolve(all.length);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
   // Batch insert discovered URLs with deduplication
   async addDiscoveredUrls(urlObjects) {
     await this.init();
@@ -327,7 +391,11 @@ class KatanaStorage {
 
   async getDiscoveredUrls(filters = {}) {
     await this.init();
+    const filterObj = (typeof filters === 'number') ? { limit: filters } : (filters || {});
     return new Promise((resolve, reject) => {
+      if (!this.db || !this.db.objectStoreNames.contains('discovered_urls')) {
+        return resolve([]);
+      }
       const tx = this.db.transaction('discovered_urls', 'readonly');
       const store = tx.objectStore('discovered_urls');
       const req = store.getAll();
@@ -336,13 +404,13 @@ class KatanaStorage {
         let results = req.result || [];
 
         // Apply filters
-        if (filters.search) {
-          const q = filters.search.toLowerCase();
-          results = results.filter(item => item.url.toLowerCase().includes(q) || (item.sourceUrl && item.sourceUrl.toLowerCase().includes(q)));
+        if (filterObj.search) {
+          const q = filterObj.search.toLowerCase();
+          results = results.filter(item => (item.url && item.url.toLowerCase().includes(q)) || (item.sourceUrl && item.sourceUrl.toLowerCase().includes(q)));
         }
 
-        if (filters.type && filters.type !== 'all') {
-          const ft = filters.type.toLowerCase();
+        if (filterObj.type && filterObj.type !== 'all') {
+          const ft = filterObj.type.toLowerCase();
           results = results.filter(item => {
             const it = (item.type || '').toLowerCase();
             if (ft === 'subdomain') return it.includes('subdomain');
@@ -358,20 +426,24 @@ class KatanaStorage {
           });
         }
 
-        if (filters.scope && filters.scope !== 'all') {
-          results = results.filter(item => item.scope === filters.scope);
+        if (filterObj.scope && filterObj.scope !== 'all') {
+          results = results.filter(item => item.scope === filterObj.scope);
         }
 
-        if (filters.extension && filters.extension !== 'all') {
-          const ext = filters.extension.toLowerCase();
+        if (filterObj.extension && filterObj.extension !== 'all') {
+          const ext = filterObj.extension.toLowerCase();
           results = results.filter(item => {
             try {
               const u = new URL(item.url);
               return u.pathname.toLowerCase().endsWith(ext);
             } catch {
-              return item.url.toLowerCase().includes(ext);
+              return (item.url || '').toLowerCase().includes(ext);
             }
           });
+        }
+
+        if (filterObj.limit && typeof filterObj.limit === 'number' && filterObj.limit > 0) {
+          results = results.slice(0, filterObj.limit);
         }
 
         resolve(results);

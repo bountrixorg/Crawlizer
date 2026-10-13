@@ -1356,7 +1356,11 @@ async function runStageWithTimeout(stageName, work, fallbackValue, timeoutMs = C
 }
 
 // Auto-start scan
-async function runAutoScan() {
+async function runAutoScan(force = false) {
+  if (!window.location || !window.location.protocol || !window.location.protocol.startsWith('http')) {
+    return;
+  }
+
   const sessionId = ++scanSessionId;
   const scanStartedAt = Date.now();
   const isOutOfTime = () => (Date.now() - scanStartedAt) >= CONFIG.TOTAL_SCAN_TIMEOUT;
@@ -1365,10 +1369,10 @@ async function runAutoScan() {
   // chrome.storage.sync (set by the popup settings panel).
   const [local, sync] = await Promise.all([
     chrome.storage.local.get(['extensionEnabled']),
-    chrome.storage.sync.get({ autoScan: true, deepCrawl: true })
+    chrome.storage.sync.get({ autoScan: false, deepCrawl: true })
   ]);
   const isEnabled = local.extensionEnabled !== false;
-  const autoScan = sync.autoScan !== false;
+  const autoScan = sync.autoScan === true;
   const deepCrawl = sync.deepCrawl !== false;
   scanState.enabled = isEnabled;
   scanState.deepCrawl = deepCrawl;
@@ -1377,7 +1381,7 @@ async function runAutoScan() {
     Logger.debug('Extension is disabled. Scan aborted.');
     return;
   }
-  if (!autoScan) {
+  if (!force && !autoScan) {
     Logger.debug('autoScan is disabled. Scan aborted.');
     return;
   }
@@ -1500,15 +1504,24 @@ setTimeout(runAutoScan, 1000);
 
 // Listen for messages from Popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getScanStatus' || request.action === 'startScan') {
-    // Return current state immediately
+  if (request.action === 'getScanStatus') {
+    sendResponse(scanState);
+    return true;
+  }
+
+  if (request.action === 'startScan') {
+    if (!scanState.scanning && !scanState.complete) {
+      runAutoScan(true).catch((error) => {
+        Logger.error('Start scan failed:', error);
+      });
+    }
     sendResponse(scanState);
     return true;
   }
 
   if (request.action === 'forceRescan') {
     resetForRescan();
-    runAutoScan().catch((error) => {
+    runAutoScan(true).catch((error) => {
       Logger.error('Force rescan failed:', error);
     });
     sendResponse({ success: true, started: true });

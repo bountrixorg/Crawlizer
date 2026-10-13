@@ -646,7 +646,9 @@ class MessageHandler {
           return res.ok;
         }
         case 'crates': {
-          const res = await this.fetchWithTimeout(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`);
+          const res = await this.fetchWithTimeout(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`, {
+            headers: { 'User-Agent': 'Crawlizer-Security-Scanner (contact@crawlizer.io)' }
+          });
           return res.ok;
         }
         default:

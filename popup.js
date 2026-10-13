@@ -3,6 +3,14 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.katanaStorage && window.katanaStorage.init) {
+    try {
+      await window.katanaStorage.init();
+    } catch (e) {
+      console.warn('KatanaStorage init in popup:', e);
+    }
+  }
+
   const statTargets = document.getElementById('stat-targets');
   const statCrawled = document.getElementById('stat-crawled');
   const statDiscovered = document.getElementById('stat-discovered');
@@ -96,12 +104,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (stats.pendingTargets > 0) {
         btnQuickStart.disabled = false;
         btnStartLabel.textContent = `Launch Crawl (${stats.pendingTargets} seeds)`;
+      } else if (stats.totalTargets > 0) {
+        btnQuickStart.disabled = false;
+        btnStartLabel.textContent = `Re-run Crawl (${stats.totalTargets} seeds)`;
       } else {
-        btnStartLabel.textContent = 'Launch Crawl';
+        btnQuickStart.disabled = true;
+        btnStartLabel.textContent = 'Launch Crawl (0 seeds)';
       }
 
       // Fetch sample of endpoints to calculate sub-metrics
-      const allDiscovered = await window.katanaStorage.getDiscoveredUrls(5000);
+      const allDiscovered = await window.katanaStorage.getDiscoveredUrls({ limit: 5000 });
       let countHtml = 0;
       let countJs = 0;
       let countApis = 0;

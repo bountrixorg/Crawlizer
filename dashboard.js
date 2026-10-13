@@ -1229,6 +1229,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (t.includes('map')) {
       label = '.MAP';
       tagClass = 'tag-subdomain';
+    } else if (t.includes('cdn')) {
+      label = 'CDN';
+      tagClass = 'tag-header';
+    } else if (t.includes('manifest') || t.includes('config') || t.includes('json') || t.includes('package')) {
+      label = 'CONFIG';
+      tagClass = 'tag-param';
+    } else if (t.includes('dom') || t.includes('inline')) {
+      label = 'DOM SCRIPT';
+      tagClass = 'tag-html-link';
     }
     return `<span class="badge-tag ${tagClass}">${label}</span>`;
   }
@@ -1241,6 +1250,33 @@ document.addEventListener('DOMContentLoaded', async () => {
           <a href="${escapeHtml(src.url)}" target="_blank" class="url-cell text-xs" style="color: var(--neon-cyan);">${escapeHtml(src.url)}</a>
         </div>
         ${src.context ? `<div class="secret-context-snippet font-mono">${escapeHtml(src.context)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderSupplyChainSourceItem(src) {
+    const rawUrl = src.url ? src.url.trim() : '';
+    const isLink = /^https?:\/\//i.test(rawUrl);
+    const chunkName = src.chunkName ? ` [${escapeHtml(src.chunkName)}]` : '';
+    let linkMarkup = '';
+    if (isLink) {
+      linkMarkup = `<a href="${escapeHtml(rawUrl)}" target="_blank" rel="noreferrer" class="url-cell text-xs" style="color: var(--neon-cyan); word-break: break-all;">${escapeHtml(rawUrl)}${chunkName}</a>`;
+    } else if (rawUrl) {
+      linkMarkup = `<span class="url-cell text-xs" style="color: var(--neon-cyan); word-break: break-all;">${escapeHtml(rawUrl)}${chunkName}</span>`;
+    } else {
+      linkMarkup = `<span class="font-mono text-xs" style="color: var(--text-muted);">DOM Script Inline</span>`;
+    }
+
+    const typeTag = formatSourceTag(src.type || (rawUrl.includes('.js') ? 'js-bundle' : 'code'));
+    const contextHtml = src.context ? `<div class="secret-context-snippet font-mono">${escapeHtml(src.context)}</div>` : '';
+
+    return `
+      <div class="secret-location-item">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          ${typeTag}
+          ${linkMarkup}
+        </div>
+        ${contextHtml}
       </div>
     `;
   }
@@ -1734,7 +1770,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="font-mono" style="font-size: 11px; color: var(--neon-cyan);">High Exposure</span>
           </td>
           <td>
-            <span class="font-mono" style="font-size: 11px; color: var(--text-secondary); word-break: break-all;">${escapeHtml(file.url || path)}</span>
+            <div class="secret-locations-list">
+              ${renderSupplyChainSourceItem({ url: file.url || file.sourceUrl || file.path, type: 'config', context: file.context || '' })}
+            </div>
           </td>
           <td>
             <div class="action-btn-group">
@@ -1812,13 +1850,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         dlMarkup = `<span class="health-downloads" style="color: var(--text-muted);">—</span>`;
       }
 
-      // Detection Sources Context
+      // Detection Sources Context (Showing Code Snippets Matching Secrets Tab)
       let sourcesMarkup = '—';
-      if (Array.isArray(pkg.sources) && pkg.sources.length > 0) {
-        const firstSrc = pkg.sources[0];
-        const srcUrl = firstSrc.url ? escapeHtml(firstSrc.url) : 'DOM Script';
-        const chunkName = firstSrc.chunkName ? ` [${escapeHtml(firstSrc.chunkName)}]` : '';
-        sourcesMarkup = `<div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); word-break: break-all;">${srcUrl}${chunkName}</div>`;
+      const rawSources = Array.isArray(pkg.sources) && pkg.sources.length > 0
+        ? pkg.sources
+        : (pkg.sourceUrl ? [{ url: pkg.sourceUrl, type: pkg.sourceType || 'js-bundle', context: pkg.context || '' }] : []);
+
+      const sources = rawSources.map(s => {
+        if (!s.context && pkg.context) {
+          return { ...s, context: pkg.context };
+        }
+        return s;
+      });
+
+      if (sources.length > 0) {
+        const initialSources = sources.slice(0, 2);
+        const remainingSources = sources.slice(2);
+
+        let locationsHtml = `<div class="secret-locations-list">`;
+        initialSources.forEach(src => {
+          locationsHtml += renderSupplyChainSourceItem(src);
+        });
+
+        if (remainingSources.length > 0) {
+          locationsHtml += `<div class="secret-locations-extra" style="display: none;">`;
+          remainingSources.forEach(src => {
+            locationsHtml += renderSupplyChainSourceItem(src);
+          });
+          locationsHtml += `</div>`;
+          locationsHtml += `<button class="btn btn-glass supply-more-toggle" style="padding: 2px 8px; font-size: 10px; align-self: flex-start; margin-top: 4px;" data-count="${remainingSources.length}">+ ${remainingSources.length} more location(s)</button>`;
+        }
+        locationsHtml += `</div>`;
+        sourcesMarkup = locationsHtml;
+      } else if (pkg.context) {
+        sourcesMarkup = `
+          <div class="secret-locations-list">
+            <div class="secret-location-item">
+              <div class="secret-context-snippet font-mono">${escapeHtml(pkg.context)}</div>
+            </div>
+          </div>
+        `;
       }
 
       // Registry Link
@@ -1870,6 +1941,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           const orig = btn.textContent;
           btn.textContent = 'Copied!';
           setTimeout(() => { btn.textContent = orig; }, 1200);
+        }
+      });
+    });
+
+    // Attach more locations toggle listeners
+    supplyTbody.querySelectorAll('.supply-more-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const extraDiv = btn.previousElementSibling;
+        if (extraDiv && extraDiv.classList.contains('secret-locations-extra')) {
+          const isExpanded = extraDiv.style.display !== 'none';
+          if (isExpanded) {
+            extraDiv.style.display = 'none';
+            btn.textContent = `+ ${btn.dataset.count} more location(s)`;
+          } else {
+            extraDiv.style.display = 'flex';
+            extraDiv.style.flexDirection = 'column';
+            extraDiv.style.gap = '6px';
+            btn.textContent = 'Collapse locations';
+          }
         }
       });
     });

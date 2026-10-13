@@ -265,9 +265,12 @@ class KatanaSupplyChainScanner {
   }
 
   extractContext(content, matchIndex, matchLength) {
-    const start = Math.max(0, matchIndex - 50);
-    const end = Math.min(content.length, matchIndex + matchLength + 50);
-    return content.slice(start, end).replace(/[\r\n]+/g, ' ').trim();
+    const start = Math.max(0, matchIndex - 60);
+    const end = Math.min(content.length, matchIndex + matchLength + 60);
+    let snippet = content.slice(start, end).replace(/[\r\n]+/g, ' ').trim();
+    if (start > 0) snippet = '...' + snippet;
+    if (end < content.length) snippet = snippet + '...';
+    return snippet;
   }
 
   /**
@@ -321,7 +324,7 @@ class KatanaSupplyChainScanner {
         weeklyDownloads: cached && cached.weeklyDownloads != null ? cached.weeklyDownloads : 0,
         sourceUrl,
         sourceType,
-        context: (contextSnippet || '').slice(0, 160),
+        context: (contextSnippet || '').slice(0, 300),
         discoveredAt: Date.now()
       });
     };
@@ -384,10 +387,11 @@ class KatanaSupplyChainScanner {
     this.rxAmdDefine.lastIndex = 0;
     while ((m = this.rxAmdDefine.exec(cleanCode)) !== null) {
       const items = m[1].split(',');
+      const ctx = this.extractContext(cleanCode, m.index, m[0].length);
       for (const item of items) {
         const raw = item.trim().replace(/^["']|["']$/g, '');
         if (raw && !this.nodeBuiltins.has(raw.toLowerCase())) {
-          registerPackage(raw, '', 'npm', m[0]);
+          registerPackage(raw, '', 'npm', ctx);
         }
       }
     }
@@ -407,13 +411,13 @@ class KatanaSupplyChainScanner {
     // 9. Public CDNs (unpkg, jsdelivr, esm.sh, skypack)
     this.rxCdn.lastIndex = 0;
     while ((m = this.rxCdn.exec(textToScan)) !== null) {
-      registerPackage(m[1], m[2] || '', 'npm', m[0]);
+      registerPackage(m[1], m[2] || '', 'npm', this.extractContext(textToScan, m.index, m[0].length));
     }
 
     // 10. cdnjs.cloudflare.com
     this.rxCdnjs.lastIndex = 0;
     while ((m = this.rxCdnjs.exec(textToScan)) !== null) {
-      registerPackage(m[1], m[2] || '', 'npm', m[0]);
+      registerPackage(m[1], m[2] || '', 'npm', this.extractContext(textToScan, m.index, m[0].length));
     }
 
     // 11. Sourcemap node_modules paths

@@ -758,23 +758,36 @@ class KatanaStorage {
     for (const [key, incoming] of incomingConsolidated.entries()) {
       if (this.knownSupplyChainMap.has(key)) {
         const existing = this.knownSupplyChainMap.get(key);
-        let locAdded = false;
+        let hasChanges = false;
         for (const loc of incoming.sources) {
           if (loc.url && !existing.sources.some(l => l.url === loc.url)) {
             existing.sources.push(loc);
-            locAdded = true;
+            hasChanges = true;
           }
         }
-        if (incoming.isUnregistered !== undefined) existing.isUnregistered = incoming.isUnregistered;
-        if (incoming.riskLevel) existing.riskLevel = incoming.riskLevel;
+        if (incoming.isUnregistered !== undefined && existing.isUnregistered !== incoming.isUnregistered) {
+          existing.isUnregistered = incoming.isUnregistered;
+          hasChanges = true;
+        }
+        if (incoming.riskLevel && existing.riskLevel !== incoming.riskLevel) {
+          existing.riskLevel = incoming.riskLevel;
+          hasChanges = true;
+        }
         if (incoming.advisories && incoming.advisories.length > 0) {
           existing.advisories = incoming.advisories;
-          existing.advisoriesCount = incoming.advisoriesCount;
+          existing.advisoriesCount = incoming.advisoriesCount || incoming.advisories.length;
+          hasChanges = true;
         }
-        if (incoming.weeklyDownloads) existing.weeklyDownloads = incoming.weeklyDownloads;
-        if (incoming.riskReasons && incoming.riskReasons.length > 0) existing.riskReasons = incoming.riskReasons;
+        if (incoming.weeklyDownloads && existing.weeklyDownloads !== incoming.weeklyDownloads) {
+          existing.weeklyDownloads = incoming.weeklyDownloads;
+          hasChanges = true;
+        }
+        if (incoming.riskReasons && incoming.riskReasons.length > 0) {
+          existing.riskReasons = incoming.riskReasons;
+          hasChanges = true;
+        }
 
-        if (locAdded || incoming.isUnregistered) {
+        if (hasChanges) {
           existing.lastDiscoveredAt = now;
           if (existing.id && !toUpdate.some(u => u.id === existing.id)) {
             toUpdate.push(existing);

@@ -691,10 +691,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const SUPPLY_CONFIG_NAMES = ['package.json', 'package-lock.json', '.npmrc', 'requirements.txt', '.env', 'yarn.lock', 'pnpm-lock.yaml', 'Pipfile', 'composer.json', 'pom.xml', 'go.mod', 'Cargo.toml'];
-  engine.onUrlFound = (urlInput) => {
+  engine.onUrlFound = async (urlInput) => {
     if (!urlInput) return;
     const urlArray = Array.isArray(urlInput) ? urlInput : [urlInput];
-    let supplyUpdated = false;
+    const newExposedToSave = [];
 
     for (const urlObj of urlArray) {
       if (!urlObj || !urlObj.url) continue;
@@ -702,21 +702,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       for (const name of SUPPLY_CONFIG_NAMES) {
         if (lower.endsWith(name) || lower.includes(`/${name}?`) || lower.includes(`/${name}#`)) {
           if (!supplyState.exposedFiles.some(f => f.url === urlObj.url)) {
-            supplyState.exposedFiles.push({
+            const expItem = {
+              key: `exposed:/${name}`,
+              type: 'exposed-file',
+              name: `/${name}`,
               url: urlObj.url,
               path: `/${name}`,
               status: 200,
               contentType: 'config',
-              risk: 'HIGH'
-            });
-            supplyUpdated = true;
+              riskLevel: 'HIGH',
+              riskReasons: [`Exposed configuration file: ${urlObj.url}`]
+            };
+            supplyState.exposedFiles.push(expItem);
+            newExposedToSave.push(expItem);
           }
           break;
         }
       }
     }
 
-    if (supplyUpdated) {
+    if (newExposedToSave.length > 0) {
+      try {
+        await storage.saveSupplyChainFindings(newExposedToSave);
+      } catch (e) {}
       updateSupplyStatsUI();
       if (document.getElementById('tab-supply-chain')?.classList.contains('active')) {
         renderSupplyTable();
@@ -1598,7 +1606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (tabSupplyChainBadge) {
       const threatCount = stats.critical + stats.advisories;
-      tabSupplyChainBadge.textContent = threatCount;
+      tabSupplyChainBadge.textContent = threatCount > 0 ? threatCount : stats.totalFindings;
       if (threatCount > 0) {
         tabSupplyChainBadge.className = 'nav-badge badge-magenta';
       } else {

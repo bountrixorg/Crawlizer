@@ -92,9 +92,9 @@ const INTERNAL_MODULE_PATTERNS = [
 
 // Fast keyword filter: if text does not contain ANY of these substrings, skip scanning in 0.01ms!
 const FAST_SCAN_KEYWORDS = [
-  'import', 'require', 'node_modules', 'dependencies', 'devDependencies',
-  'unpkg', 'jsdelivr', 'cdnjs', 'esm.sh', 'skypack',
-  'requirements.txt', 'package.json', 'composer.json', 'go.mod', 'Cargo.toml',
+  'import', 'require', 'define(', '__webpack_require__', 'node_modules',
+  'dependencies', 'devdependencies', 'unpkg', 'jsdelivr', 'cdnjs', 'esm.sh', 'skypack',
+  'requirements.txt', 'package.json', 'composer.json', 'go.mod', 'cargo.toml',
   'pom.xml', 'build.gradle', 'packages.config', '.npmrc', '.env'
 ];
 
@@ -177,8 +177,12 @@ class KatanaSupplyChainScanner {
     if (/(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|pipfile|gemfile|composer\.json|go\.mod|cargo\.toml|pom\.xml|build\.gradle|packages\.config|\.env)$/i.test(lowerUrl)) {
       return true;
     }
+    if (lowerUrl.includes('unpkg.com') || lowerUrl.includes('jsdelivr.net') || lowerUrl.includes('cdnjs.cloudflare.com') || lowerUrl.includes('esm.sh') || lowerUrl.includes('skypack.dev')) {
+      return true;
+    }
+    const lowerText = text.length > 50000 ? (text.slice(0, 25000) + text.slice(-25000)).toLowerCase() : text.toLowerCase();
     for (let i = 0; i < FAST_SCAN_KEYWORDS.length; i++) {
-      if (text.includes(FAST_SCAN_KEYWORDS[i])) return true;
+      if (lowerText.includes(FAST_SCAN_KEYWORDS[i])) return true;
     }
     return false;
   }

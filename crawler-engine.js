@@ -1298,10 +1298,15 @@ class KatanaCrawlerEngine {
         if (normalized) discoveredInItem.push({ url: normalized, type: 'html-link', sourceUrl: effectivePageUrl });
       }
 
-      // Process Script sources
+      // Process Script sources & scan CDN package references
       for (const src of tabData.scriptSources) {
         const normalized = this.normalizeUrl(src, effectivePageUrl);
-        if (normalized) discoveredInItem.push({ url: normalized, type: 'script-src', sourceUrl: effectivePageUrl });
+        if (normalized) {
+          discoveredInItem.push({ url: normalized, type: 'script-src', sourceUrl: effectivePageUrl });
+          if (this.supplyChainScanner) {
+            discoveredSupplyChain.push(...this.supplyChainScanner.scan(normalized, normalized, 'cdn-url'));
+          }
+        }
       }
 
       // Process Form actions
@@ -1316,7 +1321,7 @@ class KatanaCrawlerEngine {
         if (normalized) discoveredInItem.push({ url: normalized, type: `attr-${d.name}`, sourceUrl: effectivePageUrl });
       }
 
-      // Process Live Network Resources
+      // Process Live Network Resources & scan for CDN package dependencies
       for (const res of tabData.networkResources) {
         const normalized = this.normalizeUrl(res.name, effectivePageUrl);
         if (normalized) {
@@ -1326,6 +1331,9 @@ class KatanaCrawlerEngine {
               ? 'script-bundle'
               : 'network-resource';
           discoveredInItem.push({ url: normalized, type: resType, sourceUrl: effectivePageUrl });
+          if (this.supplyChainScanner && (res.initiatorType === 'script' || normalized.includes('.js') || normalized.includes('.json'))) {
+            discoveredSupplyChain.push(...this.supplyChainScanner.scan(normalized, normalized, 'cdn-url'));
+          }
         }
       }
 

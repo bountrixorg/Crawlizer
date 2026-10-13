@@ -765,19 +765,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function startCrawling() {
     const config = {
-      mode: cfgMode.value,
-      scopeMode: cfgScope.value,
-      scopeRegex: cfgScopeRegex.value.trim(),
-      tabRenderDelay: parseInt(cfgTabDelay.value, 10) || 400,
-      concurrency: cfgMode.value === 'single-tab' ? 1 : (parseInt(cfgConcurrency.value, 10) || 10),
-      maxDepth: parseInt(cfgDepth.value, 10) || 3,
-      timeout: (parseInt(cfgTimeout.value, 10) || 6) * 1000,
-      subdomainCrawl: cfgSubdomainCrawl.checked,
-      openFoundUrlsInTab: cfgOpenInTab.checked,
-      autoClickButtons: cfgClickButtons.checked,
-      crawlJavascript: cfgCrawlJs.checked,
-      parseRobotsAndSitemaps: cfgRobotsSitemap.checked,
-      userAgent: cfgUserAgent.value.trim()
+      mode: cfgMode?.value || 'single-tab',
+      scopeMode: cfgScope?.value || 'same-domain',
+      scopeRegex: cfgScopeRegex?.value?.trim() || '',
+      tabRenderDelay: parseInt(cfgTabDelay?.value, 10) || 400,
+      concurrency: (cfgMode?.value === 'single-tab') ? 1 : (parseInt(cfgConcurrency?.value, 10) || 10),
+      maxDepth: Math.max(3, parseInt(cfgDepth?.value, 10) || 3),
+      timeout: (parseInt(cfgTimeout?.value, 10) || 8) * 1000,
+      subdomainCrawl: cfgSubdomainCrawl ? cfgSubdomainCrawl.checked : true,
+      openFoundUrlsInTab: cfgOpenInTab ? cfgOpenInTab.checked : true,
+      autoClickButtons: cfgClickButtons ? cfgClickButtons.checked : true,
+      crawlJavascript: cfgCrawlJs ? cfgCrawlJs.checked : true,
+      parseRobotsAndSitemaps: cfgRobotsSitemap ? cfgRobotsSitemap.checked : true,
+      userAgent: cfgUserAgent?.value?.trim() || navigator.userAgent
     };
 
     engine.configure(config);
@@ -888,9 +888,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       .filter(line => line.length > 0 && !line.startsWith('#'));
   }
 
-  cfgScope.addEventListener('change', () => {
-    regexGroup.style.display = cfgScope.value === 'regex' ? 'flex' : 'none';
-  });
+  if (cfgScope && regexGroup) {
+    cfgScope.addEventListener('change', () => {
+      regexGroup.style.display = cfgScope.value === 'regex' ? 'flex' : 'none';
+    });
+  }
 
   btnClearDb.addEventListener('click', async () => {
     if (confirm('Are you sure you want to completely wipe all targets and discovered data?')) {

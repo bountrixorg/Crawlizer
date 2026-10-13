@@ -4,6 +4,402 @@
  * (with CAPTCHA detection and solving), deep JS bundle analysis, and LinkFinder regex extraction.
  */
 
+/**
+ * Standalone in-tab content inspection function for chrome.scripting.executeScript
+ * Standard function declaration ensures valid string serialization across V8 runtimes.
+ */
+function katanaInTabExtractionScript() {
+  const result = {
+    captchaDetected: false,
+    challengeType: null,
+    pageUrl: window.location.href,
+    htmlLinks: [],
+    scriptSources: [],
+    formActions: [],
+    inlineScripts: [],
+    dataEndpoints: [],
+    networkResources: [],
+    htmlComments: [],
+    metaLinks: [],
+    jsonBlobs: [],
+    rawHtml: '',
+    cssSources: [],
+    inlineStyles: []
+  };
+
+  try {
+    const title = (document.title || '').toLowerCase();
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
+    const hasNormalContent = bodyText.length > 500 && !title.includes('just a moment') && !title.includes('attention required');
+
+    const isCloudflare = !hasNormalContent && (
+      title.includes('just a moment') ||
+      title.includes('attention required! | cloudflare') ||
+      document.querySelector('#cf-challenge-running') !== null ||
+      (document.querySelector('#challenge-form') !== null && (title.includes('moment') || bodyText.includes('challenge'))) ||
+      (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')))
+    );
+
+    const isBlockingCaptcha = !hasNormalContent && (
+      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
+      (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
+    );
+
+    if (isCloudflare) {
+      result.captchaDetected = true;
+      result.challengeType = 'Cloudflare Challenge / Turnstile';
+      return result;
+    } else if (isBlockingCaptcha) {
+      result.captchaDetected = true;
+      result.challengeType = 'Bot Verification / Captcha';
+      return result;
+    }
+  } catch (e) {}
+
+  const base = document.baseURI || window.location.href;
+
+  // 2. Extract DOM links
+  try {
+    document.querySelectorAll('a[href], link[href], area[href], iframe[src], embed[src], object[data], source[src], video[src], audio[src]').forEach(el => {
+      try {
+        if (el.href && typeof el.href === 'string' && /^https?:\/\//i.test(el.href)) {
+          if (!result.htmlLinks.includes(el.href)) result.htmlLinks.push(el.href);
+        } else if (el.src && typeof el.src === 'string' && /^https?:\/\//i.test(el.src)) {
+          if (!result.htmlLinks.includes(el.src)) result.htmlLinks.push(el.src);
+        }
+        const val = el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data');
+        if (val) {
+          try {
+            const resolved = new URL(val, base).href;
+            if (/^https?:\/\//i.test(resolved) && !result.htmlLinks.includes(resolved)) {
+              result.htmlLinks.push(resolved);
+            }
+          } catch(e) {
+            if (!result.htmlLinks.includes(val)) result.htmlLinks.push(val);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 3. Extract Script sources
+  try {
+    document.querySelectorAll('script[src]').forEach(el => {
+      try {
+        const src = el.src || el.getAttribute('src');
+        if (src) {
+          try {
+            const resolved = new URL(src, base).href;
+            if (!result.scriptSources.includes(resolved)) result.scriptSources.push(resolved);
+          } catch(e) {
+            if (!result.scriptSources.includes(src)) result.scriptSources.push(src);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 4. Extract Form actions
+  try {
+    document.querySelectorAll('form[action], input[formaction], button[formaction]').forEach(el => {
+      try {
+        const rawAction = el.getAttribute('action') || el.getAttribute('formaction') || '';
+        const method = (el.getAttribute('method') || 'GET').toUpperCase();
+        if (rawAction) {
+          try {
+            const resolved = new URL(rawAction, base).href;
+            result.formActions.push({ action: resolved, method });
+          } catch(e) {
+            result.formActions.push({ action: rawAction, method });
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 5. Extract Inline Scripts & JSON routing blobs
+  try {
+    document.querySelectorAll('script:not([src])').forEach(script => {
+      try {
+        const content = script.textContent || '';
+        if (content.length > 5 && content.length < 500000) {
+          const type = (script.getAttribute('type') || '').toLowerCase();
+          const id = (script.id || '').toLowerCase();
+          if (type.includes('json') || id.includes('next') || id.includes('nuxt')) {
+            result.jsonBlobs.push(content);
+          } else {
+            result.inlineScripts.push(content);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 6. Extract Meta tag URLs
+  try {
+    document.querySelectorAll('meta[content*="/"], meta[content*="http"]').forEach(m => {
+      try {
+        const c = m.getAttribute('content');
+        if (c && c.length > 1 && c.length < 2000) {
+          try {
+            const resolved = new URL(c, base).href;
+            result.metaLinks.push(resolved);
+          } catch(e) {
+            result.metaLinks.push(c);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 7. Extract HTML Comments
+  try {
+    const iterator = document.createNodeIterator(document.documentElement, NodeFilter.SHOW_COMMENT);
+    let curNode;
+    let count = 0;
+    while ((curNode = iterator.nextNode()) && count < 150) {
+      if (curNode.nodeValue && curNode.nodeValue.length < 5000) {
+        result.htmlComments.push(curNode.nodeValue);
+        count++;
+      }
+    }
+  } catch(e) {}
+
+  // 8. Extract data-* attributes
+  try {
+    const pathAttrRegex = /^(?:data-(?:url|href|src|path|endpoint|route|api|target)|action|formaction|cite|ping|poster|manifest)$/i;
+    document.querySelectorAll('*').forEach(el => {
+      try {
+        if (el.attributes) {
+          for (const attr of el.attributes) {
+            if (pathAttrRegex.test(attr.name) && attr.value && attr.value.length < 1000) {
+              try {
+                const resolved = new URL(attr.value, base).href;
+                result.dataEndpoints.push({ name: attr.name, value: resolved });
+              } catch(e) {
+                result.dataEndpoints.push({ name: attr.name, value: attr.value });
+              }
+            }
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 9. Extract network resources from Performance API
+  try {
+    const resources = performance.getEntriesByType('resource');
+    resources.forEach(r => {
+      try {
+        if (r.name && !r.name.startsWith('data:') && !r.name.startsWith('blob:')) {
+          result.networkResources.push({
+            name: r.name,
+            initiatorType: r.initiatorType || 'resource'
+          });
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 10. Extract CSS stylesheets
+  try {
+    document.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el => {
+      try {
+        const href = el.href || el.getAttribute('href');
+        if (href) {
+          try {
+            const resolved = new URL(href, base).href;
+            result.cssSources.push(resolved);
+          } catch(e) {
+            result.cssSources.push(href);
+          }
+        }
+      } catch(e) {}
+    });
+    document.querySelectorAll('style').forEach(el => {
+      try {
+        const content = el.textContent || '';
+        if (content.length > 5 && content.length < 200000) result.inlineStyles.push(content);
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // 11. Capture HTML slice safely
+  try {
+    result.rawHtml = document.documentElement ? document.documentElement.outerHTML.slice(0, 300000) : '';
+  } catch(e) {
+    result.rawHtml = '';
+  }
+
+  return result;
+}
+
+/**
+ * Standalone in-tab click exploration function for chrome.scripting.executeScript
+ */
+function katanaInTabClickExplorationScript(maxClicks = 8) {
+  return new Promise((resolve) => {
+    const clickedResults = {
+      clickedCount: 0,
+      interceptedRequests: [],
+      newDomLinks: [],
+      navigatedRoutes: []
+    };
+
+    const origAlert = window.alert;
+    const origConfirm = window.confirm;
+    const origPrompt = window.prompt;
+    try {
+      window.alert = () => {};
+      window.confirm = () => false;
+      window.prompt = () => null;
+    } catch(e) {}
+
+    const originalFetch = window.fetch;
+    const originalXhrOpen = XMLHttpRequest.prototype.open;
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    try {
+      window.fetch = function(...args) {
+        try {
+          const u = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+          if (u) clickedResults.interceptedRequests.push(u);
+        } catch(e) {}
+        return originalFetch.apply(this, args);
+      };
+
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        try {
+          if (url) clickedResults.interceptedRequests.push(url);
+        } catch(e) {}
+        return originalXhrOpen.apply(this, [method, url, ...rest]);
+      };
+
+      history.pushState = function(state, unused, url) {
+        if (url) clickedResults.navigatedRoutes.push(url);
+        return originalPushState.apply(this, arguments);
+      };
+
+      history.replaceState = function(state, unused, url) {
+        if (url) clickedResults.navigatedRoutes.push(url);
+        return originalReplaceState.apply(this, arguments);
+      };
+    } catch(e) {}
+
+    let isFinished = false;
+    let safetyTimer = null;
+
+    function cleanup() {
+      if (isFinished) return;
+      isFinished = true;
+      try {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        window.alert = origAlert;
+        window.confirm = origConfirm;
+        window.prompt = origPrompt;
+        window.fetch = originalFetch;
+        XMLHttpRequest.prototype.open = originalXhrOpen;
+        history.pushState = originalPushState;
+        history.replaceState = originalReplaceState;
+
+        const base = document.baseURI || window.location.href;
+        document.querySelectorAll('a[href], link[href], form[action]').forEach(el => {
+          const val = el.href || el.getAttribute('href') || el.getAttribute('action');
+          if (val) {
+            try {
+              clickedResults.newDomLinks.push(new URL(val, base).href);
+            } catch(e) {
+              clickedResults.newDomLinks.push(val);
+            }
+          }
+        });
+
+        performance.getEntriesByType('resource').forEach(r => {
+          if (r.name && !r.name.startsWith('data:') && !r.name.startsWith('blob:')) {
+            clickedResults.interceptedRequests.push(r.name);
+          }
+        });
+      } catch(e) {}
+    }
+
+    safetyTimer = setTimeout(() => {
+      cleanup();
+      resolve(clickedResults);
+    }, 1200);
+
+    const destructiveRegex = /log\s*out|sign\s*out|delete|remove|destroy|trash|cancel\s*account|submit|checkout|buy|pay|leave|exit/i;
+    const selectors = [
+      'button:not([type="submit"])',
+      'input[type="button"]',
+      '[role="button"]',
+      '[role="tab"]',
+      '[role="menuitem"]',
+      'a[href="#"]',
+      'a[href^="javascript:"]',
+      '.btn:not([type="submit"])',
+      '.button:not([type="submit"])',
+      '.tab',
+      '.nav-link'
+    ];
+
+    let elements = [];
+    try {
+      elements = document.querySelectorAll(selectors.join(', '));
+    } catch(e) {}
+
+    const candidates = [];
+    for (const el of elements) {
+      try {
+        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+        if (el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.type))) continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+
+        const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+        if (destructiveRegex.test(text)) continue;
+
+        candidates.push(el);
+        if (candidates.length >= maxClicks) break;
+      } catch(e) {}
+    }
+
+    if (candidates.length === 0) {
+      cleanup();
+      resolve(clickedResults);
+      return;
+    }
+
+    let idx = 0;
+    function clickNext() {
+      if (isFinished) return;
+      if (idx >= candidates.length) {
+        cleanup();
+        resolve(clickedResults);
+        return;
+      }
+
+      const el = candidates[idx++];
+      try {
+        clickedResults.clickedCount++;
+        const preventNav = (e) => {
+          if (el.tagName === 'A' || el.closest('form') || el.type === 'submit') {
+            e.preventDefault();
+          }
+        };
+        el.addEventListener('click', preventNav, { capture: true, once: true });
+        el.click();
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      } catch(e) {}
+
+      setTimeout(clickNext, 40);
+    }
+
+    clickNext();
+  });
+}
+
 class KatanaCrawlerEngine {
   constructor(storage) {
     this.storage = storage;
@@ -17,16 +413,16 @@ class KatanaCrawlerEngine {
     this.config = {
       mode: 'single-tab', // 'single-tab' (interactive browser tab) or 'fast-fetch' (background HTTP)
       concurrency: 1,     // In single-tab mode, concurrency is strictly 1 (single tab); in fast-fetch, up to 30
-      maxDepth: 3,        // Follow discovered in-scope endpoints in the browser tab
-      timeout: 6000,      // Fast 6s timeout per request/tab load
-      tabRenderDelay: 400, // Fast 400ms delay after DOM load for JS hydration
+      maxDepth: 3,        // Follow discovered in-scope endpoints in the browser tab (default depth 3)
+      timeout: 8000,      // 8s timeout per request/tab load
+      tabRenderDelay: 400, // 400ms delay after DOM load for JS hydration
       scopeMode: 'same-domain', // 'same-domain', 'same-root', 'regex', 'all'
       scopeRegex: '',
       subdomainCrawl: true,     // Crawl discovered subdomains (*.example.com) when enabled
       openFoundUrlsInTab: true, // Automatically open discovered URLs in the single tab (excluding static assets)
       crawlJavascript: true,    // Deep JS crawl: Fetch & regex-extract external JS bundles
       autoClickButtons: true,   // Automatically click buttons & interactive elements to discover dynamic endpoints
-      maxButtonClicks: 10,      // Maximum 10 buttons per page for rapid exploration
+      maxButtonClicks: 8,       // Maximum 8 buttons per page for rapid exploration
       parseRobotsAndSitemaps: true, // Check robots.txt and sitemap.xml
       ignoreFileExtensions: ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.css', '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.mp3', '.pdf', '.zip'],
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Katana/1.1',
@@ -473,7 +869,6 @@ class KatanaCrawlerEngine {
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'User-Agent': this.config.userAgent,
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
           ...headers
         },
@@ -531,7 +926,11 @@ class KatanaCrawlerEngine {
    * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
    * or complete, preventing waiting for slow trackers/ads/media!
    */
-  async navigateTabAndWait(tabId, url, timeoutMs = 5000) {
+  /**
+   * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
+   * or complete, preventing waiting for slow trackers/ads/media!
+   */
+  async navigateTabAndWait(tabId, url, timeoutMs = 8000) {
     return new Promise((resolve) => {
       let isResolved = false;
       let timer = null;
@@ -556,36 +955,28 @@ class KatanaCrawlerEngine {
       chrome.tabs.onRemoved.addListener(onRemovedListener);
 
       // Hard timeout
-      const maxWait = Math.min(Math.max(timeoutMs || 5000, 3000), 8000);
+      const maxWait = Math.max(timeoutMs || 8000, 3000);
       timer = setTimeout(finish, maxWait);
 
-      // Track whether navigation was actually initiated
       let navStarted = false;
-      let navStartTime = null;
 
       onUpdatedListener = (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
 
         if (changeInfo.status === 'loading') {
           navStarted = true;
-          navStartTime = Date.now();
         }
 
         if (changeInfo.status === 'complete' && navStarted) {
           const tabUrl = tab?.url || '';
-          // Ignore about:blank completions — the real page hasn't loaded yet
           if (tabUrl === 'about:blank' || tabUrl.startsWith('chrome://')) return;
           finish();
         }
       };
       chrome.tabs.onUpdated.addListener(onUpdatedListener);
 
-      // Initiate navigation — register listener BEFORE calling tabs.update
-      // so we never miss the 'loading' event
+      // Initiate navigation
       chrome.tabs.update(tabId, { url }).then(() => {
-        // After we've issued the navigate command, start polling as a fallback
-        // in case the onUpdated events were missed (can happen if tab was already
-        // at the same URL or if Chrome fires events before listener was added)
         let pollTicks = 0;
         pollInterval = setInterval(async () => {
           pollTicks++;
@@ -596,17 +987,13 @@ class KatanaCrawlerEngine {
             const tabUrl = tab.url || '';
             if (tabUrl === 'about:blank' || tabUrl.startsWith('chrome://')) return;
 
-            if (tab.status === 'complete') {
-              // Only finish from poll if navStarted OR if enough time has passed
-              // (prevents falsely completing on stale state before nav fired)
-              if (navStarted || pollTicks >= 5) {
-                finish();
-              }
+            if (tab.status === 'complete' && (navStarted || pollTicks >= 4)) {
+              finish();
+              return;
             }
-          } catch {
-            // Tab might have navigated to a cross-origin page where get() fails briefly
-            if (navStarted) {
-              // Try scripting to confirm page is ready
+
+            // Fallback: check readyState directly
+            if (pollTicks >= 5) {
               try {
                 const res = await chrome.scripting.executeScript({
                   target: { tabId },
@@ -615,324 +1002,26 @@ class KatanaCrawlerEngine {
                 const state = res?.[0]?.result;
                 if (state === 'interactive' || state === 'complete') {
                   finish();
+                  return;
                 }
-              } catch { /* Still loading */ }
+              } catch {}
             }
+          } catch {
+            if (navStarted) finish();
           }
         }, 200);
       }).catch(() => {
-        // Navigation failed entirely (tab closed, invalid URL, etc.)
         finish();
       });
     });
   }
 
-
-  /**
-   * In-tab content inspection script
-   * Runs in the live browser tab: checks for CAPTCHA/bot challenges,
-   * extracts live DOM links, form actions, scripts, data-attributes,
-   * and browser performance network entries!
-   */
   static inTabExtractionScript() {
-    const result = {
-      captchaDetected: false,
-      challengeType: null,
-      pageUrl: window.location.href,
-      htmlLinks: [],
-      scriptSources: [],
-      formActions: [],
-      inlineScripts: [],
-      dataEndpoints: [],
-      networkResources: [],
-      htmlComments: [],
-      metaLinks: [],
-      jsonBlobs: [],
-      rawHtml: '',
-      cssSources: [],
-      inlineStyles: []
-    };
-
-    // 1. CAPTCHA & Cloudflare Bot Challenge Detection (Checks for real blocking interstitials)
-    const title = (document.title || '').toLowerCase();
-    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
-    const hasNormalContent = bodyText.length > 500 && !title.includes('just a moment') && !title.includes('attention required');
-
-    const isCloudflare = !hasNormalContent && (
-      title.includes('just a moment') ||
-      title.includes('attention required! | cloudflare') ||
-      document.querySelector('#cf-challenge-running') !== null ||
-      (document.querySelector('#challenge-form') !== null && (title.includes('moment') || bodyText.includes('challenge'))) ||
-      (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')))
-    );
-
-    // Only flag true blocking challenge pages! NOT pages with invisible background reCAPTCHA widgets!
-    const isBlockingCaptcha = !hasNormalContent && (
-      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
-      (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
-    );
-
-    if (isCloudflare) {
-      result.captchaDetected = true;
-      result.challengeType = 'Cloudflare Challenge / Turnstile';
-      return result;
-    } else if (isBlockingCaptcha) {
-      result.captchaDetected = true;
-      result.challengeType = 'Bot Verification / Captcha';
-      return result;
-    }
-
-    // 2. Extract DOM links (a, link, area, iframe, embed, object, audio, video, source)
-    document.querySelectorAll('a[href], link[href], area[href], iframe[src], embed[src], object[data], source[src], video[src], audio[src]').forEach(el => {
-      // Browser-resolved absolute URL:
-      if (el.href && typeof el.href === 'string' && /^https?:\/\//i.test(el.href)) {
-        result.htmlLinks.push(el.href);
-      }
-      const val = el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data');
-      if (val && !result.htmlLinks.includes(val)) result.htmlLinks.push(val);
-    });
-
-    // 3. Extract Script sources
-    document.querySelectorAll('script[src]').forEach(el => {
-      const src = el.getAttribute('src');
-      if (src) result.scriptSources.push(src);
-    });
-
-    // 4. Extract Form actions & formactions
-    document.querySelectorAll('form[action], input[formaction], button[formaction]').forEach(el => {
-      const action = el.getAttribute('action') || el.getAttribute('formaction') || '';
-      const method = (el.getAttribute('method') || 'GET').toUpperCase();
-      if (action) result.formActions.push({ action, method });
-    });
-
-    // 5. Extract Inline Scripts & JSON routing blobs (e.g. Next.js __NEXT_DATA__, Nuxt __NUXT__)
-    document.querySelectorAll('script:not([src])').forEach(script => {
-      const content = script.textContent || '';
-      if (content.length > 5) {
-        const type = (script.getAttribute('type') || '').toLowerCase();
-        const id = (script.id || '').toLowerCase();
-        if (type.includes('json') || id.includes('next') || id.includes('nuxt')) {
-          result.jsonBlobs.push(content);
-        } else {
-          result.inlineScripts.push(content);
-        }
-      }
-    });
-
-    // 6. Extract Meta tag URLs
-    document.querySelectorAll('meta[content*="/"], meta[content*="http"]').forEach(m => {
-      const c = m.getAttribute('content');
-      if (c && c.length > 1) result.metaLinks.push(c);
-    });
-
-    // 7. Extract HTML Comments (where developers hide staging URLs, API keys, test routes)
-    try {
-      const iterator = document.createNodeIterator(document.documentElement, NodeFilter.SHOW_COMMENT);
-      let curNode;
-      let count = 0;
-      while ((curNode = iterator.nextNode()) && count < 250) {
-        if (curNode.nodeValue) result.htmlComments.push(curNode.nodeValue);
-        count++;
-      }
-    } catch(e) {}
-
-    // 8. Extract data-* attributes with paths/URLs
-    const pathAttrRegex = /^(?:data-(?:url|href|src|path|endpoint|route|api|target)|action|formaction|cite|ping|poster|manifest)$/i;
-    document.querySelectorAll('*').forEach(el => {
-      for (const attr of el.attributes) {
-        if (pathAttrRegex.test(attr.name) && attr.value) {
-          result.dataEndpoints.push({ name: attr.name, value: attr.value });
-        }
-      }
-    });
-
-    // 9. Extract network requests recorded by browser Performance API!
-    try {
-      const resources = performance.getEntriesByType('resource');
-      resources.forEach(r => {
-        if (r.name && !r.name.startsWith('data:') && !r.name.startsWith('blob:')) {
-          result.networkResources.push({
-            name: r.name,
-            initiatorType: r.initiatorType || 'resource'
-          });
-        }
-      });
-    } catch {}
-
-    // 10. Extract CSS stylesheets & inline style blocks
-    document.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el => {
-      const href = el.getAttribute('href');
-      if (href) result.cssSources.push(href);
-    });
-    document.querySelectorAll('style').forEach(el => {
-      const content = el.textContent || '';
-      if (content.length > 5) result.inlineStyles.push(content);
-    });
-
-    // 11. Capture Raw HTML for deep Katana regex parsing
-    try {
-      result.rawHtml = document.documentElement.outerHTML.slice(0, 1500000);
-    } catch(e) {}
-
-    return result;
+    return katanaInTabExtractionScript();
   }
 
-  /**
-   * High-speed automated button clicking & interaction explorer
-   */
   static inTabClickExplorationScript(maxClicks = 10) {
-    return new Promise((resolve) => {
-      const clickedResults = {
-        clickedCount: 0,
-        interceptedRequests: [],
-        newDomLinks: [],
-        navigatedRoutes: []
-      };
-
-      // Neuter modal dialogs so clicking can NEVER freeze Chrome!
-      const origAlert = window.alert;
-      const origConfirm = window.confirm;
-      const origPrompt = window.prompt;
-      try {
-        window.alert = () => {};
-        window.confirm = () => false;
-        window.prompt = () => null;
-      } catch(e) {}
-
-      const originalFetch = window.fetch;
-      const originalXhrOpen = XMLHttpRequest.prototype.open;
-      const originalPushState = history.pushState;
-      const originalReplaceState = history.replaceState;
-
-      try {
-        window.fetch = function(...args) {
-          try {
-            const u = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-            if (u) clickedResults.interceptedRequests.push(u);
-          } catch(e) {}
-          return originalFetch.apply(this, args);
-        };
-
-        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-          try {
-            if (url) clickedResults.interceptedRequests.push(url);
-          } catch(e) {}
-          return originalXhrOpen.apply(this, [method, url, ...rest]);
-        };
-
-        history.pushState = function(state, unused, url) {
-          if (url) clickedResults.navigatedRoutes.push(url);
-          return originalPushState.apply(this, arguments);
-        };
-
-        history.replaceState = function(state, unused, url) {
-          if (url) clickedResults.navigatedRoutes.push(url);
-          return originalReplaceState.apply(this, arguments);
-        };
-      } catch(e) {}
-
-      let isFinished = false;
-      let safetyTimer = null;
-
-      function cleanup() {
-        if (isFinished) return;
-        isFinished = true;
-        try {
-          if (safetyTimer) clearTimeout(safetyTimer);
-          window.alert = origAlert;
-          window.confirm = origConfirm;
-          window.prompt = origPrompt;
-          window.fetch = originalFetch;
-          XMLHttpRequest.prototype.open = originalXhrOpen;
-          history.pushState = originalPushState;
-          history.replaceState = originalReplaceState;
-
-          document.querySelectorAll('a[href], link[href], form[action]').forEach(el => {
-            const val = el.href || el.getAttribute('href') || el.getAttribute('action');
-            if (val) clickedResults.newDomLinks.push(val);
-          });
-
-          performance.getEntriesByType('resource').forEach(r => {
-            if (r.name && !r.name.startsWith('data:') && !r.name.startsWith('blob:')) {
-              clickedResults.interceptedRequests.push(r.name);
-            }
-          });
-        } catch(e) {}
-      }
-
-      // Hard safety timer: exploration MUST finish within 1200ms no matter what!
-      safetyTimer = setTimeout(() => {
-        cleanup();
-        resolve(clickedResults);
-      }, 1200);
-
-      const destructiveRegex = /log\s*out|sign\s*out|delete|remove|destroy|trash|cancel\s*account|submit|checkout|buy|pay/i;
-      const selectors = [
-        'button:not([type="submit"])',
-        'input[type="button"]',
-        '[role="button"]',
-        '[role="tab"]',
-        '[role="menuitem"]',
-        'a[href="#"]',
-        'a[href^="javascript:"]',
-        '.btn:not([type="submit"])',
-        '.button:not([type="submit"])',
-        '.tab',
-        '.nav-link'
-      ];
-
-      let elements = [];
-      try {
-        elements = document.querySelectorAll(selectors.join(', '));
-      } catch(e) {}
-
-      const candidates = [];
-      for (const el of elements) {
-        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
-        if (el.closest('form') && (el.type === 'submit' || el.tagName === 'BUTTON' && !el.type)) continue;
-
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-
-        const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
-        if (destructiveRegex.test(text)) continue;
-
-        candidates.push(el);
-        if (candidates.length >= maxClicks) break;
-      }
-
-      if (candidates.length === 0) {
-        cleanup();
-        resolve(clickedResults);
-        return;
-      }
-
-      let idx = 0;
-      function clickNext() {
-        if (isFinished) return;
-        if (idx >= candidates.length) {
-          cleanup();
-          resolve(clickedResults);
-          return;
-        }
-
-        const el = candidates[idx++];
-        try {
-          clickedResults.clickedCount++;
-          // Prevent accidental hard navigation on test clicks
-          if (el.tagName === 'A' && el.getAttribute('href') && !el.getAttribute('href').startsWith('#')) {
-            el.addEventListener('click', (e) => e.preventDefault(), { capture: true, once: true });
-          }
-          el.scrollIntoView({ behavior: 'instant', block: 'center' });
-          el.click();
-          el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-        } catch(e) {}
-
-        setTimeout(clickNext, 35);
-      }
-
-      clickNext();
-    });
+    return katanaInTabClickExplorationScript(maxClicks);
   }
 
   /**
@@ -977,34 +1066,30 @@ class KatanaCrawlerEngine {
     try {
       const injectionResults = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: KatanaCrawlerEngine.inTabExtractionScript
+        func: katanaInTabExtractionScript
       });
       tabData = injectionResults?.[0]?.result;
     } catch (err) {
       this.log('wrn', `Could not inspect tab content for ${url}: ${err.message}`);
     }
 
-    if (tabData && tabData.pageUrl === 'about:blank' && url !== 'about:blank') {
-      this.log('inf', `[Browser Tab] Tab still on about:blank, retrying navigation for ${url}...`);
-      tabData = null;
-
-      // Retry navigation once with a longer timeout
+    if (!tabData || (tabData.pageUrl === 'about:blank' && url !== 'about:blank')) {
+      this.log('inf', `[Browser Tab] Tab content pending, retrying inspection for ${url}...`);
       try {
-        await this.navigateTabAndWait(tab.id, url, 7000);
         await new Promise(r => setTimeout(r, 600));
         const retryResults = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          func: KatanaCrawlerEngine.inTabExtractionScript
+          func: katanaInTabExtractionScript
         });
         const retryData = retryResults?.[0]?.result;
         if (retryData && retryData.pageUrl !== 'about:blank') {
           tabData = retryData;
-          this.log('inf', `[Browser Tab] Retry navigation succeeded for ${url}`);
+          this.log('inf', `[Browser Tab] Retry inspection succeeded for ${url}`);
         } else {
-          this.log('wrn', `[Browser Tab] Retry navigation still on about:blank for ${url}, falling back to HTTP spider`);
+          this.log('wrn', `[Browser Tab] Retry inspection still pending for ${url}, attempting HTTP fallback`);
         }
       } catch (err) {
-        this.log('wrn', `[Browser Tab] Retry navigation failed for ${url}: ${err.message}`);
+        this.log('wrn', `[Browser Tab] Retry inspection failed for ${url}: ${err.message}`);
       }
     }
 
@@ -1032,7 +1117,7 @@ class KatanaCrawlerEngine {
       try {
         const reExtract = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          func: KatanaCrawlerEngine.inTabExtractionScript
+          func: katanaInTabExtractionScript
         });
         tabData = reExtract?.[0]?.result;
       } catch {}
@@ -1205,7 +1290,7 @@ class KatanaCrawlerEngine {
       // Process External CSS Stylesheets
       const cssFiles = (tabData.cssSources || [])
         .map(c => this.normalizeUrl(c, effectivePageUrl))
-        .filter(u => u && this.isInScope(u, seedUrl) && !this.visitedUrls.has(u));
+        .filter(u => u && this.isInScope(u, effectiveSeedUrl) && !this.visitedUrls.has(u));
 
       if (cssFiles.length > 0) {
         const cssToFetch = cssFiles.slice(0, 10);
@@ -1305,8 +1390,8 @@ class KatanaCrawlerEngine {
       try {
         const clickPromise = chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          func: KatanaCrawlerEngine.inTabClickExplorationScript,
-          args: [this.config.maxButtonClicks || 10]
+          func: katanaInTabClickExplorationScript,
+          args: [this.config.maxButtonClicks || 8]
         });
 
         const clickTimeout = new Promise((_, reject) =>
@@ -1358,7 +1443,7 @@ class KatanaCrawlerEngine {
     if (this.config.crawlJavascript) {
       const jsFiles = discoveredInItem.filter(d =>
         (d.type === 'script-src' || d.type === 'script-bundle' || d.url.endsWith('.js')) &&
-        this.isInScope(d.url, seedUrl)
+        this.isInScope(d.url, effectiveSeedUrl)
       );
 
       const jsFilesToFetch = jsFiles.slice(0, 15).filter(j => !this.visitedUrls.has(j.url));
@@ -1393,7 +1478,7 @@ class KatanaCrawlerEngine {
               }
 
               if (this.config.subdomainCrawl) {
-                const jsSubdomains = this.extractSubdomainsFromText(jsText, seedUrl);
+                const jsSubdomains = this.extractSubdomainsFromText(jsText, effectiveSeedUrl);
                 if (jsSubdomains.length > 0) {
                   discoveredInItem.push(...jsSubdomains);
                 }
@@ -1409,7 +1494,7 @@ class KatanaCrawlerEngine {
     // Fetches original unminified source code arrays & audits them for secrets & endpoints
     if (sourceMapUrlsToFetch.length > 0) {
       const uniqueMaps = [...new Set(sourceMapUrlsToFetch)]
-        .filter(m => m && this.isInScope(m, seedUrl) && !this.visitedUrls.has(m))
+        .filter(m => m && this.isInScope(m, effectiveSeedUrl) && !this.visitedUrls.has(m))
         .slice(0, 10);
 
       uniqueMaps.forEach(m => this.visitedUrls.add(m));

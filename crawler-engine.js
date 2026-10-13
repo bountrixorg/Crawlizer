@@ -531,7 +531,7 @@ class KatanaCrawlerEngine {
    * Fast-navigate the single tab: Resolves as soon as DOM is interactive/loaded
    * or complete, preventing waiting for slow trackers/ads/media!
    */
-  async navigateTabAndWait(tabId, url, timeoutMs = 8000) {
+  async navigateTabAndWait(tabId, url, timeoutMs = 4500) {
     return new Promise(async (resolve) => {
       let isResolved = false;
       let timer = null;
@@ -572,8 +572,11 @@ class KatanaCrawlerEngine {
         return;
       }
 
+      const initialCanonical = this.canonicalUrl(initialUrl);
+      const targetCanonical = this.canonicalUrl(url);
+      const isSamePageNav = Boolean(initialCanonical && targetCanonical && initialCanonical === targetCanonical);
+
       let navStarted = false;
-      const isSamePageNav = Boolean(initialUrl && initialUrl !== 'about:blank' && initialUrl === url);
 
       onUpdatedListener = (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
@@ -586,12 +589,14 @@ class KatanaCrawlerEngine {
           const currentUrl = tab?.url || '';
           if (!currentUrl || currentUrl === 'about:blank') return;
 
-          // If navigating from an existing page, make sure the completed tab is NOT the old URL
-          if (!isSamePageNav && initialUrl && initialUrl !== 'about:blank' && currentUrl === initialUrl) {
+          const currentCanonical = this.canonicalUrl(currentUrl);
+
+          // If navigating from an existing page to a different page, ensure it is not the old URL
+          if (!isSamePageNav && initialCanonical && currentCanonical === initialCanonical) {
             return;
           }
 
-          if (navStarted || currentUrl !== initialUrl) {
+          if (navStarted || isSamePageNav || (currentCanonical && currentCanonical !== initialCanonical)) {
             finish();
           }
         }
@@ -607,8 +612,24 @@ class KatanaCrawlerEngine {
 
       // Fast-poll document.readyState after giving Chrome initial time to begin navigation
       let pollTicks = 0;
+      let consecutiveErrors = 0;
+
       pollInterval = setInterval(async () => {
         pollTicks++;
+
+        // Fast-path: check chrome.tabs.get status directly
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          if (tab && tab.status === 'complete') {
+            const currentCanonical = this.canonicalUrl(tab.url);
+            if (currentCanonical && currentCanonical !== 'about:blank') {
+              if (isSamePageNav || navStarted || currentCanonical !== initialCanonical) {
+                finish();
+                return;
+              }
+            }
+          }
+        } catch {}
 
         try {
           const res = await chrome.scripting.executeScript({
@@ -621,19 +642,21 @@ class KatanaCrawlerEngine {
           const cur = res?.[0]?.result;
           if (!cur) return;
 
+          consecutiveErrors = 0;
+
           // Tab is still on about:blank or internal page; wait for target to load
           if (cur.href === 'about:blank' || cur.href.startsWith('chrome://')) {
             return;
           }
 
-          // If navigating from an existing page to a different page,
-          // we MUST wait until the tab has navigated away from initialUrl!
-          if (!isSamePageNav && initialUrl && initialUrl !== 'about:blank' && cur.href === initialUrl) {
-            return; // Browser is still on the previous page! Do not finish!
+          const curCanonical = this.canonicalUrl(cur.href);
+
+          // If navigating from an existing page to a different page, wait until left initialUrl
+          if (!isSamePageNav && initialCanonical && curCanonical === initialCanonical) {
+            return;
           }
 
-          // If navigating to the same URL, give at least 2 ticks for reload transition
-          if (isSamePageNav && !navStarted && pollTicks < 3) {
+          if (isSamePageNav && !navStarted && pollTicks < 2) {
             return;
           }
 
@@ -642,13 +665,17 @@ class KatanaCrawlerEngine {
             finish();
           }
         } catch {
-          // Script execution fails during navigation frame unloads/transitions
           navStarted = true;
+          consecutiveErrors++;
+          // If script execution fails consecutively after nav started, page may have frame/CSP restriction; finish cleanly
+          if (pollTicks > 6 && consecutiveErrors >= 3) {
+            finish();
+          }
         }
-      }, 200);
+      }, 150);
 
       // Max hard timeout: prevents hanging indefinitely on slow tracking pixels/ads
-      const maxWait = Math.min(Math.max(timeoutMs || 8000, 5000), 12000);
+      const maxWait = Math.min(Math.max(timeoutMs || 4000, 2000), 5000);
       timer = setTimeout(finish, maxWait);
     });
   }
@@ -681,16 +708,18 @@ class KatanaCrawlerEngine {
     // 1. CAPTCHA & Cloudflare Bot Challenge Detection (Checks for real blocking interstitials)
     const title = (document.title || '').toLowerCase();
     const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
+    const hasNormalContent = bodyText.length > 500 && !title.includes('just a moment') && !title.includes('attention required');
 
-    const isCloudflare = title.includes('just a moment') ||
-                         title.includes('attention required! | cloudflare') ||
-                         document.querySelector('#challenge-form') !== null ||
-                         document.querySelector('#cf-challenge-running') !== null ||
-                         document.querySelector('.cf-turnstile-wrapper') !== null ||
-                         (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')));
+    const isCloudflare = !hasNormalContent && (
+      title.includes('just a moment') ||
+      title.includes('attention required! | cloudflare') ||
+      document.querySelector('#cf-challenge-running') !== null ||
+      (document.querySelector('#challenge-form') !== null && (title.includes('moment') || bodyText.includes('challenge'))) ||
+      (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')))
+    );
 
     // Only flag true blocking challenge pages! NOT pages with invisible background reCAPTCHA widgets!
-    const isBlockingCaptcha = (
+    const isBlockingCaptcha = !hasNormalContent && (
       (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
       (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
     );
@@ -707,8 +736,12 @@ class KatanaCrawlerEngine {
 
     // 2. Extract DOM links (a, link, area, iframe, embed, object, audio, video, source)
     document.querySelectorAll('a[href], link[href], area[href], iframe[src], embed[src], object[data], source[src], video[src], audio[src]').forEach(el => {
+      // Browser-resolved absolute URL:
+      if (el.href && typeof el.href === 'string' && /^https?:\/\//i.test(el.href)) {
+        result.htmlLinks.push(el.href);
+      }
       const val = el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data');
-      if (val) result.htmlLinks.push(val);
+      if (val && !result.htmlLinks.includes(val)) result.htmlLinks.push(val);
     });
 
     // 3. Extract Script sources
@@ -808,6 +841,16 @@ class KatanaCrawlerEngine {
         navigatedRoutes: []
       };
 
+      // Neuter modal dialogs so clicking can NEVER freeze Chrome!
+      const origAlert = window.alert;
+      const origConfirm = window.confirm;
+      const origPrompt = window.prompt;
+      try {
+        window.alert = () => {};
+        window.confirm = () => false;
+        window.prompt = () => null;
+      } catch(e) {}
+
       const originalFetch = window.fetch;
       const originalXhrOpen = XMLHttpRequest.prototype.open;
       const originalPushState = history.pushState;
@@ -840,46 +883,24 @@ class KatanaCrawlerEngine {
         };
       } catch(e) {}
 
-      const destructiveRegex = /log\s*out|sign\s*out|delete|remove|destroy|trash|cancel\s*account/i;
-      const selectors = [
-        'button',
-        'input[type="button"]',
-        'input[type="submit"]',
-        '[role="button"]',
-        '[role="tab"]',
-        '[role="menuitem"]',
-        'a[href="#"]',
-        'a[href^="javascript:"]',
-        '.btn',
-        '.button',
-        '.tab',
-        '.nav-link'
-      ];
-
-      const elements = document.querySelectorAll(selectors.join(', '));
-      const candidates = [];
-
-      for (const el of elements) {
-        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-
-        const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
-        if (destructiveRegex.test(text)) continue;
-
-        candidates.push(el);
-        if (candidates.length >= maxClicks) break;
-      }
+      let isFinished = false;
+      let safetyTimer = null;
 
       function cleanup() {
+        if (isFinished) return;
+        isFinished = true;
         try {
+          if (safetyTimer) clearTimeout(safetyTimer);
+          window.alert = origAlert;
+          window.confirm = origConfirm;
+          window.prompt = origPrompt;
           window.fetch = originalFetch;
           XMLHttpRequest.prototype.open = originalXhrOpen;
           history.pushState = originalPushState;
           history.replaceState = originalReplaceState;
 
           document.querySelectorAll('a[href], link[href], form[action]').forEach(el => {
-            const val = el.getAttribute('href') || el.getAttribute('action');
+            const val = el.href || el.getAttribute('href') || el.getAttribute('action');
             if (val) clickedResults.newDomLinks.push(val);
           });
 
@@ -891,6 +912,47 @@ class KatanaCrawlerEngine {
         } catch(e) {}
       }
 
+      // Hard safety timer: exploration MUST finish within 1200ms no matter what!
+      safetyTimer = setTimeout(() => {
+        cleanup();
+        resolve(clickedResults);
+      }, 1200);
+
+      const destructiveRegex = /log\s*out|sign\s*out|delete|remove|destroy|trash|cancel\s*account|submit|checkout|buy|pay/i;
+      const selectors = [
+        'button:not([type="submit"])',
+        'input[type="button"]',
+        '[role="button"]',
+        '[role="tab"]',
+        '[role="menuitem"]',
+        'a[href="#"]',
+        'a[href^="javascript:"]',
+        '.btn:not([type="submit"])',
+        '.button:not([type="submit"])',
+        '.tab',
+        '.nav-link'
+      ];
+
+      let elements = [];
+      try {
+        elements = document.querySelectorAll(selectors.join(', '));
+      } catch(e) {}
+
+      const candidates = [];
+      for (const el of elements) {
+        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+        if (el.closest('form') && (el.type === 'submit' || el.tagName === 'BUTTON' && !el.type)) continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+
+        const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+        if (destructiveRegex.test(text)) continue;
+
+        candidates.push(el);
+        if (candidates.length >= maxClicks) break;
+      }
+
       if (candidates.length === 0) {
         cleanup();
         resolve(clickedResults);
@@ -899,6 +961,7 @@ class KatanaCrawlerEngine {
 
       let idx = 0;
       function clickNext() {
+        if (isFinished) return;
         if (idx >= candidates.length) {
           cleanup();
           resolve(clickedResults);
@@ -908,6 +971,10 @@ class KatanaCrawlerEngine {
         const el = candidates[idx++];
         try {
           clickedResults.clickedCount++;
+          // Prevent accidental hard navigation on test clicks
+          if (el.tagName === 'A' && el.getAttribute('href') && !el.getAttribute('href').startsWith('#')) {
+            el.addEventListener('click', (e) => e.preventDefault(), { capture: true, once: true });
+          }
           el.scrollIntoView({ behavior: 'instant', block: 'center' });
           el.click();
           el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
@@ -924,7 +991,21 @@ class KatanaCrawlerEngine {
    * Crawl a single target URL using the dedicated browser tab
    */
   async crawlItemSingleTab(item) {
-    const { url, seedUrl, depth, targetId } = item;
+    const pageTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Page crawl safety timeout on ${item.url}`)), 8500)
+    );
+    try {
+      await Promise.race([
+        this._executeCrawlItemSingleTab(item),
+        pageTimeout
+      ]);
+    } catch (err) {
+      this.log('wrn', `Notice on ${item.url}: ${err.message}`);
+    }
+  }
+
+  async _executeCrawlItemSingleTab(item) {
+    let { url, seedUrl, depth, targetId } = item;
     this.log('inf', `[Browser Tab] Navigating [Depth ${depth}]: ${url}`);
 
     if (targetId) {
@@ -937,7 +1018,7 @@ class KatanaCrawlerEngine {
     try {
       await this.navigateTabAndWait(tab.id, url, this.config.timeout);
     } catch (err) {
-      this.log('wrn', `Navigation failed for ${url}: ${err.message}`);
+      this.log('wrn', `Navigation notice for ${url}: ${err.message}`);
     }
 
     // 2. Wait for client-side JavaScript / Single-Page Apps (React, Next.js, Vue) to render
@@ -998,20 +1079,45 @@ class KatanaCrawlerEngine {
     const discoveredSupplyChain = [];
     const sourceMapUrlsToFetch = [];
 
-    // Probe origin manifests (.env, package.json, .npmrc, requirements.txt, etc.)
-    if (this.supplyChainScanner) {
+    // Automatically align seedUrl on depth 0 if the target seed redirected
+    let effectiveSeedUrl = seedUrl;
+    if (depth === 0 && effectivePageUrl) {
       try {
-        const probed = await this.supplyChainScanner.probeOriginManifests(effectivePageUrl, (u, opts) => this.fetchWithTimeout(u, opts));
-        if (probed && probed.length > 0) {
-          discoveredSupplyChain.push(...probed);
+        const effObj = new URL(effectivePageUrl);
+        const seedObj = new URL(seedUrl);
+        const effApex = this.getApexDomain(effObj.hostname).toLowerCase();
+        const seedApex = this.getApexDomain(seedObj.hostname).toLowerCase();
+        if (effApex && seedApex && effApex === seedApex) {
+          effectiveSeedUrl = effectivePageUrl;
+        }
+      } catch {}
+    }
+
+    // Probe origin manifests (.env, package.json, .npmrc, requirements.txt, etc.)
+    // Asynchronously non-blocking so crawler tab progresses at maximum speed!
+    if (this.supplyChainScanner && depth <= 1) {
+      this.supplyChainScanner.probeOriginManifests(effectivePageUrl, (u, opts) => this.fetchWithTimeout(u, opts))
+        .then(async (probed) => {
+          if (!probed || probed.length === 0) return;
+          const probeDiscovered = [];
+          const probeSecrets = [];
           for (const p of probed) {
-            if (p.url) discoveredInItem.push({ url: p.url, type: 'config', sourceUrl: effectivePageUrl });
+            if (p.url) probeDiscovered.push({ url: p.url, type: 'config', sourceUrl: effectivePageUrl, scope: 'in-scope', targetUrl: effectiveSeedUrl, depth });
             if (p.rawContent && this.secretScanner) {
-              discoveredSecrets.push(...this.secretScanner.scan(p.rawContent, p.url, 'config'));
+              probeSecrets.push(...this.secretScanner.scan(p.rawContent, p.url, 'config'));
             }
           }
-        }
-      } catch (e) {}
+          if (probeDiscovered.length > 0) {
+            await this.storage.addDiscoveredUrls(probeDiscovered);
+            if (this.onUrlFound) this.onUrlFound(probeDiscovered);
+          }
+          if (probeSecrets.length > 0 && this.secretScanner) {
+            await this.storage.saveSecrets(probeSecrets);
+            if (this.onSecretFound) this.onSecretFound(probeSecrets);
+          }
+          await this.storage.saveSupplyChainFindings(probed);
+          if (this.onSupplyChainFinding) this.onSupplyChainFinding(probed);
+        }).catch(() => {});
     }
 
     // Fallback: If in-tab DOM inspection returned null (e.g. extension permission denied on error page or CSP sandbox), fetch directly
@@ -1187,12 +1293,17 @@ class KatanaCrawlerEngine {
     // 5. Automated Button Clicking & Interactive DOM Exploration
     if (this.config.autoClickButtons) {
       try {
-        const clickResults = await chrome.scripting.executeScript({
+        const clickPromise = chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: KatanaCrawlerEngine.inTabClickExplorationScript,
           args: [this.config.maxButtonClicks || 10]
         });
 
+        const clickTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Button exploration timeout')), 1800)
+        );
+
+        const clickResults = await Promise.race([clickPromise, clickTimeout]);
         const clickData = clickResults?.[0]?.result;
         if (clickData) {
           let buttonUrlsCount = 0;
@@ -1229,7 +1340,7 @@ class KatanaCrawlerEngine {
           }
         }
       } catch (err) {
-        this.log('wrn', `Button exploration warning for ${url}: ${err.message}`);
+        this.log('wrn', `Button exploration notice for ${url}: ${err.message}`);
       }
     }
 
@@ -1347,9 +1458,9 @@ class KatanaCrawlerEngine {
       if (!canonical) continue;
       d.url = canonical;
 
-      const inScope = this.isInScope(canonical, seedUrl);
+      const inScope = this.isInScope(canonical, effectiveSeedUrl);
       d.scope = inScope ? 'in-scope' : 'out-of-scope';
-      d.targetUrl = seedUrl;
+      d.targetUrl = effectiveSeedUrl;
       d.depth = depth;
 
       // Deduplicate within the current crawl session
@@ -1371,7 +1482,7 @@ class KatanaCrawlerEngine {
           this.enqueuedUrls.add(canonical);
           this.queue.push({
             url: canonical,
-            seedUrl: seedUrl,
+            seedUrl: effectiveSeedUrl,
             depth: depth + 1,
             targetId: null
           });
@@ -1487,10 +1598,13 @@ class KatanaCrawlerEngine {
             func: () => {
               const title = (document.title || '').toLowerCase();
               const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
+              const hasNormalContent = bodyText.length > 500 && !title.includes('just a moment') && !title.includes('attention required');
+              if (hasNormalContent) return false;
+
               const isCf = title.includes('just a moment') ||
                            title.includes('attention required!') ||
-                           document.querySelector('#challenge-form') !== null ||
-                           document.querySelector('#cf-challenge-running') !== null;
+                           document.querySelector('#cf-challenge-running') !== null ||
+                           (document.querySelector('#challenge-form') !== null && title.includes('moment'));
               const isBlocking = isCf || (
                 (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
                 (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
@@ -1507,13 +1621,13 @@ class KatanaCrawlerEngine {
           // If execution fails, tab may have navigated to normal page
           finish();
         }
-      }, 2000);
+      }, 1500);
 
-      // Auto-resume after 45s safety timeout so crawler never hangs indefinitely
+      // Auto-resume after 15s safety timeout so crawler never hangs indefinitely
       safetyTimer = setTimeout(() => {
-        this.log('wrn', '[CAPTCHA] Resolution wait timed out after 45s. Automatically resuming crawl...');
+        this.log('wrn', '[CAPTCHA] Resolution wait timed out after 15s. Automatically resuming crawl...');
         finish();
-      }, 45000);
+      }, 15000);
 
       this.captchaResolver = finish;
     });
@@ -1838,4 +1952,10 @@ class KatanaCrawlerEngine {
 }
 
 // Global engine singleton
-window.katanaEngine = new KatanaCrawlerEngine(window.katanaStorage);
+if (typeof window !== 'undefined') {
+  window.KatanaCrawlerEngine = KatanaCrawlerEngine;
+  window.katanaEngine = new KatanaCrawlerEngine(window.katanaStorage);
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { KatanaCrawlerEngine };
+}

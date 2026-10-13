@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     { title: 'Secrets & Threat Findings', icon: '🗡️', shortcut: 'TAB 4', action: () => switchTab('tab-secrets') },
     { title: 'Supply Chain & Dependency Audit', icon: '📦', shortcut: 'TAB 5', action: () => switchTab('tab-supply-chain') },
     { title: 'Live Stream Terminal Feed', icon: '💻', shortcut: 'TAB 6', action: () => switchTab('tab-terminal') },
-    { title: 'Audit Active Tab (Supply Chain)', icon: '🔍', shortcut: 'AUDIT', action: () => { switchTab('tab-supply-chain'); scanActiveTabSupplyChain(); } },
+    { title: 'Audit Active Tab (Supply Chain)', icon: '🔍', shortcut: 'AUDIT', action: () => { switchTab('tab-supply-chain'); scanActiveTabSupplyChain(true); } },
     { title: 'Start / Resume Crawl Engine', icon: '▶️', shortcut: 'START', action: () => btnStart.click() },
     { title: 'Pause Crawl Session', icon: '⏸️', shortcut: 'PAUSE', action: () => btnPause.click() },
     { title: 'Stop Crawl Session', icon: '⏹️', shortcut: 'STOP', action: () => btnStop.click() },
@@ -2303,7 +2303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Bind Event Listeners for Supply Chain Tab
   if (btnScanActiveTab) {
-    btnScanActiveTab.addEventListener('click', () => scanActiveTabSupplyChain(false));
+    btnScanActiveTab.addEventListener('click', () => scanActiveTabSupplyChain(true));
   }
 
   if (btnSupplyRescan) {

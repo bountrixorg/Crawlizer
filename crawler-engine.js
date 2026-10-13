@@ -573,6 +573,7 @@ class KatanaCrawlerEngine {
       }
 
       let navStarted = false;
+      const isSamePageNav = Boolean(initialUrl && initialUrl !== 'about:blank' && initialUrl === url);
 
       onUpdatedListener = (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
@@ -583,7 +584,14 @@ class KatanaCrawlerEngine {
 
         if (changeInfo.status === 'complete') {
           const currentUrl = tab?.url || '';
-          if (currentUrl && currentUrl !== 'about:blank') {
+          if (!currentUrl || currentUrl === 'about:blank') return;
+
+          // If navigating from an existing page, make sure the completed tab is NOT the old URL
+          if (!isSamePageNav && initialUrl && initialUrl !== 'about:blank' && currentUrl === initialUrl) {
+            return;
+          }
+
+          if (navStarted || currentUrl !== initialUrl) {
             finish();
           }
         }
@@ -601,8 +609,6 @@ class KatanaCrawlerEngine {
       let pollTicks = 0;
       pollInterval = setInterval(async () => {
         pollTicks++;
-        // Allow brief interval for initial navigation trigger
-        if (pollTicks < 2) return;
 
         try {
           const res = await chrome.scripting.executeScript({
@@ -620,12 +626,18 @@ class KatanaCrawlerEngine {
             return;
           }
 
-          // If still on the old URL before navigation started, wait
-          if (initialUrl && initialUrl !== 'about:blank' && cur.href === initialUrl && !navStarted) {
+          // If navigating from an existing page to a different page,
+          // we MUST wait until the tab has navigated away from initialUrl!
+          if (!isSamePageNav && initialUrl && initialUrl !== 'about:blank' && cur.href === initialUrl) {
+            return; // Browser is still on the previous page! Do not finish!
+          }
+
+          // If navigating to the same URL, give at least 2 ticks for reload transition
+          if (isSamePageNav && !navStarted && pollTicks < 3) {
             return;
           }
 
-          // DOM is interactive or complete
+          // DOM is interactive or complete on the new page!
           if (cur.state === 'interactive' || cur.state === 'complete') {
             finish();
           }
@@ -1351,10 +1363,8 @@ class KatanaCrawlerEngine {
       // Enqueue in-scope links for further depth:
       // CRITICAL: Only enqueue NAVIGABLE pages in the single tab (NOT raw .js, .css, or media files!)
       // This loads actual HTML pages, web endpoints, and subdomains in the tab to find the maximum possible URLs!
-      const canOpenInTab = (this.config.openFoundUrlsInTab !== false);
       if (inScope &&
           depth < this.config.maxDepth &&
-          canOpenInTab &&
           this.isNavigableInTab(canonical)) {
 
         if (!this.visitedUrls.has(canonical) && !this.enqueuedUrls.has(canonical)) {

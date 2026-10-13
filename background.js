@@ -123,37 +123,21 @@ class BackgroundState {
 const state = new BackgroundState();
 
 // ============================================================================
-// BADGE MANAGEMENT
+// BADGE MANAGEMENT (Icon badge numbers disabled)
 // ============================================================================
 
 class BadgeManager {
   static async updateBadge(tabId, riskCount) {
-    try {
-      if (riskCount > 0) {
-        const color = this.getRiskColor(riskCount);
-        const text = riskCount > 99 ? '99+' : riskCount.toString();
-        await chrome.action.setBadgeText({ text, tabId });
-        await chrome.action.setBadgeBackgroundColor({ color, tabId });
-      } else {
-        await chrome.action.setBadgeText({ text: '', tabId });
-      }
-    } catch (error) {
-      console.error('Failed to update badge:', error);
-    }
-  }
-
-  static getRiskColor(count) {
-    if (count >= 5) return '#ff0055';
-    if (count >= 3) return '#ffaa00';
-    if (count >= 1) return '#00f0ff';
-    return '#00ff88';
+    // Disabled: No badge text or numbers on icon
   }
 
   static async clearBadge(tabId) {
     try {
-      await chrome.action.setBadgeText({ text: '', tabId });
+      if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setBadgeText) {
+        await chrome.action.setBadgeText({ text: '', tabId });
+      }
     } catch (error) {
-      console.error('Failed to clear badge:', error);
+      // ignore
     }
   }
 }
@@ -231,11 +215,14 @@ class OsvChecker {
     for (const v of vulns) {
       if (!v || !v.id) continue;
       const severity = this.pickSeverity(v);
+      const aliases = Array.isArray(v.aliases) ? v.aliases.map(String) : [];
+      const cveAlias = aliases.find(a => a.startsWith('CVE-')) || null;
       advisories.push({
         id: String(v.id),
+        cveId: cveAlias || String(v.id),
         summary: String(v.summary || v.details || '').slice(0, 240),
         severity,
-        aliases: Array.isArray(v.aliases) ? v.aliases.map(String) : [],
+        aliases,
         published: v.published || null,
         modified: v.modified || null
       });
@@ -264,6 +251,7 @@ class OsvChecker {
     const db = v.database_specific && v.database_specific.severity;
     if (typeof db === 'string') {
       const upper = db.toUpperCase();
+      if (upper === 'MODERATE') return 'MEDIUM';
       if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(upper)) return upper;
     }
 

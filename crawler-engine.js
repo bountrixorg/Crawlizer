@@ -125,7 +125,7 @@ function katanaInTabExtractionScript() {
         if (content.length > 5 && content.length < 500000) {
           const type = (script.getAttribute('type') || '').toLowerCase();
           const id = (script.id || '').toLowerCase();
-          if (type.includes('json') || id.includes('next') || id.includes('nuxt')) {
+          if (type.includes('json') || type === 'importmap' || id.includes('next') || id.includes('nuxt')) {
             result.jsonBlobs.push(content);
           } else {
             result.inlineScripts.push(content);
@@ -1143,32 +1143,7 @@ class KatanaCrawlerEngine {
       } catch {}
     }
 
-    // Probe origin manifests (.env, package.json, .npmrc, requirements.txt, etc.)
-    // Asynchronously non-blocking so crawler tab progresses at maximum speed!
-    if (this.supplyChainScanner && depth <= 1) {
-      this.supplyChainScanner.probeOriginManifests(effectivePageUrl, (u, opts) => this.fetchWithTimeout(u, opts))
-        .then(async (probed) => {
-          if (!probed || probed.length === 0) return;
-          const probeDiscovered = [];
-          const probeSecrets = [];
-          for (const p of probed) {
-            if (p.url) probeDiscovered.push({ url: p.url, type: 'config', sourceUrl: effectivePageUrl, scope: 'in-scope', targetUrl: effectiveSeedUrl, depth });
-            if (p.rawContent && this.secretScanner) {
-              probeSecrets.push(...this.secretScanner.scan(p.rawContent, p.url, 'config'));
-            }
-          }
-          if (probeDiscovered.length > 0) {
-            await this.storage.addDiscoveredUrls(probeDiscovered);
-            if (this.onUrlFound) this.onUrlFound(probeDiscovered);
-          }
-          if (probeSecrets.length > 0 && this.secretScanner) {
-            await this.storage.saveSecrets(probeSecrets);
-            if (this.onSecretFound) this.onSecretFound(probeSecrets);
-          }
-          await this.storage.saveSupplyChainFindings(probed);
-          if (this.onSupplyChainFinding) this.onSupplyChainFinding(probed);
-        }).catch(() => {});
-    }
+
 
     // Fallback: If in-tab DOM inspection returned null (e.g. extension permission denied on error page or CSP sandbox), fetch directly
     if (!tabData) {

@@ -1878,7 +1878,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     refreshSupplyChainTable();
   }
 
-  // Active Tab Audit
+  // Active Tab Audit (Pattern-based inspection matching secrets finder)
   async function scanActiveTabSupplyChain(forceRescan = false) {
     if (supplyStatusTag) {
       supplyStatusTag.textContent = 'SCANNING...';
@@ -1886,8 +1886,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (supplyProgressWrap) {
       supplyProgressWrap.style.display = 'flex';
-      if (supplyProgressFill) supplyProgressFill.style.width = '15%';
-      if (supplyProgressText) supplyProgressText.textContent = forceRescan ? 'Triggering full rescan on active tab...' : 'Locating active web tab & querying scanner...';
+      if (supplyProgressFill) supplyProgressFill.style.width = '20%';
+      if (supplyProgressText) supplyProgressText.textContent = 'Inspecting active tab DOM & scripts...';
     }
 
     try {
@@ -1897,7 +1897,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // If active tab is the dashboard itself or restricted, find a legitimate target web tab!
       if (!tab || restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
-        // 1. Check if crawler engine has a live dedicated browser tab
         if (engine && engine.crawlerTabId) {
           try {
             const cTab = await chrome.tabs.get(engine.crawlerTabId);
@@ -1907,7 +1906,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           } catch {}
         }
 
-        // 2. Query all open tabs across windows to find any active or recent web target (http: or https:)
         if (!tab || restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
           const allTabs = await chrome.tabs.query({});
           const webTabs = allTabs.filter(t => t.url && /^https?:\/\//i.test(t.url));
@@ -1928,126 +1926,130 @@ document.addEventListener('DOMContentLoaded', async () => {
       supplyState.targetUrl = tab.url || 'unknown';
       if (supplyTargetUrl) supplyTargetUrl.textContent = tab.url || '—';
 
-      // Check content script connection or execute script dynamically
-      let response = null;
-      try {
-        response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'startScan' });
-      } catch (err) {
-        // Content script might not be injected yet if page was loaded prior to extension reload.
-        if (chrome.scripting && chrome.scripting.executeScript) {
-          if (supplyProgressText) supplyProgressText.textContent = 'Injecting scanner into page...';
-          try {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['content.js']
-            });
-            // Wait 600ms for init
-            await new Promise(r => setTimeout(r, 600));
-            response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'startScan' });
-          } catch (injectErr) {
-            console.warn('Script injection failed:', injectErr);
+      // Standalone tab extraction function (runs in tab context)
+      function inTabDomExtractor() {
+        const scripts = [];
+        document.querySelectorAll('script').forEach(el => {
+          scripts.push({
+            src: el.src || el.getAttribute('src') || '',
+            content: el.textContent || '',
+            type: (el.getAttribute('type') || '').toLowerCase()
+          });
+        });
+        return {
+          url: window.location.href,
+          html: document.documentElement ? document.documentElement.outerHTML.slice(0, 2000000) : '',
+          scripts
+        };
+      }
+
+      let extractedData = null;
+      if (chrome.scripting && chrome.scripting.executeScript) {
+        try {
+          const res = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: inTabDomExtractor
+          });
+          if (res && res[0] && res[0].result) {
+            extractedData = res[0].result;
           }
+        } catch (e) {
+          console.warn('Direct tab script execution failed:', e);
         }
       }
 
-      // If still no direct response, check background state cache
-      if (!response) {
-        const bgResult = await chrome.runtime.sendMessage({ action: 'getResults', tabId: tab.id });
-        if (bgResult && (bgResult.suspiciousPackages?.length || bgResult.exposedFiles?.length)) {
-          supplyState.packages = bgResult.suspiciousPackages || [];
-          supplyState.exposedFiles = bgResult.exposedFiles || [];
-          finishSupplyAudit(true);
-          return;
+      // Fallback: fetch page directly if tab script execution was blocked
+      if (!extractedData) {
+        try {
+          const pageRes = await fetch(tab.url);
+          if (pageRes.ok) {
+            extractedData = {
+              url: tab.url,
+              html: await pageRes.text(),
+              scripts: []
+            };
+          }
+        } catch (e) {}
+      }
+
+      if (!extractedData) {
+        throw new Error('Unable to inspect page content in active tab.');
+      }
+
+      if (supplyProgressFill) supplyProgressFill.style.width = '45%';
+      if (supplyProgressText) supplyProgressText.textContent = 'Pattern scanning packages & dependencies...';
+
+      const scanner = window.katanaSupplyChainScanner || (typeof KatanaSupplyChainScanner !== 'undefined' ? new KatanaSupplyChainScanner() : null);
+      if (!scanner) {
+        throw new Error('KatanaSupplyChainScanner engine not loaded.');
+      }
+
+      const allDiscovered = [];
+
+      // 1. Scan page HTML
+      if (extractedData.html) {
+        allDiscovered.push(...scanner.scan(extractedData.html, extractedData.url, 'html'));
+      }
+
+      // 2. Scan inline scripts & JSON blobs
+      const scriptsToFetch = [];
+      for (const s of extractedData.scripts || []) {
+        if (s.content) {
+          const sType = s.type.includes('json') || s.type === 'importmap' ? 'json' : 'rendered-js';
+          allDiscovered.push(...scanner.scan(s.content, extractedData.url, sType));
+        }
+        if (s.src && /^https?:\/\//i.test(s.src)) {
+          // Scan script URL itself for CDN packages (jsdelivr, unpkg, cdnjs, etc.)
+          allDiscovered.push(...scanner.scan(s.src, s.src, 'cdn-url'));
+          scriptsToFetch.push(s.src);
         }
       }
 
-      if (response) {
-        handleSupplyScanResponse(response);
-        if (response.scanning || (!response.complete && !response.packages?.length)) {
-          startPollingTabStatus(tab.id);
-        } else {
-          finishSupplyAudit(true);
-        }
-      } else {
-        let domainLabel = tab.url;
-        try { domainLabel = new URL(tab.url).hostname; } catch {}
-        if (supplyStatusTag) { supplyStatusTag.textContent = 'SCANNING'; supplyStatusTag.className = 'supply-status-tag active'; }
-        if (supplyProgressText) supplyProgressText.textContent = `Connected to ${domainLabel}. Auditing page dependencies...`;
-        startPollingTabStatus(tab.id);
+      // 3. Fast-fetch top external JS scripts (up to 12) for deep package extraction
+      if (scriptsToFetch.length > 0) {
+        if (supplyProgressFill) supplyProgressFill.style.width = '65%';
+        if (supplyProgressText) supplyProgressText.textContent = `Scanning ${Math.min(12, scriptsToFetch.length)} external bundles...`;
+
+        const scriptsSample = scriptsToFetch.slice(0, 12);
+        await Promise.allSettled(scriptsSample.map(async (scriptUrl) => {
+          try {
+            const resp = await fetch(scriptUrl);
+            if (resp && resp.ok) {
+              const jsContent = await resp.text();
+              allDiscovered.push(...scanner.scan(jsContent, scriptUrl, 'js-bundle'));
+            }
+          } catch (e) {}
+        }));
       }
+
+      if (supplyProgressFill) supplyProgressFill.style.width = '85%';
+      if (supplyProgressText) supplyProgressText.textContent = 'Querying OSV.dev CVE advisories & registries...';
+
+      // Save initial pattern discoveries immediately
+      if (allDiscovered.length > 0) {
+        await storage.saveSupplyChainFindings(allDiscovered);
+        await refreshSupplyChainTable();
+      }
+
+      // 4. Background evaluate OSV CVE advisories & dependency confusion
+      scanner.queueForEvaluation(allDiscovered, async (evaluated) => {
+        if (!evaluated) return;
+        await storage.saveSupplyChainFindings([evaluated]);
+        debouncedRefreshSupplyChain();
+      });
+
+      // Update UI state
+      supplyState.packages = allDiscovered.filter(f => f.type === 'package');
+      supplyState.exposedFiles = allDiscovered.filter(f => f.type === 'exposed-file');
+      updateSupplyStatsUI();
+      renderSupplyTable();
+
+      finishSupplyAudit(true);
     } catch (e) {
       console.error('scanActiveTabSupplyChain error:', e);
       if (supplyStatusTag) { supplyStatusTag.textContent = 'ERROR'; supplyStatusTag.className = 'supply-status-tag threat'; }
       if (supplyProgressText) supplyProgressText.textContent = `Audit error: ${e.message}`;
     }
-  }
-
-  async function handleSupplyScanResponse(response) {
-    if (!response) return;
-
-    if (response.url && supplyTargetUrl) {
-      supplyState.targetUrl = response.url;
-      supplyTargetUrl.textContent = response.url;
-    }
-
-    if (Array.isArray(response.packages)) {
-      supplyState.packages = response.packages;
-    }
-
-    if (Array.isArray(response.exposedFiles)) {
-      supplyState.exposedFiles = response.exposedFiles;
-    }
-
-    if (response.stage) {
-      const rawProg = response.stage.progress || 0;
-      const pct = rawProg <= 1 ? Math.round(rawProg * 100) : Math.round(rawProg);
-      const safePct = Math.max(5, Math.min(100, pct));
-      if (supplyProgressFill) supplyProgressFill.style.width = `${safePct}%`;
-      if (supplyProgressText) supplyProgressText.textContent = response.stage.text || 'Auditing dependencies...';
-    }
-
-    const itemsToSave = [
-      ...(response.packages || []).map(p => ({ ...p, type: 'package' })),
-      ...(response.exposedFiles || []).map(f => ({ ...f, type: 'exposed-file' }))
-    ];
-    if (itemsToSave.length > 0) {
-      try {
-        await storage.saveSupplyChainFindings(itemsToSave);
-      } catch (err) {}
-    }
-
-    updateSupplyStatsUI();
-    renderSupplyTable();
-  }
-
-  function startPollingTabStatus(tabId) {
-    clearInterval(supplyState.pollTimer);
-    supplyState.pollAttempts = 0;
-
-    supplyState.pollTimer = setInterval(async () => {
-      supplyState.pollAttempts++;
-      try {
-        const res = await chrome.tabs.sendMessage(tabId, { action: 'getScanStatus' });
-        if (res) {
-          handleSupplyScanResponse(res);
-          if (res.complete || (!res.scanning && res.packages?.length > 0)) {
-            clearInterval(supplyState.pollTimer);
-            finishSupplyAudit(true);
-          }
-        }
-      } catch (err) {
-        // Tab closed or script unloaded
-        if (supplyState.pollAttempts > 15) {
-          clearInterval(supplyState.pollTimer);
-          finishSupplyAudit(false);
-        }
-      }
-
-      if (supplyState.pollAttempts > 30) {
-        clearInterval(supplyState.pollTimer);
-        finishSupplyAudit(false);
-      }
-    }, 1200);
   }
 
   function finishSupplyAudit(isSuccess) {

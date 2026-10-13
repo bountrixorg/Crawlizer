@@ -1,59 +1,108 @@
 /**
- * Katana Supply Chain Scanner - Ultra-High-Speed In-Stream Dependency & Threat Detection Engine
- * Scans Raw HTML, Rendered DOM, External JS Bundles, CSS, Inline Scripts, JSON Blobs, and Source Maps
- * at the exact same time as Katana Secret Scanner.
- * 
- * Extracts npm, PyPI, Packagist, Cargo, and Go packages, checks dependency confusion risks,
- * probes exposed root manifests (.env, package.json, .npmrc), and queries OSV CVEs in the background.
+ * Katana Supply Chain Scanner - Pattern-Based Multi-Ecosystem Dependency & Vulnerability Engine
+ * Scans HTML, DOM Scripts, JS Bundles, CSS, JSON Manifests, and Source Maps for package references.
+ * Pattern-based architecture matching KatanaSecretScanner with integrated OSV.dev CVE advisories
+ * and dependency confusion detection.
  */
 
 // ============================================================================
-// PRE-COMPILED ULTRA-FAST REGEX ENGINE
+// LRU CACHE UTILITY
+// ============================================================================
+class SupplyChainLRUCache {
+  constructor(maxSize = 512) {
+    this.maxSize = Math.max(1, Number(maxSize) || 512);
+    this.map = new Map();
+  }
+
+  get(key) {
+    if (!this.map.has(key)) return undefined;
+    const value = this.map.get(key);
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    if (this.map.has(key)) this.map.delete(key);
+    this.map.set(key, value);
+    while (this.map.size > this.maxSize) {
+      const oldestKey = this.map.keys().next().value;
+      this.map.delete(oldestKey);
+    }
+  }
+
+  has(key) {
+    return this.map.has(key);
+  }
+
+  clear() {
+    this.map.clear();
+  }
+}
+
+// ============================================================================
+// PATTERN RULES & DICTIONARIES
 // ============================================================================
 
-// 1. Unified Imports & Requires: ES6 import, dynamic import, CommonJS require, export from, AMD, Webpack, SystemJS
-const RX_IMPORT_REQUIRE = /(?:(?:import|export)\s+(?:[\w*\s{},$]+\s+from\s+)?|require\s*(?:\.resolve)?\s*\(\s*|import\s*\(\s*|__webpack_require__\s*\(\s*|System\.import\s*\(\s*|define\s*\(\s*\[\s*|require\.ensure\s*\(\s*\[\s*)['"](@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)['"]/g;
+// Node.js standard built-in modules to ignore
+const NODE_BUILTINS = new Set([
+  'assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console',
+  'constants', 'crypto', 'dgram', 'diagnostics_channel', 'dns', 'domain',
+  'events', 'fs', 'fs/promises', 'http', 'http2', 'https', 'inspector',
+  'module', 'net', 'os', 'path', 'path/posix', 'path/win32', 'perf_hooks',
+  'process', 'punycode', 'querystring', 'readline', 'repl', 'stream',
+  'stream/promises', 'stream/consumers', 'stream/web', 'string_decoder',
+  'sys', 'timers', 'timers/promises', 'tls', 'trace_events', 'tty',
+  'url', 'util', 'util/types', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib'
+]);
 
-// 2. Webpack / Bundler node_modules chunks & chunk paths
-const RX_NODE_MODULES = /(?:node_modules|\/node_modules\/|(?<=\/)~[a-zA-Z0-9_.\-]+\/)\/(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)/g;
+// Relative path prefixes and framework aliases to ignore
+const LOCAL_PATH_PREFIXES = [
+  './', '../', '/', '\\', '@/', '~/', '~~/'
+];
 
-// 3. Public CDNs (unpkg, jsdelivr, esm.sh, skypack)
-const RX_CDN = /(?:cdn\.jsdelivr\.net\/npm\/|unpkg\.com\/|esm\.sh\/|cdn\.skypack\.dev\/)(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)(?:@([0-9a-zA-Z._\-]+))?/g;
+// Common internal root directory names
+const INTERNAL_ROOTS = new Set([
+  'src', 'app', 'apps', 'components', 'component', 'pages', 'layouts', 'views',
+  'hooks', 'utils', 'lib', 'libs', 'services', 'service', 'store', 'stores',
+  'state', 'modules', 'assets', 'styles', 'css', 'scss', 'sass', 'less',
+  'images', 'img', 'fonts', 'locales', 'i18n', 'types', 'constants',
+  'config', 'configs', 'public', 'static', 'fixtures', 'tests', '__tests__'
+]);
 
-// 4. cdnjs.cloudflare.com
-const RX_CDNJS = /cdnjs\.cloudflare\.com\/ajax\/libs\/([a-zA-Z0-9_.\-]+)(?:\/([0-9a-zA-Z._\-]+))?/g;
-
-// 5. Python / PyPI requirements.txt
-const RX_PYTHON_REQ = /^([a-zA-Z0-9_\-]+)\s*(?:==|>=|<=|~=|!=)\s*([0-9a-zA-Z._\-]+)/gm;
-
-// 6. PHP Composer.json dependencies
-const RX_COMPOSER = /"([a-zA-Z0-9_\-]+\/[a-zA-Z0-9_\-]+)"\s*:\s*"[^"]+"/g;
-
-// 7. Rust Cargo.toml dependencies
-const RX_CARGO = /^\s*([a-zA-Z0-9_\-]+)\s*=\s*(?:\{[^}]*version\s*=\s*|)['"]([0-9a-zA-Z._\-]+)/gm;
-
-// 8. Go go.mod dependencies
-const RX_GOMOD = /^\s*([a-zA-Z0-9_.\-\/]+)\s+v([0-9a-zA-Z._\-]+)/gm;
-
-// 9. Exposed sensitive configuration file paths in HTML / JS code
-const RX_CONFIG_PATHS = /['"](\/(?:package\.json|package-lock\.json|\.npmrc|\.yarnrc|\.env|\.env\.local|\.env\.development|\.env\.production|requirements\.txt|Pipfile|composer\.json|go\.mod|Cargo\.toml))['"]/gi;
-
-// 10. Fast sourcemap node_modules pattern (extracts package directly from sourcemap sources paths)
-const RX_MAP_NODE_MODULES = /(?:(?:webpack:\/\/\/|\/|^)node_modules\/)(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)/g;
+// Internal module patterns that are sub-components of parent packages
+const INTERNAL_MODULE_PATTERNS = [
+  { parent: 'prismjs', pattern: /^prism-[a-z]+$/ },
+  { parent: 'highlight.js', pattern: /^highlight\.js\/lib\/languages\// },
+  { parent: 'monaco-editor', pattern: /^monaco-editor\/esm\// },
+  { parent: 'codemirror', pattern: /^codemirror\/(?:mode|addon)\// },
+  { parent: 'ace-builds', pattern: /^ace\/(?:mode|theme)\// },
+  { parent: '@babel/runtime', pattern: /^@babel\/runtime\/(?:helpers|core-js|regenerator)/ },
+  { parent: 'rxjs', pattern: /^rxjs\/(?:internal|operators|testing|ajax|fetch|webSocket|dist)/ },
+  { parent: 'swiper', pattern: /^swiper\/(?:components|modules|core|shared|element|vue)/ },
+  { parent: 'lodash', pattern: /^lodash\/[a-zA-Z0-9_]+$/ },
+  { parent: 'lodash-es', pattern: /^lodash-es\/.+$/ },
+  { parent: 'antd', pattern: /^antd\/(?:es|lib|dist)\// },
+  { parent: '@mui/material', pattern: /^@mui\/material\/(?:styles|colors|utils|internal|esm|lab)/ },
+  { parent: '@mui/system', pattern: /^@mui\/system\/(?:styles|colors|utils|esm)/ },
+  { parent: 'date-fns', pattern: /^date-fns\/(?:locale|esm)/ },
+  { parent: 'vue', pattern: /^vue\/(?:dist|esm|server|shared|compiler-sfc)/ },
+  { parent: 'react-dom', pattern: /^react-dom\/(?:client|server|test-utils)/ }
+];
 
 // Fast keyword filter: if text does not contain ANY of these substrings, skip scanning in 0.01ms!
 const FAST_SCAN_KEYWORDS = [
   'import', 'require', 'node_modules', 'dependencies', 'devDependencies',
   'unpkg', 'jsdelivr', 'cdnjs', 'esm.sh', 'skypack',
-  'sources', 'requirements.txt', 'package.json', 'composer.json', 'go.mod', 'Cargo.toml',
-  '.npmrc', '.env'
+  'requirements.txt', 'package.json', 'composer.json', 'go.mod', 'Cargo.toml',
+  'pom.xml', 'build.gradle', 'packages.config', '.npmrc', '.env'
 ];
 
 class KatanaSupplyChainScanner {
   constructor() {
-    this.evaluatedCache = new Map(); // key -> evaluated record
+    this.evaluatedCache = new SupplyChainLRUCache(512); // key -> evaluated record
     this.pendingQueries = new Map(); // key -> Promise
-    this.probedOrigins = new Set();  // Set of apex origins probed
+    this.nodeBuiltins = NODE_BUILTINS;
 
     // Background evaluation queue
     this.evalQueue = [];
@@ -61,45 +110,73 @@ class KatanaSupplyChainScanner {
     this.maxConcurrentEval = 6;
     this.activeEvalCount = 0;
 
-    // Node.js standard built-in modules
-    this.nodeBuiltins = new Set([
-      'assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console',
-      'constants', 'crypto', 'dgram', 'diagnostics_channel', 'dns', 'domain',
-      'events', 'fs', 'fs/promises', 'http', 'http2', 'https', 'inspector',
-      'module', 'net', 'os', 'path', 'path/posix', 'path/win32', 'perf_hooks',
-      'process', 'punycode', 'querystring', 'readline', 'repl', 'stream',
-      'stream/promises', 'stream/consumers', 'stream/web', 'string_decoder',
-      'sys', 'timers', 'timers/promises', 'tls', 'trace_events', 'tty',
-      'url', 'util', 'util/types', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib'
-    ]);
+    // Precompile regex patterns once
+    this.compilePatterns();
+  }
 
-    // Local / relative path prefixes and framework aliases to ignore
-    this.localPrefixes = [
-      './', '../', '/', '\\', '@/', '~/', '~~/',
-      'src/', 'app/', 'pages/', 'components/', 'assets/', 'lib/', 'utils/',
-      'hooks/', 'styles/', 'types/', 'config/', 'public/', 'modules/'
-    ];
+  compilePatterns() {
+    // 1. CommonJS require: require('pkg') or require("pkg/subpath")
+    this.rxRequire = /(?<!@)\brequire\s*(?:\.resolve)?\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-    // Apex origin manifest & config probe paths
-    this.manifestProbePaths = [
-      '/package.json',
-      '/package-lock.json',
-      '/.npmrc',
-      '/.env',
-      '/.env.local',
-      '/requirements.txt',
-      '/yarn.lock',
-      '/composer.json',
-      '/Cargo.toml',
-      '/go.mod'
-    ];
+    // 2. ES6 static import: import ... from 'pkg'
+    this.rxImportFrom = /(?<!@)\bimport\s+(?!type\b)(?:[\w*\s{},$]+\s+from\s+)?['"]([^'"]+)['"]/g;
+
+    // 3. Dynamic import: import('pkg')
+    this.rxDynamicImport = /(?<!@)\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+    // 4. ES6 export from: export ... from 'pkg'
+    this.rxExportFrom = /(?<!@)\bexport\s+(?!type\b)(?:[\w*\s{},$]+\s+from\s+)['"]([^'"]+)['"]/g;
+
+    // 5. AMD / RequireJS: define(['pkg', 'pkg2'], ...)
+    this.rxAmdDefine = /(?<!@)\bdefine\s*\(\s*(?:['"][^'"]*['"]\s*,\s*)?\[\s*([^\]]+)\]/g;
+
+    // 6. Webpack runtime: __webpack_require__('pkg') or require.ensure(['pkg'], ...)
+    this.rxWebpack = /(?<!@)(?:__webpack_require__\s*\(|require\.ensure\s*\(\s*\[)\s*['"]([^'"]+)['"]/g;
+
+    // 7. SystemJS: System.import('pkg')
+    this.rxSystemJs = /(?<!@)\bSystem\.import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+    // 8. Public CDNs (unpkg, jsdelivr, esm.sh, skypack)
+    this.rxCdn = /(?:cdn\.jsdelivr\.net\/npm\/|unpkg\.com\/|esm\.sh\/|cdn\.skypack\.dev\/)(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)(?:@([0-9a-zA-Z._\-]+))?/g;
+
+    // 9. cdnjs.cloudflare.com: cdnjs.cloudflare.com/ajax/libs/<pkg>/[version]
+    this.rxCdnjs = /cdnjs\.cloudflare\.com\/ajax\/libs\/([a-zA-Z0-9_.\-]+)(?:\/([0-9a-zA-Z._\-]+))?/g;
+
+    // 10. Sourcemap node_modules paths
+    this.rxSourceMapModules = /(?:webpack:\/\/\/|\/|^)(?:node_modules|\/~\/)\/(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)/g;
+
+    // 11. Python / PyPI requirements.txt format
+    this.rxPythonReq = /^([a-zA-Z0-9_\-]+)\s*(?:==|>=|<=|~=|!=)\s*([0-9a-zA-Z._\-]+)/gm;
+
+    // 12. PHP composer.json dependency line
+    this.rxComposer = /"([a-zA-Z0-9_\-]+\/[a-zA-Z0-9_\-]+)"\s*:\s*"([^"]+)"/g;
+
+    // 13. Rust Cargo.toml dependency line
+    this.rxCargo = /^\s*([a-zA-Z0-9_\-]+)\s*=\s*(?:\{[^}]*version\s*=\s*|)['"]([0-9a-zA-Z._\-]+)/gm;
+
+    // 14. Go go.mod dependency line
+    this.rxGoMod = /^\s*(?:require\s+)?([a-zA-Z0-9_.\-\/]+)\s+v([0-9a-zA-Z._\-]+)/gm;
+
+    // 15. Java Maven / Gradle dependencies
+    this.rxMavenDep = /<dependency>[\s\S]*?<groupId>([^<]+)<\/groupId>[\s\S]*?<artifactId>([^<]+)<\/artifactId>(?:[\s\S]*?<version>([^<]+)<\/version>)?[\s\S]*?<\/dependency>/gi;
+    this.rxGradleDep = /(?:implementation|api|compile)\s*['"]([a-zA-Z0-9_.-]+):([a-zA-Z0-9_.-]+)(?::([a-zA-Z0-9_.-]+))?['"]/g;
+
+    // 16. .NET NuGet package references
+    this.rxNuget = /(?:<PackageReference\s+Include="([^"]+)"(?:\s+Version="([^"]+)")?|<package\s+id="([^"]+)"(?:\s+version="([^"]+)")?)/gi;
+
+    // 17. Exposed config / manifest paths referenced in code
+    this.rxConfigPaths = /['"](\/(?:package\.json|package-lock\.json|\.npmrc|\.yarnrc|\.env|\.env\.[a-z]+|requirements\.txt|Pipfile|composer\.json|go\.mod|Cargo\.toml|pom\.xml))['"]/gi;
   }
 
   /**
-   * Fast-path check: does the text contain any dependency or supply chain keywords?
+   * Fast keyword check: skip non-code/plain text blobs in 0.01ms
    */
-  hasRelevantKeywords(text) {
+  hasRelevantKeywords(text, sourceUrl = '') {
     if (!text || typeof text !== 'string') return false;
+    const lowerUrl = (sourceUrl || '').toLowerCase();
+    if (/(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|pipfile|gemfile|composer\.json|go\.mod|cargo\.toml|pom\.xml|build\.gradle|packages\.config|\.env)$/i.test(lowerUrl)) {
+      return true;
+    }
     for (let i = 0; i < FAST_SCAN_KEYWORDS.length; i++) {
       if (text.includes(FAST_SCAN_KEYWORDS[i])) return true;
     }
@@ -107,78 +184,147 @@ class KatanaSupplyChainScanner {
   }
 
   /**
-   * Fast synchronous scan of code / HTML / bundle / sourcemap text to extract referenced packages
-   * Runs in microseconds at the exact same time as Katana Secret Scanner.
+   * Strips comments and TypeScript type declarations before matching
    */
-  scan(text, sourceUrl, sourceType = 'js-bundle') {
-    if (!text || typeof text !== 'string' || text.length < 5) return [];
+  stripNonCode(content) {
+    if (!content || typeof content !== 'string') return '';
+    return content
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/(?:^|[\s;])import\s+type\s+[^;]*?from\s+['"][^'"]+['"]\s*;?/g, '')
+      .replace(/(?:^|[\s;])export\s+type\s+[^;]*?from\s+['"][^'"]+['"]\s*;?/g, '');
+  }
 
-    // Ultra-fast keyword fast-path: skip irrelevant non-code blobs in 0.01ms
-    if (!this.hasRelevantKeywords(text)) {
+  /**
+   * Cleans and validates package specifiers
+   */
+  normalizePackageSpecifier(specifier, eco = 'npm') {
+    if (!specifier || typeof specifier !== 'string') return null;
+
+    let clean = specifier.trim().replace(/^["'`]|["'`]$/g, '').split('#')[0].split('?')[0];
+    if (!clean || clean.length < 2 || clean.length > 120) return null;
+
+    // Drop absolute URLs, data URIs, or file paths
+    if (/^(https?:|data:|blob:|file:|\*)/i.test(clean)) return null;
+
+    // Drop relative paths and framework aliases
+    for (const prefix of LOCAL_PATH_PREFIXES) {
+      if (clean.startsWith(prefix)) return null;
+    }
+
+    // Check if the root component is a local alias (e.g. 'src/components/Button')
+    const parts = clean.split('/');
+    if (eco === 'npm' && parts.length > 1 && !clean.startsWith('@')) {
+      if (INTERNAL_ROOTS.has(parts[0].toLowerCase())) return null;
+    }
+
+    // Extract base package from subpath (e.g. 'lodash/merge' -> 'lodash', '@scope/pkg/sub' -> '@scope/pkg')
+    let basePkg = clean;
+    if (eco === 'npm') {
+      if (clean.startsWith('@')) {
+        if (parts.length >= 2) {
+          basePkg = `${parts[0]}/${parts[1]}`;
+        } else {
+          return null;
+        }
+      } else if (clean.includes('/')) {
+        basePkg = parts[0];
+      }
+    }
+
+    // Check against internal module patterns
+    for (const item of INTERNAL_MODULE_PATTERNS) {
+      if (item.pattern.test(clean) || item.pattern.test(basePkg)) {
+        return null;
+      }
+    }
+
+    // Filter Node builtins
+    const lower = basePkg.toLowerCase();
+    if (eco === 'npm' && this.nodeBuiltins.has(lower)) {
+      return null;
+    }
+
+    // Validate syntax
+    if (eco === 'npm') {
+      if (!/^(@[a-z0-9\-~][a-z0-9\-._~]*\/)?[a-z0-9\-~][a-z0-9\-._~]*$/i.test(basePkg)) {
+        return null;
+      }
+      return lower;
+    }
+
+    return basePkg;
+  }
+
+  extractContext(content, matchIndex, matchLength) {
+    const start = Math.max(0, matchIndex - 50);
+    const end = Math.min(content.length, matchIndex + matchLength + 50);
+    return content.slice(start, end).replace(/[\r\n]+/g, ' ').trim();
+  }
+
+  /**
+   * Main scan method matching KatanaSecretScanner signature:
+   * scan(content, sourceUrl, sourceType) -> Array of findings
+   */
+  scan(content, sourceUrl = '', sourceType = 'js-bundle') {
+    if (!content || typeof content !== 'string' || content.length < 5) {
       return [];
     }
 
-    // Guard against multi-gigabyte memory bombs (limit to 2MB)
-    const textToScan = text.length > 2000000 ? text.slice(0, 2000000) : text;
-    const discovered = new Map(); // key (eco:name) -> item
+    // Fast keyword check
+    if (!this.hasRelevantKeywords(content, sourceUrl)) {
+      return [];
+    }
 
-    const addPackage = (name, version, eco, contextSnippet) => {
-      if (!name || typeof name !== 'string') return;
-      let cleanName = name.trim();
+    // Performance safety: limit scan buffer to 3MB
+    const textToScan = content.length > 3000000 ? content.slice(0, 3000000) : content;
+    const cleanCode = this.stripNonCode(textToScan);
+    const discovered = new Map(); // key -> finding
 
-      // Fast quote and whitespace stripping
-      cleanName = cleanName.replace(/^["'`]|["'`]$/g, '').replace(/\/+$/, '');
-      if (!cleanName || cleanName.length < 2 || cleanName.length > 100) return;
+    const registerPackage = (rawName, version = '', eco = 'npm', contextSnippet = '') => {
+      const normalizedName = this.normalizePackageSpecifier(rawName, eco);
+      if (!normalizedName) return;
 
-      // Handle scoped vs unscoped packages
-      if (cleanName.startsWith('@')) {
-        const parts = cleanName.split('/');
-        if (parts.length > 2) cleanName = parts.slice(0, 2).join('/');
-      } else if (cleanName.includes('/')) {
-        // Unscoped subpath import like 'lodash/merge' -> base package is 'lodash'
-        cleanName = cleanName.split('/')[0];
-      }
-
-      // Filter local paths, aliases, URL protocols, and built-ins
-      const lower = cleanName.toLowerCase();
-      if (this.nodeBuiltins.has(lower)) return;
-      if (this.localPrefixes.some(p => lower.startsWith(p))) return;
-      if (/^(https?:|data:|blob:|file:|\*)/i.test(lower)) return;
-      if (lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.vue') || lower.endsWith('.css')) return;
-
-      // Validate naming syntax
-      if (!/^(@[a-z0-9\-~][a-z0-9\-._~]*\/)?[a-z0-9\-~][a-z0-9\-._~]*$/i.test(cleanName)) return;
-
-      // npm package names are lowercase
-      const finalName = (eco === 'npm' || !eco) ? lower : cleanName;
-      const ecosystem = eco || 'npm';
-      const key = `${ecosystem}:${finalName}`;
+      const cleanVersion = String(version || '').replace(/^[\^~>=<]+/, '').trim();
+      const key = `${eco}:${normalizedName}`;
 
       if (discovered.has(key)) {
         const existing = discovered.get(key);
-        if (!existing.version && version) existing.version = version;
+        if (!existing.version && cleanVersion) {
+          existing.version = cleanVersion;
+        }
         return;
       }
 
+      // Check if we already evaluated this package previously (instant LRU hit)
+      const cached = this.evaluatedCache.get(key);
+
       discovered.set(key, {
-        type: 'package',
         key,
-        name: finalName,
-        version: version || '',
-        ecosystem,
+        type: 'package',
+        name: normalizedName,
+        version: cleanVersion,
+        ecosystem: eco,
+        riskLevel: cached ? cached.riskLevel : 'LOW',
+        riskReasons: cached ? (cached.riskReasons || []) : [],
+        isUnregistered: cached ? Boolean(cached.isUnregistered) : false,
+        advisories: cached ? (cached.advisories || []) : [],
+        advisoriesCount: cached ? (cached.advisoriesCount || (cached.advisories ? cached.advisories.length : 0)) : 0,
+        weeklyDownloads: cached && cached.weeklyDownloads != null ? cached.weeklyDownloads : 0,
         sourceUrl,
         sourceType,
-        context: (contextSnippet || '').slice(0, 140),
+        context: (contextSnippet || '').slice(0, 160),
         discoveredAt: Date.now()
       });
     };
 
-    // 1. Check if the text is a JSON manifest directly (package.json or importmap)
+    // 1. Direct JSON Manifest check (package.json, importmap)
     if (textToScan.startsWith('{') || textToScan.includes('"dependencies"') || textToScan.includes('"imports"')) {
-      // Manifest dependencies
-      if (textToScan.includes('"dependencies"')) {
-        try {
-          const parsed = JSON.parse(textToScan);
+      try {
+        const parsed = JSON.parse(textToScan);
+
+        // A. Node package.json dependencies
+        if (parsed.dependencies || parsed.devDependencies || parsed.peerDependencies || parsed.optionalDependencies) {
           const allDeps = {
             ...(parsed.dependencies || {}),
             ...(parsed.devDependencies || {}),
@@ -186,112 +332,169 @@ class KatanaSupplyChainScanner {
             ...(parsed.optionalDependencies || {})
           };
           for (const [depName, depVer] of Object.entries(allDeps)) {
-            const cleanVer = String(depVer).replace(/^[\^~>=<]+/, '').trim();
-            addPackage(depName, cleanVer, 'npm', `Manifest dependency: ${depName}@${cleanVer}`);
+            registerPackage(depName, String(depVer), 'npm', `Manifest dependency: ${depName}@${depVer}`);
           }
-        } catch (e) { /* fallback to regex */ }
-      }
+        }
 
-      // Import maps (<script type="importmap">)
-      if (textToScan.includes('"imports"')) {
-        try {
-          const parsed = JSON.parse(textToScan);
-          const imports = (parsed && parsed.imports) || {};
-          for (const [specifier, targetUrl] of Object.entries(imports)) {
-            if (!specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.includes('://')) {
-              addPackage(specifier, '', 'npm', `Import map: ${specifier} -> ${targetUrl}`);
-            }
+        // B. HTML5 Import Maps (<script type="importmap">)
+        if (parsed.imports && typeof parsed.imports === 'object') {
+          for (const [specifier, target] of Object.entries(parsed.imports)) {
+            registerPackage(specifier, '', 'npm', `Import map: ${specifier} -> ${target}`);
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        // Fall back to regex parsing if not strictly JSON
       }
     }
 
-    // 2. High-speed Imports & Requires (Unified precompiled regex)
-    RX_IMPORT_REQUIRE.lastIndex = 0;
+    // 2. CommonJS require('...')
+    this.rxRequire.lastIndex = 0;
     let m;
-    while ((m = RX_IMPORT_REQUIRE.exec(textToScan)) !== null) {
-      const matchIdx = m.index;
-      const snippet = textToScan.slice(Math.max(0, matchIdx - 20), Math.min(textToScan.length, matchIdx + m[0].length + 20));
-      addPackage(m[1], '', 'npm', snippet);
+    while ((m = this.rxRequire.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
     }
 
-    // 3. Webpack chunk / node_modules bundle paths
-    RX_NODE_MODULES.lastIndex = 0;
-    while ((m = RX_NODE_MODULES.exec(textToScan)) !== null) {
-      const matchIdx = m.index;
-      const snippet = textToScan.slice(Math.max(0, matchIdx - 15), Math.min(textToScan.length, matchIdx + m[0].length + 15));
-      addPackage(m[1], '', 'npm', snippet);
+    // 3. ES6 import ... from '...'
+    this.rxImportFrom.lastIndex = 0;
+    while ((m = this.rxImportFrom.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
     }
 
-    // 4. Source map sources paths (if scanning a source map)
+    // 4. Dynamic import('...')
+    this.rxDynamicImport.lastIndex = 0;
+    while ((m = this.rxDynamicImport.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
+    }
+
+    // 5. ES6 export ... from '...'
+    this.rxExportFrom.lastIndex = 0;
+    while ((m = this.rxExportFrom.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
+    }
+
+    // 6. AMD define(['...', '...'])
+    this.rxAmdDefine.lastIndex = 0;
+    while ((m = this.rxAmdDefine.exec(cleanCode)) !== null) {
+      const items = m[1].split(',');
+      for (const item of items) {
+        const raw = item.trim().replace(/^["']|["']$/g, '');
+        if (raw) registerPackage(raw, '', 'npm', m[0]);
+      }
+    }
+
+    // 7. Webpack runtime imports
+    this.rxWebpack.lastIndex = 0;
+    while ((m = this.rxWebpack.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
+    }
+
+    // 8. System.import('...')
+    this.rxSystemJs.lastIndex = 0;
+    while ((m = this.rxSystemJs.exec(cleanCode)) !== null) {
+      registerPackage(m[1], '', 'npm', this.extractContext(cleanCode, m.index, m[0].length));
+    }
+
+    // 9. Public CDNs (unpkg, jsdelivr, esm.sh, skypack)
+    this.rxCdn.lastIndex = 0;
+    while ((m = this.rxCdn.exec(textToScan)) !== null) {
+      registerPackage(m[1], m[2] || '', 'npm', m[0]);
+    }
+
+    // 10. cdnjs.cloudflare.com
+    this.rxCdnjs.lastIndex = 0;
+    while ((m = this.rxCdnjs.exec(textToScan)) !== null) {
+      registerPackage(m[1], m[2] || '', 'npm', m[0]);
+    }
+
+    // 11. Sourcemap node_modules paths
     if (sourceType === 'source-map' || sourceUrl.endsWith('.map') || textToScan.includes('"sources"')) {
-      RX_MAP_NODE_MODULES.lastIndex = 0;
-      while ((m = RX_MAP_NODE_MODULES.exec(textToScan)) !== null) {
-        addPackage(m[1], '', 'npm', `Source map module: ${m[0]}`);
+      this.rxSourceMapModules.lastIndex = 0;
+      while ((m = this.rxSourceMapModules.exec(textToScan)) !== null) {
+        registerPackage(m[1], '', 'npm', `Source map: ${m[0]}`);
       }
     }
 
-    // 5. Public CDNs: jsdelivr, unpkg, esm.sh, skypack
-    RX_CDN.lastIndex = 0;
-    while ((m = RX_CDN.exec(textToScan)) !== null) {
-      addPackage(m[1], m[2] || '', 'npm', m[0]);
-    }
-
-    // 6. cdnjs.cloudflare.com
-    RX_CDNJS.lastIndex = 0;
-    while ((m = RX_CDNJS.exec(textToScan)) !== null) {
-      addPackage(m[1], m[2] || '', 'npm', m[0]);
-    }
-
-    // 7. Python / PyPI Requirements format
-    if (sourceUrl.endsWith('requirements.txt') || textToScan.includes('requirements.txt')) {
-      RX_PYTHON_REQ.lastIndex = 0;
-      while ((m = RX_PYTHON_REQ.exec(textToScan)) !== null) {
-        addPackage(m[1], m[2] || '', 'pypi', m[0]);
+    // 12. Python requirements.txt
+    if (sourceUrl.includes('requirements.txt') || textToScan.includes('requirements.txt') || this.rxPythonReq.test(textToScan)) {
+      this.rxPythonReq.lastIndex = 0;
+      while ((m = this.rxPythonReq.exec(textToScan)) !== null) {
+        registerPackage(m[1], m[2] || '', 'pypi', m[0]);
       }
     }
 
-    // 8. PHP Composer format
-    if (sourceUrl.endsWith('composer.json') || textToScan.includes('composer.json')) {
-      RX_COMPOSER.lastIndex = 0;
-      while ((m = RX_COMPOSER.exec(textToScan)) !== null) {
-        addPackage(m[1], '', 'composer', m[0]);
+    // 13. PHP composer.json
+    if (sourceUrl.includes('composer.json') || textToScan.includes('composer.json')) {
+      this.rxComposer.lastIndex = 0;
+      while ((m = this.rxComposer.exec(textToScan)) !== null) {
+        registerPackage(m[1], m[2] || '', 'composer', m[0]);
       }
     }
 
-    // 9. Rust Cargo.toml format
-    if (sourceUrl.endsWith('Cargo.toml') || textToScan.includes('Cargo.toml')) {
-      RX_CARGO.lastIndex = 0;
-      while ((m = RX_CARGO.exec(textToScan)) !== null) {
-        addPackage(m[1], m[2] || '', 'crates', m[0]);
+    // 14. Rust Cargo.toml
+    if (sourceUrl.includes('Cargo.toml') || textToScan.includes('Cargo.toml')) {
+      this.rxCargo.lastIndex = 0;
+      while ((m = this.rxCargo.exec(textToScan)) !== null) {
+        registerPackage(m[1], m[2] || '', 'crates', m[0]);
       }
     }
 
-    // 10. Go go.mod format
-    if (sourceUrl.endsWith('go.mod') || textToScan.includes('go.mod')) {
-      RX_GOMOD.lastIndex = 0;
-      while ((m = RX_GOMOD.exec(textToScan)) !== null) {
-        addPackage(m[1], m[2] || '', 'golang', m[0]);
+    // 15. Go go.mod
+    if (sourceUrl.includes('go.mod') || textToScan.includes('go.mod')) {
+      this.rxGoMod.lastIndex = 0;
+      while ((m = this.rxGoMod.exec(textToScan)) !== null) {
+        registerPackage(m[1], m[2] || '', 'golang', m[0]);
       }
     }
 
-    // 11. Check for exposed configuration files in HTML or JS endpoints
-    if (sourceType === 'html' || sourceType === 'rendered-js') {
-      RX_CONFIG_PATHS.lastIndex = 0;
-      while ((m = RX_CONFIG_PATHS.exec(textToScan)) !== null) {
+    // 16. Java Maven & Gradle
+    if (sourceUrl.includes('pom.xml') || textToScan.includes('<project')) {
+      this.rxMavenDep.lastIndex = 0;
+      while ((m = this.rxMavenDep.exec(textToScan)) !== null) {
+        const fullName = `${m[1].trim()}:${m[2].trim()}`;
+        registerPackage(fullName, m[3] ? m[3].trim() : '', 'maven', m[0]);
+      }
+    }
+    if (sourceUrl.includes('build.gradle') || textToScan.includes('dependencies {')) {
+      this.rxGradleDep.lastIndex = 0;
+      while ((m = this.rxGradleDep.exec(textToScan)) !== null) {
+        const fullName = `${m[1].trim()}:${m[2].trim()}`;
+        registerPackage(fullName, m[3] ? m[3].trim() : '', 'maven', m[0]);
+      }
+    }
+
+    // 17. .NET NuGet
+    if (sourceUrl.includes('packages.config') || textToScan.includes('<PackageReference') || textToScan.includes('<package id=')) {
+      this.rxNuget.lastIndex = 0;
+      while ((m = this.rxNuget.exec(textToScan)) !== null) {
+        const pkgName = m[1] || m[3];
+        const pkgVer = m[2] || m[4] || '';
+        if (pkgName) registerPackage(pkgName, pkgVer, 'nuget', m[0]);
+      }
+    }
+
+    // 18. Exposed configuration / manifest file references
+    if (sourceType === 'html' || sourceType === 'rendered-js' || sourceType === 'js-bundle') {
+      this.rxConfigPaths.lastIndex = 0;
+      while ((m = this.rxConfigPaths.exec(cleanCode)) !== null) {
         const foundPath = m[1];
         const key = `exposed:${foundPath}`;
         if (!discovered.has(key)) {
           discovered.set(key, {
-            type: 'exposed-file',
             key,
+            type: 'exposed-file',
             path: foundPath,
+            name: foundPath,
             status: 200,
             contentType: 'config',
             riskLevel: 'HIGH',
-            riskReasons: ['Exposed sensitive manifest / configuration path referenced in code'],
+            riskReasons: [`Exposed manifest/config reference: ${foundPath}`],
+            isUnregistered: false,
+            advisories: [],
+            advisoriesCount: 0,
+            weeklyDownloads: 0,
             sourceUrl,
             sourceType,
+            context: this.extractContext(cleanCode, m.index, m[0].length),
             discoveredAt: Date.now()
           });
         }
@@ -303,7 +506,7 @@ class KatanaSupplyChainScanner {
 
   /**
    * Non-blocking background evaluation queue.
-   * Feeds discovered packages into background registry & OSV checks without freezing the crawler!
+   * Feeds discovered packages into background registry & OSV CVE checks.
    */
   queueForEvaluation(findingsList, onEvaluatedCallback) {
     if (!Array.isArray(findingsList) || findingsList.length === 0) return;
@@ -317,6 +520,7 @@ class KatanaSupplyChainScanner {
         const cached = this.evaluatedCache.get(cacheKey);
         const merged = {
           ...item,
+          version: item.version || cached.version || '',
           isUnregistered: Boolean(cached.isUnregistered),
           riskLevel: cached.riskLevel || 'LOW',
           riskReasons: cached.riskReasons || [],
@@ -335,9 +539,6 @@ class KatanaSupplyChainScanner {
     this.processQueue();
   }
 
-  /**
-   * Processes the background evaluation queue with bounded concurrency
-   */
   async processQueue() {
     if (this.isProcessingQueue) return;
     this.isProcessingQueue = true;
@@ -352,7 +553,7 @@ class KatanaSupplyChainScanner {
           const evaluated = await this.evaluatePackage(task.item);
           if (task.callback) task.callback(evaluated);
         } catch (err) {
-          console.warn('[KatanaSupplyChain] Evaluation worker error:', err);
+          console.warn('[SupplyChainScanner] Evaluation worker error:', err);
         } finally {
           this.activeEvalCount--;
           this.processQueue();
@@ -364,8 +565,7 @@ class KatanaSupplyChainScanner {
   }
 
   /**
-   * Evaluates a package finding with the background service worker (registry check & OSV CVE lookups)
-   * Uses in-memory caching for sub-millisecond return on seen packages!
+   * Evaluates a package with background service worker (OSV CVE lookup + registry check)
    */
   async evaluatePackage(item) {
     if (!item || item.type !== 'package') return item;
@@ -375,6 +575,7 @@ class KatanaSupplyChainScanner {
       const cached = this.evaluatedCache.get(cacheKey);
       return {
         ...item,
+        version: item.version || cached.version || '',
         isUnregistered: Boolean(cached.isUnregistered),
         riskLevel: cached.riskLevel || 'LOW',
         riskReasons: cached.riskReasons || [],
@@ -391,35 +592,39 @@ class KatanaSupplyChainScanner {
 
     const queryPromise = (async () => {
       try {
-        const response = await chrome.runtime.sendMessage({
-          action: 'analyzePackage',
-          name: item.name,
-          ecosystem: item.ecosystem || 'npm',
-          version: item.version,
-          sources: [{ url: item.sourceUrl, context: item.context }],
-          options: { osvLookup: true }
-        });
-
-        if (response) {
-          this.evaluatedCache.set(cacheKey, {
-            ...response,
-            evaluatedAt: Date.now()
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+          const response = await chrome.runtime.sendMessage({
+            action: 'analyzePackage',
+            name: item.name,
+            ecosystem: item.ecosystem || 'npm',
+            version: item.version,
+            sources: [{ url: item.sourceUrl, context: item.context }],
+            options: { osvLookup: true }
           });
 
-          return {
-            ...item,
-            isUnregistered: Boolean(response.isUnregistered),
-            riskLevel: response.riskLevel || (response.isUnregistered ? 'CRITICAL' : 'LOW'),
-            riskReasons: response.riskReasons || [],
-            weeklyDownloads: response.weeklyDownloads != null ? response.weeklyDownloads : 0,
-            advisories: response.advisories || [],
-            advisoriesCount: response.advisoriesCount || (response.advisories ? response.advisories.length : 0),
-            error: response.error,
-            evaluatedAt: Date.now()
-          };
+          if (response) {
+            const evaluatedData = {
+              ...response,
+              evaluatedAt: Date.now()
+            };
+            this.evaluatedCache.set(cacheKey, evaluatedData);
+
+            return {
+              ...item,
+              version: item.version || response.version || '',
+              isUnregistered: Boolean(response.isUnregistered),
+              riskLevel: response.riskLevel || (response.isUnregistered ? 'CRITICAL' : 'LOW'),
+              riskReasons: response.riskReasons || [],
+              weeklyDownloads: response.weeklyDownloads != null ? response.weeklyDownloads : 0,
+              advisories: response.advisories || [],
+              advisoriesCount: response.advisoriesCount || (response.advisories ? response.advisories.length : 0),
+              error: response.error,
+              evaluatedAt: Date.now()
+            };
+          }
         }
       } catch (err) {
-        console.warn(`[SupplyChainScanner] Background evaluation failed for ${item.name}:`, err);
+        console.warn(`[SupplyChainScanner] Evaluation failed for ${item.name}:`, err);
       } finally {
         this.pendingQueries.delete(cacheKey);
       }
@@ -428,63 +633,6 @@ class KatanaSupplyChainScanner {
 
     this.pendingQueries.set(cacheKey, queryPromise);
     return queryPromise;
-  }
-
-  /**
-   * Fast root origin probe for exposed manifest & secret config files
-   */
-  async probeOriginManifests(pageUrl, fetchFn) {
-    if (!pageUrl || !fetchFn) return [];
-    let origin = '';
-    try {
-      origin = new URL(pageUrl).origin;
-    } catch {
-      return [];
-    }
-
-    if (this.probedOrigins.has(origin)) return [];
-    this.probedOrigins.add(origin);
-
-    const findings = [];
-    const probePromises = this.manifestProbePaths.map(async (relPath) => {
-      const probeUrl = `${origin}${relPath}`;
-      try {
-        const resp = await fetchFn(probeUrl, { timeout: 2500 });
-        if (resp && resp.ok) {
-          const contentType = resp.headers?.get ? (resp.headers.get('content-type') || '') : '';
-          const text = await resp.text();
-
-          // If response looks like an HTML error/404 page masquerading as 200, skip it
-          if (text.includes('<!DOCTYPE html>') && (relPath.endsWith('.json') || relPath.endsWith('.txt') || relPath.endsWith('.npmrc') || relPath.endsWith('.env'))) {
-            return;
-          }
-
-          findings.push({
-            type: 'exposed-file',
-            key: `exposed:${relPath}`,
-            path: relPath,
-            url: probeUrl,
-            status: resp.status,
-            contentType: contentType || 'text/plain',
-            riskLevel: 'HIGH',
-            riskReasons: [`Exposed configuration file found at ${probeUrl}`],
-            rawContent: text.slice(0, 50000),
-            sourceUrl: probeUrl,
-            sourceType: 'probe',
-            discoveredAt: Date.now()
-          });
-
-          // If it is a manifest, immediately parse its dependencies!
-          if (relPath === '/package.json' || relPath === '/requirements.txt' || relPath === '/composer.json') {
-            const parsedPkgs = this.scan(text, probeUrl, 'manifest');
-            findings.push(...parsedPkgs);
-          }
-        }
-      } catch (e) { /* ignore network timeouts */ }
-    });
-
-    await Promise.allSettled(probePromises);
-    return findings;
   }
 }
 

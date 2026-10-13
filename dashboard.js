@@ -1776,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusBadge = `
           <span class="badge-risk-safe">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            REGISTERED SAFE
+            SAFE
           </span>
         `;
       }
@@ -1798,6 +1798,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         advMarkup = `<span class="font-mono threat-text" style="font-size: 11px;">⚠️ Public claimable namespace (Critical)</span>`;
       } else {
         advMarkup = `<span class="font-mono" style="font-size: 11px; color: var(--neon-green);">✓ No active OSV CVEs</span>`;
+      }
+
+      // Health / Downloads Display
+      let dlMarkup = '';
+      if (isUnreg) {
+        dlMarkup = `<span class="health-downloads threat-text">Unregistered</span>`;
+      } else if (pkg.weeklyDownloads != null && pkg.weeklyDownloads > 0) {
+        dlMarkup = `<span class="health-downloads">${formatNumber(pkg.weeklyDownloads)} dl/wk</span>`;
+      } else if (pkg.weeklyDownloads === 0) {
+        dlMarkup = `<span class="health-downloads" style="color: var(--text-muted);">Active</span>`;
+      } else {
+        dlMarkup = `<span class="health-downloads" style="color: var(--text-muted);">—</span>`;
       }
 
       // Detection Sources Context
@@ -1831,7 +1843,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <td>${advMarkup}</td>
           <td>
             <div class="pkg-health-cell">
-              <span class="health-downloads">${downloads} dl/wk</span>
+              ${dlMarkup}
               ${pkg.riskReasons && pkg.riskReasons.length > 0 ? `<span class="health-notes">${escapeHtml(pkg.riskReasons[0])}</span>` : ''}
             </div>
           </td>

@@ -2336,6 +2336,7 @@ body.hacker-app {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .badge-risk-high {
@@ -2350,6 +2351,7 @@ body.hacker-app {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .badge-risk-safe {
@@ -2361,6 +2363,10 @@ body.hacker-app {
   padding: 3px 8px;
   border-radius: 4px;
   font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .badge-risk-error {
@@ -2371,6 +2377,10 @@ body.hacker-app {
   font-family: var(--font-mono);
   padding: 3px 8px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .advisories-cell {

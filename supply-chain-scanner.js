@@ -44,7 +44,7 @@ class SupplyChainLRUCache {
 // PATTERN RULES & DICTIONARIES
 // ============================================================================
 
-// Node.js standard built-in modules to ignore
+// Node.js standard built-in modules & CommonJS/AMD pseudo-modules to ignore
 const NODE_BUILTINS = new Set([
   'assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console',
   'constants', 'crypto', 'dgram', 'diagnostics_channel', 'dns', 'domain',
@@ -53,7 +53,11 @@ const NODE_BUILTINS = new Set([
   'process', 'punycode', 'querystring', 'readline', 'repl', 'stream',
   'stream/promises', 'stream/consumers', 'stream/web', 'string_decoder',
   'sys', 'timers', 'timers/promises', 'tls', 'trace_events', 'tty',
-  'url', 'util', 'util/types', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib'
+  'url', 'util', 'util/types', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib',
+  // CommonJS, AMD, bundler pseudo-modules & JS globals to ignore
+  'exports', 'require', '__proto__', 'prototype', 'global', 'globalthis',
+  'window', 'document', 'self', 'this', 'default', '__esmodule',
+  'undefined', 'null', 'nan', 'arguments', 'caller', 'callee'
 ]);
 
 // Relative path prefixes and framework aliases to ignore
@@ -382,7 +386,9 @@ class KatanaSupplyChainScanner {
       const items = m[1].split(',');
       for (const item of items) {
         const raw = item.trim().replace(/^["']|["']$/g, '');
-        if (raw) registerPackage(raw, '', 'npm', m[0]);
+        if (raw && !this.nodeBuiltins.has(raw.toLowerCase())) {
+          registerPackage(raw, '', 'npm', m[0]);
+        }
       }
     }
 

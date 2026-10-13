@@ -527,22 +527,34 @@ class MessageHandler {
   static REGISTRY_CACHE_TTL = 5 * 60 * 1000;
 
   static async fetchNpmMetadata(normalized) {
-    const res = await this.fetchWithTimeout(`https://registry.npmjs.org/${normalized}`);
-    if (res.status === 404) return { error: 'HTTP 404' };
+    const encoded = encodeURIComponent(normalized);
+
+    // Concurrently fetch weekly downloads
+    const downloadsPromise = this.fetchWithTimeout(`https://api.npmjs.org/downloads/point/last-week/${encoded}`)
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+
+    // Concurrently fetch package manifest: request /latest first (returns ~2KB instead of 7MB packument)
+    let res = await this.fetchWithTimeout(`https://registry.npmjs.org/${encoded}/latest`);
+
+    // If /latest returned 404, check the root packument (abbreviated) in case it has only non-latest dist tags
+    if (res.status === 404) {
+      const rootRes = await this.fetchWithTimeout(`https://registry.npmjs.org/${encoded}`, {
+        headers: { 'Accept': 'application/vnd.npm.install-v1+json' }
+      });
+      if (rootRes.status === 404) return { error: 'HTTP 404' };
+      res = rootRes;
+    }
+
     if (res.status === 429) return { error: 'Rate Limit Exceeded (429)' };
     if (!res.ok) return { error: `HTTP ${res.status}` };
 
-    const info = await res.json();
+    const [info, dlData] = await Promise.all([
+      res.json(),
+      downloadsPromise
+    ]);
 
-    let downloads = 0;
-    try {
-      const dlRes = await this.fetchWithTimeout(`https://api.npmjs.org/downloads/point/last-week/${normalized}`);
-      if (dlRes.ok) {
-        const dlData = await dlRes.json();
-        downloads = Number(dlData.downloads) || 0;
-      }
-    } catch (e) { /* tolerate download fetch failure */ }
-
+    const downloads = Number(dlData?.downloads) || 0;
     return { info, downloads };
   }
 

@@ -6,11 +6,12 @@
 class KatanaStorage {
   constructor() {
     this.dbName = 'KatanaCrawlerDB';
-    this.dbVersion = 2;
+    this.dbVersion = 3;
     this.db = null;
     this.initPromise = null;
     this.knownUrlSet = new Set(); // In-memory URL deduplication set
     this.knownSecretMap = new Map(); // In-memory unique secret deduplication map: match -> record
+    this.knownSupplyChainMap = new Map(); // In-memory supply chain deduplication map: key -> record
   }
 
   async init() {
@@ -49,6 +50,18 @@ class KatanaStorage {
           secretStore.createIndex('sourceUrl', 'sourceUrl', { unique: false });
           secretStore.createIndex('sourceType', 'sourceType', { unique: false });
           secretStore.createIndex('discoveredAt', 'discoveredAt', { unique: false });
+        }
+
+        // Supply Chain & NPM Dependencies store
+        if (!db.objectStoreNames.contains('supply_chain')) {
+          const supplyStore = db.createObjectStore('supply_chain', { keyPath: 'id', autoIncrement: true });
+          supplyStore.createIndex('key', 'key', { unique: false });
+          supplyStore.createIndex('name', 'name', { unique: false });
+          supplyStore.createIndex('ecosystem', 'ecosystem', { unique: false });
+          supplyStore.createIndex('riskLevel', 'riskLevel', { unique: false });
+          supplyStore.createIndex('isUnregistered', 'isUnregistered', { unique: false });
+          supplyStore.createIndex('type', 'type', { unique: false });
+          supplyStore.createIndex('discoveredAt', 'discoveredAt', { unique: false });
         }
 
         // Settings & Sessions store
@@ -174,9 +187,20 @@ class KatanaStorage {
             this.knownSecretMap.set(match, record);
           }
 
+    if (this.db.objectStoreNames.contains('supply_chain')) {
+      await new Promise((resolve) => {
+        const tx = this.db.transaction('supply_chain', 'readonly');
+        const store = tx.objectStore('supply_chain');
+        const req = store.getAll();
+
+        req.onsuccess = () => {
+          const all = req.result || [];
+          for (const item of all) {
+            if (!item || !item.key) continue;
+            this.knownSupplyChainMap.set(item.key, item);
+          }
           resolve();
         };
-
         req.onerror = () => resolve();
       });
     }
@@ -605,17 +629,196 @@ class KatanaStorage {
     return stats;
   }
 
+  async saveSupplyChainFindings(findingsArray) {
+    if (!findingsArray || findingsArray.length === 0) return { newCount: 0, updatedCount: 0 };
+    await this.init();
+
+    const now = Date.now();
+    const incomingConsolidated = new Map();
+
+    for (const f of findingsArray) {
+      if (!f) continue;
+      const key = f.key || (f.type === 'exposed-file' ? `exposed:${f.path}` : `${f.ecosystem || 'npm'}:${f.name}`);
+      const locItem = {
+        url: f.sourceUrl || '',
+        type: f.sourceType || 'code',
+        context: f.context || '',
+        discoveredAt: f.discoveredAt || now
+      };
+
+      if (incomingConsolidated.has(key)) {
+        const item = incomingConsolidated.get(key);
+        if (locItem.url && !item.sources.some(s => s.url === locItem.url)) {
+          item.sources.push(locItem);
+        }
+      } else {
+        incomingConsolidated.set(key, {
+          key,
+          type: f.type || 'package',
+          name: f.name || f.path || 'unknown',
+          version: f.version || '',
+          ecosystem: f.ecosystem || 'npm',
+          path: f.path || '',
+          status: f.status || 200,
+          contentType: f.contentType || '',
+          riskLevel: f.riskLevel || (f.isUnregistered ? 'CRITICAL' : 'LOW'),
+          riskReasons: f.riskReasons || [],
+          isUnregistered: Boolean(f.isUnregistered),
+          advisories: f.advisories || [],
+          advisoriesCount: f.advisoriesCount || (f.advisories ? f.advisories.length : 0),
+          weeklyDownloads: f.weeklyDownloads != null ? f.weeklyDownloads : 0,
+          sources: locItem.url ? [locItem] : [],
+          discoveredAt: f.discoveredAt || now
+        });
+      }
+    }
+
+    const toInsert = [];
+    const toUpdate = [];
+
+    for (const [key, incoming] of incomingConsolidated.entries()) {
+      if (this.knownSupplyChainMap.has(key)) {
+        const existing = this.knownSupplyChainMap.get(key);
+        let locAdded = false;
+        for (const loc of incoming.sources) {
+          if (loc.url && !existing.sources.some(l => l.url === loc.url)) {
+            existing.sources.push(loc);
+            locAdded = true;
+          }
+        }
+        if (incoming.isUnregistered !== undefined) existing.isUnregistered = incoming.isUnregistered;
+        if (incoming.riskLevel) existing.riskLevel = incoming.riskLevel;
+        if (incoming.advisories && incoming.advisories.length > 0) {
+          existing.advisories = incoming.advisories;
+          existing.advisoriesCount = incoming.advisoriesCount;
+        }
+        if (incoming.weeklyDownloads) existing.weeklyDownloads = incoming.weeklyDownloads;
+        if (incoming.riskReasons && incoming.riskReasons.length > 0) existing.riskReasons = incoming.riskReasons;
+
+        if (locAdded || incoming.isUnregistered) {
+          existing.lastDiscoveredAt = now;
+          if (existing.id && !toUpdate.some(u => u.id === existing.id)) {
+            toUpdate.push(existing);
+          }
+        }
+      } else {
+        const newRecord = {
+          ...incoming,
+          firstDiscoveredAt: incoming.discoveredAt || now,
+          lastDiscoveredAt: incoming.discoveredAt || now
+        };
+        this.knownSupplyChainMap.set(key, newRecord);
+        toInsert.push(newRecord);
+      }
+    }
+
+    if (toInsert.length === 0 && toUpdate.length === 0) {
+      return { newCount: 0, updatedCount: 0 };
+    }
+
+    return new Promise((resolve, reject) => {
+      if (!this.db.objectStoreNames.contains('supply_chain')) {
+        return resolve({ newCount: 0, updatedCount: 0 });
+      }
+      const tx = this.db.transaction('supply_chain', 'readwrite');
+      const store = tx.objectStore('supply_chain');
+
+      for (const item of toInsert) {
+        const req = store.add(item);
+        req.onsuccess = (e) => {
+          item.id = e.target.result;
+        };
+      }
+
+      for (const item of toUpdate) {
+        if (item.id) store.put(item);
+      }
+
+      tx.oncomplete = () => resolve({
+        newCount: toInsert.length,
+        updatedCount: toUpdate.length
+      });
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async getSupplyChainFindings(filters = {}) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      if (!this.db.objectStoreNames.contains('supply_chain')) {
+        return resolve([]);
+      }
+      const tx = this.db.transaction('supply_chain', 'readonly');
+      const store = tx.objectStore('supply_chain');
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        let results = req.result || [];
+
+        if (filters.search) {
+          const q = filters.search.toLowerCase();
+          results = results.filter(item =>
+            (item.name && item.name.toLowerCase().includes(q)) ||
+            (item.path && item.path.toLowerCase().includes(q)) ||
+            (item.ecosystem && item.ecosystem.toLowerCase().includes(q)) ||
+            (item.sources && item.sources.some(src => (src.url && src.url.toLowerCase().includes(q))))
+          );
+        }
+
+        if (filters.ecosystem && filters.ecosystem !== 'all') {
+          results = results.filter(item => (item.ecosystem || '').toLowerCase() === filters.ecosystem.toLowerCase());
+        }
+
+        if (filters.severity && filters.severity !== 'all') {
+          if (filters.severity === 'critical') results = results.filter(item => item.isUnregistered);
+          else if (filters.severity === 'cve') results = results.filter(item => item.advisoriesCount > 0);
+          else if (filters.severity === 'safe') results = results.filter(item => !item.isUnregistered && (!item.advisoriesCount || item.advisoriesCount === 0));
+          else if (filters.severity === 'exposed') results = results.filter(item => item.type === 'exposed-file');
+        }
+
+        // Sort: Critical (unregistered) > CVE count desc > date desc
+        results.sort((a, b) => {
+          if (a.isUnregistered && !b.isUnregistered) return -1;
+          if (!a.isUnregistered && b.isUnregistered) return 1;
+          const advA = a.advisoriesCount || 0;
+          const advB = b.advisoriesCount || 0;
+          if (advA !== advB) return advB - advA;
+          return (b.lastDiscoveredAt || 0) - (a.lastDiscoveredAt || 0);
+        });
+
+        resolve(results);
+      };
+
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async clearSupplyChainFindings() {
+    await this.init();
+    this.knownSupplyChainMap.clear();
+    return new Promise((resolve, reject) => {
+      if (!this.db.objectStoreNames.contains('supply_chain')) return resolve();
+      const tx = this.db.transaction('supply_chain', 'readwrite');
+      tx.objectStore('supply_chain').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
   async clearAll() {
     await this.init();
     this.knownUrlSet.clear();
     this.knownSecretMap.clear();
+    this.knownSupplyChainMap.clear();
     return new Promise((resolve, reject) => {
       const stores = ['targets', 'discovered_urls'];
       if (this.db.objectStoreNames.contains('secrets')) stores.push('secrets');
+      if (this.db.objectStoreNames.contains('supply_chain')) stores.push('supply_chain');
       const tx = this.db.transaction(stores, 'readwrite');
       tx.objectStore('targets').clear();
       tx.objectStore('discovered_urls').clear();
       if (this.db.objectStoreNames.contains('secrets')) tx.objectStore('secrets').clear();
+      if (this.db.objectStoreNames.contains('supply_chain')) tx.objectStore('supply_chain').clear();
 
       tx.oncomplete = () => resolve();
       tx.onerror = (e) => reject(e.target.error);

@@ -51,11 +51,16 @@ class KatanaCrawlerEngine {
     this.secretScanner = (typeof KatanaSecretScanner !== 'undefined') ? new KatanaSecretScanner() : null;
     this.totalSecretsInSession = 0;
 
+    // Supply Chain & NPM Dependency Scanner Engine
+    this.supplyChainScanner = (typeof KatanaSupplyChainScanner !== 'undefined') ? new KatanaSupplyChainScanner() : null;
+    this.totalSupplyChainInSession = 0;
+
     // Callbacks
     this.onLog = null;
     this.onProgress = null;
     this.onUrlFound = null;
     this.onSecretFound = null;
+    this.onSupplyChainFinding = null;
     this.onStateChange = null;
     this.onCaptchaDetected = null;
     this.onCaptchaResolved = null;
@@ -898,7 +903,21 @@ class KatanaCrawlerEngine {
     let discoveredInItem = [];
     const effectivePageUrl = tabData?.pageUrl || url;
     const discoveredSecrets = [];
+    const discoveredSupplyChain = [];
     const sourceMapUrlsToFetch = [];
+
+    // Probe origin manifests (.env, package.json, .npmrc, requirements.txt, etc.)
+    if (this.supplyChainScanner) {
+      try {
+        const probed = await this.supplyChainScanner.probeOriginManifests(effectivePageUrl, (u, opts) => this.fetchWithTimeout(u, opts));
+        if (probed && probed.length > 0) {
+          discoveredSupplyChain.push(...probed);
+          for (const p of probed) {
+            if (p.url) discoveredInItem.push({ url: p.url, type: 'config', sourceUrl: effectivePageUrl });
+          }
+        }
+      } catch (e) {}
+    }
 
     // Fallback: If in-tab DOM inspection returned null (e.g. extension permission denied on error page or CSP sandbox), fetch directly
     if (!tabData) {
@@ -911,6 +930,9 @@ class KatanaCrawlerEngine {
           discoveredInItem.push(...fallbackUrls);
           if (this.secretScanner) {
             discoveredSecrets.push(...this.secretScanner.scan(bodyText, url, 'html'));
+          }
+          if (this.supplyChainScanner) {
+            discoveredSupplyChain.push(...this.supplyChainScanner.scan(bodyText, url, 'html'));
           }
           this.log('inf', `[Engine Fallback] Extracted ${fallbackUrls.length} links via background spider for ${url}`);
         }
@@ -925,6 +947,9 @@ class KatanaCrawlerEngine {
         if (this.secretScanner) {
           discoveredSecrets.push(...this.secretScanner.scan(tabData.rawHtml, effectivePageUrl, 'html'));
         }
+        if (this.supplyChainScanner) {
+          discoveredSupplyChain.push(...this.supplyChainScanner.scan(tabData.rawHtml, effectivePageUrl, 'html'));
+        }
         const rawEndpoints = this.extractEndpointsFromJs(tabData.rawHtml, effectivePageUrl);
         discoveredInItem.push(...rawEndpoints);
       }
@@ -933,6 +958,9 @@ class KatanaCrawlerEngine {
       for (const scriptText of tabData.inlineScripts || []) {
         if (this.secretScanner) {
           discoveredSecrets.push(...this.secretScanner.scan(scriptText, effectivePageUrl, 'rendered-js'));
+        }
+        if (this.supplyChainScanner) {
+          discoveredSupplyChain.push(...this.supplyChainScanner.scan(scriptText, effectivePageUrl, 'rendered-js'));
         }
         const jsEndpoints = this.extractEndpointsFromJs(scriptText, effectivePageUrl);
         discoveredInItem.push(...jsEndpoints);
@@ -949,14 +977,20 @@ class KatanaCrawlerEngine {
         if (this.secretScanner) {
           discoveredSecrets.push(...this.secretScanner.scan(jsonStr, effectivePageUrl, 'rendered-js'));
         }
+        if (this.supplyChainScanner) {
+          discoveredSupplyChain.push(...this.supplyChainScanner.scan(jsonStr, effectivePageUrl, 'rendered-js'));
+        }
         const jsonEndpoints = this.extractEndpointsFromJs(jsonStr, effectivePageUrl);
         discoveredInItem.push(...jsonEndpoints);
       }
 
-      // 3. Scan HTML Comments (staging secrets, dev routes, subdomains)
+      // 3. Scan HTML Comments (staging secrets, dev routes, subdomains, dependency references)
       for (const comment of tabData.htmlComments || []) {
         if (this.secretScanner) {
           discoveredSecrets.push(...this.secretScanner.scan(comment, effectivePageUrl, 'html-comment'));
+        }
+        if (this.supplyChainScanner) {
+          discoveredSupplyChain.push(...this.supplyChainScanner.scan(comment, effectivePageUrl, 'html-comment'));
         }
         const commentEndpoints = this.extractEndpointsFromJs(comment, effectivePageUrl);
         discoveredInItem.push(...commentEndpoints);
@@ -970,6 +1004,9 @@ class KatanaCrawlerEngine {
       for (const styleText of tabData.inlineStyles || []) {
         if (this.secretScanner) {
           discoveredSecrets.push(...this.secretScanner.scan(styleText, effectivePageUrl, 'css'));
+        }
+        if (this.supplyChainScanner) {
+          discoveredSupplyChain.push(...this.supplyChainScanner.scan(styleText, effectivePageUrl, 'css'));
         }
         discoveredInItem.push(...this.extractUrlsFromCss(styleText, effectivePageUrl));
         if (typeof KatanaSecretScanner !== 'undefined') {
@@ -993,6 +1030,9 @@ class KatanaCrawlerEngine {
               const cssText = await resp.text();
               if (this.secretScanner) {
                 discoveredSecrets.push(...this.secretScanner.scan(cssText, cssUrl, 'css'));
+              }
+              if (this.supplyChainScanner) {
+                discoveredSupplyChain.push(...this.supplyChainScanner.scan(cssText, cssUrl, 'css'));
               }
               discoveredInItem.push(...this.extractUrlsFromCss(cssText, cssUrl));
               if (typeof KatanaSecretScanner !== 'undefined') {
@@ -1122,6 +1162,9 @@ class KatanaCrawlerEngine {
               if (this.secretScanner) {
                 discoveredSecrets.push(...this.secretScanner.scan(jsText, jsItem.url, 'js-bundle'));
               }
+              if (this.supplyChainScanner) {
+                discoveredSupplyChain.push(...this.supplyChainScanner.scan(jsText, jsItem.url, 'js-bundle'));
+              }
 
               // Extract sourcemap references (.js.map)
               if (typeof KatanaSecretScanner !== 'undefined') {
@@ -1169,6 +1212,9 @@ class KatanaCrawlerEngine {
                 // Deep secret scanning on original unminified source code!
                 if (this.secretScanner) {
                   discoveredSecrets.push(...this.secretScanner.scan(mapText, mapUrl, 'source-map'));
+                }
+                if (this.supplyChainScanner) {
+                  discoveredSupplyChain.push(...this.supplyChainScanner.scan(mapText, mapUrl, 'source-map'));
                 }
 
                 // Extract endpoints from source map!
@@ -1260,6 +1306,42 @@ class KatanaCrawlerEngine {
         if (this.onSecretFound) {
           this.onSecretFound(discoveredSecrets);
         }
+      }
+    }
+
+    // Persist discovered supply chain packages & configs to database & notify dashboard
+    if (this.supplyChainScanner && discoveredSupplyChain.length > 0) {
+      try {
+        const supplyRes = await this.storage.saveSupplyChainFindings(discoveredSupplyChain);
+        const newSupplyCount = (typeof supplyRes === 'object') ? (supplyRes.newCount || 0) : (supplyRes || 0);
+        const updatedSupplyCount = (typeof supplyRes === 'object') ? (supplyRes.updatedCount || 0) : 0;
+
+        if (newSupplyCount > 0 || updatedSupplyCount > 0) {
+          this.totalSupplyChainInSession += newSupplyCount;
+          if (newSupplyCount > 0) {
+            this.log('inf', `[SUPPLY CHAIN] Extracted ${newSupplyCount} new package dependency(ies) on ${effectivePageUrl}!${updatedSupplyCount > 0 ? ` (+${updatedSupplyCount} locations)` : ''}`);
+          }
+          if (this.onSupplyChainFinding) {
+            this.onSupplyChainFinding(discoveredSupplyChain);
+          }
+        }
+
+        // Asynchronously evaluate packages in background queue (OSV & dependency confusion checks)
+        // Completely non-blocking so crawler velocity stays at maximum speed!
+        this.supplyChainScanner.queueForEvaluation(discoveredSupplyChain, async (evaluated) => {
+          if (!evaluated) return;
+          await this.storage.saveSupplyChainFindings([evaluated]);
+          if (evaluated.isUnregistered) {
+            this.log('wrn', `[SUPPLY CHAIN ALERT] UNREGISTERED PACKAGE detected: "${evaluated.name}" (${evaluated.ecosystem}) - Dependency Confusion Attack Risk!`);
+          } else if (evaluated.advisoriesCount > 0) {
+            this.log('wrn', `[SUPPLY CHAIN ALERT] Vulnerable package detected: "${evaluated.name}" has ${evaluated.advisoriesCount} known CVE advisories!`);
+          }
+          if (this.onSupplyChainFinding) {
+            this.onSupplyChainFinding([evaluated]);
+          }
+        });
+      } catch (err) {
+        console.warn('Supply chain processing error:', err);
       }
     }
 
@@ -1531,6 +1613,37 @@ class KatanaCrawlerEngine {
           }
           if (this.onSecretFound) this.onSecretFound(sec);
         }
+      }
+    }
+
+    // Supply chain scanning in Fast-Fetch mode
+    if (this.supplyChainScanner) {
+      const srcType = contentType.includes('javascript') ? 'js-bundle' : contentType.includes('css') ? 'css' : 'html';
+      const pkgs = this.supplyChainScanner.scan(body, url, srcType);
+      if (pkgs.length > 0) {
+        try {
+          const supplyRes = await this.storage.saveSupplyChainFindings(pkgs);
+          const newSupplyCount = (typeof supplyRes === 'object') ? (supplyRes.newCount || 0) : (supplyRes || 0);
+          const updatedSupplyCount = (typeof supplyRes === 'object') ? (supplyRes.updatedCount || 0) : 0;
+          if (newSupplyCount > 0 || updatedSupplyCount > 0) {
+            this.totalSupplyChainInSession += newSupplyCount;
+            if (newSupplyCount > 0) {
+              this.log('inf', `[SUPPLY CHAIN] Extracted ${newSupplyCount} package(s) on ${url}!`);
+            }
+            if (this.onSupplyChainFinding) this.onSupplyChainFinding(pkgs);
+          }
+
+          this.supplyChainScanner.queueForEvaluation(pkgs, async (evaluated) => {
+            if (!evaluated) return;
+            await this.storage.saveSupplyChainFindings([evaluated]);
+            if (evaluated.isUnregistered) {
+              this.log('wrn', `[SUPPLY CHAIN ALERT] UNREGISTERED PACKAGE detected: "${evaluated.name}" - Dependency Confusion Risk!`);
+            } else if (evaluated.advisoriesCount > 0) {
+              this.log('wrn', `[SUPPLY CHAIN ALERT] Vulnerable package detected: "${evaluated.name}" has ${evaluated.advisoriesCount} CVEs!`);
+            }
+            if (this.onSupplyChainFinding) this.onSupplyChainFinding([evaluated]);
+          });
+        } catch (e) {}
       }
     }
   }

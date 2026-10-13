@@ -502,6 +502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await renderTargetsTable();
   await refreshResultsTable();
   await refreshSecretsTable();
+  await refreshSupplyChainTable();
   drawRpsChart();
   typeBreadcrumbText('mission/telemetry-overview');
 
@@ -638,6 +639,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   engine.onSecretFound = () => {
     refreshMetrics();
     debouncedRefreshSecrets();
+  };
+
+  engine.onSupplyChainFinding = () => {
+    refreshMetrics();
+    debouncedRefreshSupplyChain();
   };
 
   const SUPPLY_CONFIG_NAMES = ['package.json', 'package-lock.json', '.npmrc', 'requirements.txt', '.env', 'yarn.lock', 'pnpm-lock.yaml', 'Pipfile', 'composer.json', 'pom.xml', 'go.mod', 'Cargo.toml'];
@@ -946,6 +952,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           metricSecretsBreakdown.textContent = `${totalSec} Sensitive Findings`;
         }
+      }
+    } catch {}
+
+    try {
+      const allSupply = await storage.getSupplyChainFindings();
+      const threats = allSupply.filter(s => s.isUnregistered || (s.advisoriesCount > 0)).length;
+      if (tabSupplyChainBadge) {
+        tabSupplyChainBadge.textContent = threats > 0 ? threats : allSupply.length;
+        tabSupplyChainBadge.className = threats > 0 ? 'nav-badge badge-magenta' : 'nav-badge badge-cyan';
       }
     } catch {}
 
@@ -1785,9 +1800,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  let refreshSupplyChainDebounce = null;
+  function debouncedRefreshSupplyChain() {
+    clearTimeout(refreshSupplyChainDebounce);
+    refreshSupplyChainDebounce = setTimeout(refreshSupplyChainTable, 250);
+  }
+
+  async function refreshSupplyChainTable() {
+    if (!supplyTbody) return;
+    try {
+      const allFindings = await storage.getSupplyChainFindings(supplyState.filters);
+      supplyState.packages = allFindings.filter(f => f.type === 'package');
+      supplyState.exposedFiles = allFindings.filter(f => f.type === 'exposed-file');
+      updateSupplyStatsUI();
+      renderSupplyTable();
+    } catch (e) {
+      console.warn('refreshSupplyChainTable error:', e);
+    }
+  }
+
   function refreshSupplyChainView() {
-    updateSupplyStatsUI();
-    renderSupplyTable();
+    refreshSupplyChainTable();
   }
 
   // Active Tab Audit
@@ -1875,7 +1908,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function handleSupplyScanResponse(response) {
+  async function handleSupplyScanResponse(response) {
     if (!response) return;
 
     if (response.url && supplyTargetUrl) {
@@ -1895,6 +1928,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pct = Math.max(10, Math.min(100, Math.round((response.stage.progress || 0) * 100)));
       if (supplyProgressFill) supplyProgressFill.style.width = `${pct}%`;
       if (supplyProgressText) supplyProgressText.textContent = response.stage.text || 'Auditing dependencies...';
+    }
+
+    const itemsToSave = [
+      ...(response.packages || []).map(p => ({ ...p, type: 'package' })),
+      ...(response.exposedFiles || []).map(f => ({ ...f, type: 'exposed-file' }))
+    ];
+    if (itemsToSave.length > 0) {
+      try {
+        await storage.saveSupplyChainFindings(itemsToSave);
+      } catch (err) {}
     }
 
     updateSupplyStatsUI();
@@ -1995,15 +2038,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       if (analysis) {
-        // Upsert into packages array
-        const existingIdx = supplyState.packages.findIndex(p => p.name === analysis.name && (p.ecosystem || 'npm') === (analysis.ecosystem || 'npm'));
-        if (existingIdx >= 0) {
-          supplyState.packages[existingIdx] = analysis;
-        } else {
-          supplyState.packages.unshift(analysis);
-        }
-        updateSupplyStatsUI();
-        renderSupplyTable();
+        await storage.saveSupplyChainFindings([analysis]);
+        await refreshSupplyChainTable();
+        await refreshMetrics();
         engine.log('inf', `Supply chain analysis completed for ${name}: ${analysis.isUnregistered ? 'UNREGISTERED/MISSING' : 'SAFE'} (${analysis.advisoriesCount || 0} CVEs)`);
       }
     } catch (e) {
@@ -2081,6 +2118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.log('inf', `Beginning batch supply chain analysis of ${pkgList.length} packages...`);
 
     let done = 0;
+    const batchResults = [];
     for (const item of pkgList) {
       try {
         const analysis = await chrome.runtime.sendMessage({
@@ -2093,20 +2131,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         if (analysis) {
-          const existingIdx = supplyState.packages.findIndex(p => p.name === analysis.name && (p.ecosystem || 'npm') === (analysis.ecosystem || 'npm'));
-          if (existingIdx >= 0) {
-            supplyState.packages[existingIdx] = analysis;
-          } else {
-            supplyState.packages.unshift(analysis);
-          }
+          batchResults.push(analysis);
         }
       } catch (err) {
         console.warn(`Failed to audit ${item.name}:`, err);
       }
       done++;
       if (btnAuditBatch) btnAuditBatch.textContent = `Audited ${done}/${pkgList.length}...`;
-      updateSupplyStatsUI();
-      renderSupplyTable();
+    }
+
+    if (batchResults.length > 0) {
+      await storage.saveSupplyChainFindings(batchResults);
+      await refreshSupplyChainTable();
+      await refreshMetrics();
     }
 
     if (btnAuditBatch) {
@@ -2256,21 +2293,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (supplySearch) {
     supplySearch.addEventListener('input', () => {
       supplyState.filters.search = supplySearch.value;
-      renderSupplyTable();
+      debouncedRefreshSupplyChain();
     });
   }
 
   if (supplyFilterSeverity) {
     supplyFilterSeverity.addEventListener('change', () => {
       supplyState.filters.severity = supplyFilterSeverity.value;
-      renderSupplyTable();
+      refreshSupplyChainTable();
     });
   }
 
   if (supplyFilterEco) {
     supplyFilterEco.addEventListener('change', () => {
       supplyState.filters.eco = supplyFilterEco.value;
-      renderSupplyTable();
+      refreshSupplyChainTable();
     });
   }
 
@@ -2289,7 +2326,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           tag.classList.add('active');
           if (supplyFilterEco) supplyFilterEco.value = eco;
         }
-        renderSupplyTable();
+        refreshSupplyChainTable();
       });
     });
   }
@@ -2356,13 +2393,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (btnClearSupply) {
-    btnClearSupply.addEventListener('click', () => {
+    btnClearSupply.addEventListener('click', async () => {
       if (confirm('Clear all supply chain findings?')) {
+        await storage.clearSupplyChainFindings();
         supplyState.packages = [];
         supplyState.exposedFiles = [];
-        updateSupplyStatsUI();
-        renderSupplyTable();
-        engine.log('inf', 'Supply chain findings cleared.');
+        await refreshMetrics();
+        await refreshSupplyChainTable();
+        engine.log('inf', 'Supply chain findings cleared from database.');
       }
     });
   }

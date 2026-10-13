@@ -1922,6 +1922,521 @@ body.hacker-app {
   gap: 10px;
 }
 
+/* ==========================================================================
+   SUPPLY CHAIN & NPM SECURITY AUDIT TAB
+   ========================================================================== */
+
+#tab-supply-chain .glass-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-color: var(--border-glow-cyan);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 24px var(--neon-cyan-glow);
+}
+
+.supply-target-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid var(--border-glow-cyan);
+  border-radius: 8px;
+}
+
+.target-info-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-prompt {
+  color: var(--neon-cyan);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.target-url-text {
+  color: var(--text-main);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.supply-status-tag {
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  letter-spacing: 0.5px;
+}
+
+.supply-status-tag.active {
+  background: var(--neon-cyan-badge);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+  animation: pulse-border 1.5s infinite;
+}
+
+.supply-status-tag.threat {
+  background: rgba(255, 51, 102, 0.25);
+  color: var(--neon-red);
+  border-color: var(--neon-red);
+  box-shadow: 0 0 12px var(--neon-red-glow);
+}
+
+.supply-status-tag.clean {
+  background: var(--neon-green-badge);
+  color: var(--neon-green);
+  border-color: var(--neon-green);
+}
+
+/* Supply Progress Meter */
+.supply-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px dashed var(--border-glow-cyan);
+  border-radius: 8px;
+}
+
+.supply-progress-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.supply-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green));
+  box-shadow: 0 0 12px var(--neon-cyan);
+  transition: width 0.3s ease;
+}
+
+.supply-progress-text {
+  font-size: 11px;
+  color: var(--neon-cyan);
+}
+
+/* Supply Stats Grid */
+.supply-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.supply-stat-card {
+  background: var(--glass-card-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all var(--trans-speed) ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.supply-stat-card:hover {
+  border-color: var(--border-glow-cyan);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.card-risk-meter {
+  border-color: var(--border-glow-cyan);
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.05), rgba(10, 14, 20, 0.7));
+}
+
+.card-confusion {
+  border-color: rgba(255, 51, 102, 0.35);
+}
+
+.card-confusion:hover {
+  border-color: var(--neon-red);
+  box-shadow: 0 0 20px var(--neon-red-glow);
+}
+
+.stat-icon-threat {
+  font-size: 16px;
+}
+
+.threat-text {
+  color: var(--neon-red);
+  text-shadow: 0 0 12px var(--neon-red-glow);
+}
+
+.risk-score-display {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.risk-score-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 16px var(--neon-cyan-glow);
+  line-height: 1;
+}
+
+.risk-score-max {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.badge-risk-level {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-glow-cyan);
+  background: var(--neon-cyan-badge);
+  color: var(--neon-cyan);
+}
+
+.badge-risk-level.level-critical {
+  background: rgba(255, 51, 102, 0.25);
+  color: var(--neon-red);
+  border-color: var(--neon-red);
+  box-shadow: 0 0 10px var(--neon-red-glow);
+}
+
+.badge-risk-level.level-high {
+  background: rgba(249, 115, 22, 0.25);
+  color: #fb923c;
+  border-color: #fb923c;
+}
+
+.badge-risk-level.level-low {
+  background: var(--neon-green-badge);
+  color: var(--neon-green);
+  border-color: var(--neon-green);
+}
+
+.risk-meter-track {
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.risk-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.4s ease;
+  background: var(--neon-green);
+}
+
+/* Ecosystem Tag Strip */
+.ecosystem-badge-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(10, 14, 20, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.eco-tag {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.eco-tag:hover, .eco-tag.active {
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan-glow);
+}
+
+.eco-tag b {
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+/* Manual On-Demand Audit Panel */
+.supply-manual-audit-panel {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.supply-manual-audit-panel:hover {
+  border-color: var(--border-glow-cyan);
+}
+
+.manual-audit-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.manual-audit-header:hover {
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.manual-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--neon-cyan);
+}
+
+.manual-subtitle {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.accordion-toggle-arrow {
+  color: var(--text-muted);
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.accordion-toggle-arrow.open {
+  transform: rotate(180deg);
+  color: var(--neon-cyan);
+}
+
+.manual-audit-body {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.manual-inputs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cyber-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.cyber-textarea:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+/* Supply Chain Table Elements */
+#tab-supply-chain .table-wrapper.scrollable-table {
+  flex: 1;
+  max-height: calc(100vh - 460px);
+  min-height: 480px;
+  overflow-y: auto;
+}
+
+#supply-chain-table td {
+  vertical-align: top;
+  padding: 14px 16px;
+}
+
+.eco-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+}
+
+.eco-pill-npm { background: rgba(203, 56, 55, 0.2); color: #ff6b6b; border: 1px solid rgba(203, 56, 55, 0.5); }
+.eco-pill-pypi { background: rgba(55, 118, 171, 0.25); color: #60a5fa; border: 1px solid rgba(55, 118, 171, 0.5); }
+.eco-pill-rubygems { background: rgba(224, 87, 87, 0.2); color: #f87171; border: 1px solid rgba(224, 87, 87, 0.5); }
+.eco-pill-nuget { background: rgba(0, 72, 128, 0.25); color: #38bdf8; border: 1px solid rgba(0, 72, 128, 0.5); }
+.eco-pill-maven { background: rgba(199, 23, 50, 0.2); color: #f43f5e; border: 1px solid rgba(199, 23, 50, 0.5); }
+.eco-pill-composer { background: rgba(242, 141, 53, 0.2); color: #fb923c; border: 1px solid rgba(242, 141, 53, 0.5); }
+.eco-pill-golang { background: rgba(0, 173, 216, 0.2); color: #22d3ee; border: 1px solid rgba(0, 173, 216, 0.5); }
+.eco-pill-crates { background: rgba(244, 102, 35, 0.2); color: #fb923c; border: 1px solid rgba(244, 102, 35, 0.5); }
+
+.pkg-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pkg-name-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+}
+
+.pkg-ver-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.badge-risk-critical {
+  background: rgba(255, 51, 102, 0.25);
+  color: var(--neon-red);
+  border: 1px solid var(--neon-red);
+  box-shadow: 0 0 10px var(--neon-red-glow);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-risk-high {
+  background: rgba(249, 115, 22, 0.22);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-risk-safe {
+  background: var(--neon-green-badge);
+  color: var(--neon-green);
+  border: 1px solid var(--border-glow-green);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}
+
+.badge-risk-error {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.advisories-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.adv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 43, 214, 0.12);
+  border: 1px solid var(--border-glow-magenta);
+  color: var(--neon-magenta);
+  text-decoration: none;
+  transition: all 0.15s;
+  max-width: fit-content;
+}
+
+.adv-badge:hover {
+  background: rgba(255, 43, 214, 0.25);
+  box-shadow: 0 0 10px var(--neon-magenta-glow);
+}
+
+.adv-sev-pill {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.adv-sev-critical { background: var(--neon-red); color: #fff; }
+.adv-sev-high { background: #f97316; color: #fff; }
+.adv-sev-medium { background: #eab308; color: #000; }
+.adv-sev-low { background: #22c55e; color: #000; }
+
+.pkg-health-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.health-downloads {
+  color: var(--neon-cyan);
+  font-weight: 700;
+}
+
+.health-notes {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.action-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {

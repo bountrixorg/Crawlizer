@@ -83,6 +83,18 @@
           <span class="nav-badge badge-magenta" id="tab-secrets-count">0</span>
         </button>
 
+        <button class="nav-item" data-tab="tab-supply-chain">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </span>
+          <span class="nav-label">Supply Chain & NPM</span>
+          <span class="nav-badge badge-cyan" id="tab-supply-chain-badge">0</span>
+        </button>
+
         <button class="nav-item" data-tab="tab-terminal">
           <span class="nav-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -798,9 +810,232 @@
               </table>
             </div>
           </div>
+        <!-- TAB 5: SUPPLY CHAIN & NPM VULNERABILITY AUDIT -->
+        <div class="tab-pane" id="tab-supply-chain">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <div class="panel-icon-badge" style="color: var(--neon-cyan); border-color: var(--border-glow-cyan); background: var(--neon-cyan-badge);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                  </svg>
+                </div>
+                <div>
+                  <h3>Supply Chain & Dependency Security</h3>
+                  <p class="panel-sub">Multi-ecosystem dependency confusion detection, exposed configs (.env, package.json), & OSV.dev CVE/GHSA advisories</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="btn-scan-active-tab" class="btn btn-primary" title="Audit Current Active Browser Tab">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                  <span>Audit Active Tab</span>
+                </button>
+                <button id="btn-export-supply-html" class="btn btn-glass" title="Download standalone HTML audit report">Export HTML Report</button>
+                <button id="btn-export-supply-json" class="btn btn-glass">Export JSON</button>
+                <button id="btn-export-supply-csv" class="btn btn-glass">Export CSV</button>
+                <button id="btn-copy-supply-bad" class="btn btn-glass" title="Copy missing/unregistered packages">Copy Bad</button>
+                <button id="btn-clear-supply" class="btn btn-glass btn-icon" title="Clear current findings">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Target Bar & Progress -->
+            <div class="supply-target-bar">
+              <div class="target-info-wrap">
+                <span class="target-prompt font-mono">TARGET:</span>
+                <span class="target-url-text font-mono" id="supply-target-url">— No active target audited yet —</span>
+              </div>
+              <div class="target-actions-wrap">
+                <span class="supply-status-tag" id="supply-status-tag">STANDBY</span>
+                <button id="btn-supply-rescan" class="btn btn-glass btn-sm" title="Force re-scan active tab">↻ Rescan Tab</button>
+              </div>
+            </div>
+
+            <!-- Progress Meter (hidden by default) -->
+            <div class="supply-progress-wrap" id="supply-progress-wrap" style="display: none;">
+              <div class="supply-progress-bar">
+                <div class="supply-progress-fill" id="supply-progress-fill" style="width: 0%;"></div>
+              </div>
+              <div class="supply-progress-text font-mono" id="supply-progress-text">Initializing crawler & registry queries...</div>
+            </div>
+
+            <!-- Supply Chain Stat Cards & Risk Gauge -->
+            <div class="supply-stats-grid">
+              <!-- Risk Score Meter -->
+              <div class="supply-stat-card card-risk-meter">
+                <div class="stat-header">
+                  <span class="stat-title">COMPOSITE RISK SCORE</span>
+                  <span class="badge-risk-level font-mono" id="supply-risk-level-badge">LOW</span>
+                </div>
+                <div class="risk-score-display">
+                  <div class="risk-score-num font-mono" id="supply-risk-score">0</div>
+                  <div class="risk-score-max font-mono">/100</div>
+                </div>
+                <div class="risk-meter-track">
+                  <div class="risk-meter-fill" id="supply-risk-meter-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- Unregistered / Dependency Confusion -->
+              <div class="supply-stat-card card-confusion">
+                <div class="stat-header">
+                  <span class="stat-title">DEPENDENCY CONFUSION</span>
+                  <span class="stat-icon-threat">⚠️</span>
+                </div>
+                <div class="stat-value font-mono threat-text" id="supply-stat-critical">0</div>
+                <div class="stat-desc">Unregistered packages on public registry</div>
+              </div>
+
+              <!-- OSV Advisories / CVEs -->
+              <div class="supply-stat-card card-cves">
+                <div class="stat-header">
+                  <span class="stat-title">KNOWN ADVISORIES</span>
+                  <span class="stat-icon-threat">🛡️</span>
+                </div>
+                <div class="stat-value font-mono glow-magenta" id="supply-stat-cves">0</div>
+                <div class="stat-desc">OSV.dev CVE / GHSA matches</div>
+              </div>
+
+              <!-- Safe / Registered Packages -->
+              <div class="supply-stat-card card-safe">
+                <div class="stat-header">
+                  <span class="stat-title">SAFE PACKAGES</span>
+                  <span class="stat-icon-threat">✓</span>
+                </div>
+                <div class="stat-value font-mono glow-green" id="supply-stat-safe">0</div>
+                <div class="stat-desc">Publicly verified & active packages</div>
+              </div>
+
+              <!-- Exposed Configs -->
+              <div class="supply-stat-card card-exposed">
+                <div class="stat-header">
+                  <span class="stat-title">EXPOSED CONFIGS</span>
+                  <span class="stat-icon-threat">📂</span>
+                </div>
+                <div class="stat-value font-mono glow-cyan" id="supply-stat-exposed">0</div>
+                <div class="stat-desc">package.json, .npmrc, requirements.txt, .env</div>
+              </div>
+            </div>
+
+            <!-- Ecosystem Breakdown Strip -->
+            <div class="ecosystem-badge-strip" id="supply-eco-strip">
+              <span class="eco-tag eco-npm" data-eco="npm">npm: <b id="eco-count-npm">0</b></span>
+              <span class="eco-tag eco-pypi" data-eco="pypi">PyPI: <b id="eco-count-pypi">0</b></span>
+              <span class="eco-tag eco-rubygems" data-eco="rubygems">RubyGems: <b id="eco-count-rubygems">0</b></span>
+              <span class="eco-tag eco-nuget" data-eco="nuget">NuGet: <b id="eco-count-nuget">0</b></span>
+              <span class="eco-tag eco-maven" data-eco="maven">Maven: <b id="eco-count-maven">0</b></span>
+              <span class="eco-tag eco-composer" data-eco="composer">Packagist: <b id="eco-count-composer">0</b></span>
+              <span class="eco-tag eco-golang" data-eco="golang">Go: <b id="eco-count-golang">0</b></span>
+              <span class="eco-tag eco-crates" data-eco="crates">Crates: <b id="eco-count-crates">0</b></span>
+            </div>
+
+            <!-- Manual Package Audit Form (Collapsible/Accordion) -->
+            <div class="supply-manual-audit-panel">
+              <div class="manual-audit-header" id="btn-toggle-manual-audit">
+                <span class="font-mono prompt-symbol">&gt;_</span>
+                <span class="manual-title">On-Demand Package / Manifest Audit Console</span>
+                <span class="manual-subtitle">Audit custom packages or manifests (package.json, requirements.txt, etc.)</span>
+                <span class="accordion-toggle-arrow" id="manual-audit-arrow">▼</span>
+              </div>
+              <div class="manual-audit-body" id="manual-audit-body" style="display: none;">
+                <div class="manual-inputs-row">
+                  <div class="select-wrapper" style="width: 140px;">
+                    <select id="manual-audit-eco" class="filter-select">
+                      <option value="npm">npm</option>
+                      <option value="pypi">PyPI</option>
+                      <option value="rubygems">RubyGems</option>
+                      <option value="nuget">NuGet</option>
+                      <option value="maven">Maven</option>
+                      <option value="composer">Packagist</option>
+                      <option value="golang">Go</option>
+                      <option value="crates">crates.io</option>
+                    </select>
+                  </div>
+                  <input type="text" id="manual-audit-input" class="search-input" placeholder="Enter package name (e.g. lodash@4.17.21 or internal-corp-auth)" style="flex: 1;">
+                  <button id="btn-run-manual-audit" class="btn btn-primary">Audit Package</button>
+                </div>
+                <div class="manual-textarea-row" style="margin-top: 10px;">
+                  <textarea id="manual-audit-textarea" class="cyber-textarea" placeholder="Or paste multiple package names or package.json / requirements.txt contents here..." rows="3"></textarea>
+                  <div style="margin-top: 6px; display: flex; gap: 8px;">
+                    <button id="btn-audit-batch" class="btn btn-glass">Audit Batch Manifest</button>
+                    <button id="btn-load-sample-manifest" class="btn btn-glass btn-sm">Load Sample Vulnerable Manifest</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Filter Toolbar -->
+            <div class="filter-toolbar">
+              <div class="search-input-wrapper">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="supply-search" placeholder="Search package name, version, CVE id, or file path...">
+              </div>
+
+              <div class="filter-group">
+                <label>Severity:</label>
+                <div class="select-wrapper">
+                  <select id="supply-filter-severity" class="filter-select">
+                    <option value="all">All Findings</option>
+                    <option value="critical">Missing / Confusion (Critical)</option>
+                    <option value="cve">With CVEs / Advisories</option>
+                    <option value="safe">Safe Packages</option>
+                    <option value="exposed">Exposed Files</option>
+                    <option value="error">Errors</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Ecosystem:</label>
+                <div class="select-wrapper">
+                  <select id="supply-filter-eco" class="filter-select">
+                    <option value="all">All Ecosystems</option>
+                    <option value="npm">npm</option>
+                    <option value="pypi">PyPI</option>
+                    <option value="rubygems">RubyGems</option>
+                    <option value="nuget">NuGet</option>
+                    <option value="maven">Maven</option>
+                    <option value="composer">Packagist</option>
+                    <option value="golang">Go</option>
+                    <option value="crates">crates.io</option>
+                  </select>
+                </div>
+              </div>
+
+              <span class="filter-results-count" id="supply-count-label">0 findings</span>
+            </div>
+
+            <!-- Supply Chain Findings Table -->
+            <div class="table-wrapper scrollable-table">
+              <table class="data-table" id="supply-chain-table">
+                <thead>
+                  <tr>
+                    <th width="48">#</th>
+                    <th width="90">Ecosystem</th>
+                    <th width="240">Package Name &amp; Version</th>
+                    <th width="140">Status / Risk</th>
+                    <th width="260">OSV.dev Advisories (CVE / GHSA)</th>
+                    <th width="140">Health / Downloads</th>
+                    <th>Detection Context / Sources</th>
+                    <th width="110">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="supply-tbody">
+                  <tr>
+                    <td colspan="8" class="empty-state">No supply chain findings yet. Click <strong>"Audit Active Tab"</strong> or paste packages into the audit console above!</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <!-- TAB 5: LIVE TERMINAL FEED -->
+        <!-- TAB 6: LIVE TERMINAL FEED -->
         <div class="tab-pane" id="tab-terminal">
           <div class="terminal-container">
             <div class="terminal-header">

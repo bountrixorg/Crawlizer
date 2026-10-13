@@ -360,7 +360,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     { title: 'Targets & Spider Configuration', icon: '🎯', shortcut: 'TAB 2', action: () => switchTab('tab-upload') },
     { title: 'Discovered Endpoints Explorer', icon: '⚡', shortcut: 'TAB 3', action: () => switchTab('tab-results') },
     { title: 'Secrets & Threat Findings', icon: '🗡️', shortcut: 'TAB 4', action: () => switchTab('tab-secrets') },
-    { title: 'Live Stream Terminal Feed', icon: '💻', shortcut: 'TAB 5', action: () => switchTab('tab-terminal') },
+    { title: 'Supply Chain & Dependency Audit', icon: '📦', shortcut: 'TAB 5', action: () => switchTab('tab-supply-chain') },
+    { title: 'Live Stream Terminal Feed', icon: '💻', shortcut: 'TAB 6', action: () => switchTab('tab-terminal') },
+    { title: 'Audit Active Tab (Supply Chain)', icon: '🔍', shortcut: 'AUDIT', action: () => { switchTab('tab-supply-chain'); scanActiveTabSupplyChain(); } },
     { title: 'Start / Resume Crawl Engine', icon: '▶️', shortcut: 'START', action: () => btnStart.click() },
     { title: 'Pause Crawl Session', icon: '⏸️', shortcut: 'PAUSE', action: () => btnPause.click() },
     { title: 'Stop Crawl Session', icon: '⏹️', shortcut: 'STOP', action: () => btnStop.click() },
@@ -470,6 +472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       'tab-upload': 'mission/target-configuration',
       'tab-results': 'mission/discovered-endpoints',
       'tab-secrets': 'mission/secret-findings',
+      'tab-supply-chain': 'mission/supply-chain-audit',
       'tab-terminal': 'mission/live-terminal'
     };
     typeBreadcrumbText(labelMap[tabId] || 'mission/active');
@@ -478,6 +481,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshResultsTable();
     } else if (tabId === 'tab-secrets') {
       refreshSecretsTable();
+    } else if (tabId === 'tab-supply-chain') {
+      refreshSupplyChainView();
     } else if (tabId === 'tab-overview') {
       drawRpsChart();
     }
@@ -633,6 +638,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   engine.onSecretFound = () => {
     refreshMetrics();
     debouncedRefreshSecrets();
+  };
+
+  const SUPPLY_CONFIG_NAMES = ['package.json', 'package-lock.json', '.npmrc', 'requirements.txt', '.env', 'yarn.lock', 'pnpm-lock.yaml', 'Pipfile', 'composer.json', 'pom.xml', 'go.mod', 'Cargo.toml'];
+  engine.onUrlFound = (urlObj) => {
+    if (!urlObj || !urlObj.url) return;
+    const lower = urlObj.url.toLowerCase();
+    for (const name of SUPPLY_CONFIG_NAMES) {
+      if (lower.endsWith(name) || lower.includes(`/${name}?`) || lower.includes(`/${name}#`)) {
+        if (!supplyState.exposedFiles.some(f => f.url === urlObj.url)) {
+          supplyState.exposedFiles.push({
+            url: urlObj.url,
+            path: `/${name}`,
+            status: 200,
+            contentType: 'config',
+            risk: 'HIGH'
+          });
+          updateSupplyStatsUI();
+          if (document.getElementById('tab-supply-chain')?.classList.contains('active')) {
+            renderSupplyTable();
+          }
+        }
+        break;
+      }
+    }
   };
 
   // ==========================================
@@ -1349,6 +1378,1000 @@ document.addEventListener('DOMContentLoaded', async () => {
         engine.log('inf', 'All secrets cleared from database.');
       }
     });
+  }
+
+  // ==========================================
+  // Supply Chain & NPM Audit Controller
+  // ==========================================
+  const btnScanActiveTab = document.getElementById('btn-scan-active-tab');
+  const btnSupplyRescan = document.getElementById('btn-supply-rescan');
+  const supplyTargetUrl = document.getElementById('supply-target-url');
+  const supplyStatusTag = document.getElementById('supply-status-tag');
+  const supplyProgressWrap = document.getElementById('supply-progress-wrap');
+  const supplyProgressFill = document.getElementById('supply-progress-fill');
+  const supplyProgressText = document.getElementById('supply-progress-text');
+
+  const supplyRiskScore = document.getElementById('supply-risk-score');
+  const supplyRiskLevelBadge = document.getElementById('supply-risk-level-badge');
+  const supplyRiskMeterFill = document.getElementById('supply-risk-meter-fill');
+  const supplyStatCritical = document.getElementById('supply-stat-critical');
+  const supplyStatCves = document.getElementById('supply-stat-cves');
+  const supplyStatSafe = document.getElementById('supply-stat-safe');
+  const supplyStatExposed = document.getElementById('supply-stat-exposed');
+  const tabSupplyChainBadge = document.getElementById('tab-supply-chain-badge');
+
+  const supplyEcoStrip = document.getElementById('supply-eco-strip');
+  const ecoCountNpm = document.getElementById('eco-count-npm');
+  const ecoCountPypi = document.getElementById('eco-count-pypi');
+  const ecoCountRubygems = document.getElementById('eco-count-rubygems');
+  const ecoCountNuget = document.getElementById('eco-count-nuget');
+  const ecoCountMaven = document.getElementById('eco-count-maven');
+  const ecoCountComposer = document.getElementById('eco-count-composer');
+  const ecoCountGolang = document.getElementById('eco-count-golang');
+  const ecoCountCrates = document.getElementById('eco-count-crates');
+
+  const btnToggleManualAudit = document.getElementById('btn-toggle-manual-audit');
+  const manualAuditBody = document.getElementById('manual-audit-body');
+  const manualAuditArrow = document.getElementById('manual-audit-arrow');
+  const manualAuditEco = document.getElementById('manual-audit-eco');
+  const manualAuditInput = document.getElementById('manual-audit-input');
+  const btnRunManualAudit = document.getElementById('btn-run-manual-audit');
+  const manualAuditTextarea = document.getElementById('manual-audit-textarea');
+  const btnAuditBatch = document.getElementById('btn-audit-batch');
+  const btnLoadSampleManifest = document.getElementById('btn-load-sample-manifest');
+
+  const supplySearch = document.getElementById('supply-search');
+  const supplyFilterSeverity = document.getElementById('supply-filter-severity');
+  const supplyFilterEco = document.getElementById('supply-filter-eco');
+  const supplyCountLabel = document.getElementById('supply-count-label');
+  const supplyTbody = document.getElementById('supply-tbody');
+
+  const btnExportSupplyHtml = document.getElementById('btn-export-supply-html');
+  const btnExportSupplyJson = document.getElementById('btn-export-supply-json');
+  const btnExportSupplyCsv = document.getElementById('btn-export-supply-csv');
+  const btnCopySupplyBad = document.getElementById('btn-copy-supply-bad');
+  const btnClearSupply = document.getElementById('btn-clear-supply');
+
+  const supplyState = {
+    targetUrl: '',
+    packages: [],
+    exposedFiles: [],
+    activeTabId: null,
+    pollTimer: null,
+    pollAttempts: 0,
+    filters: {
+      search: '',
+      severity: 'all',
+      eco: 'all'
+    }
+  };
+
+  function calculateSupplyStats() {
+    const packages = supplyState.packages || [];
+    const exposedFiles = supplyState.exposedFiles || [];
+
+    let critical = 0;
+    let safe = 0;
+    let errors = 0;
+    let advisories = 0;
+
+    const ecosystems = { npm: 0, pypi: 0, rubygems: 0, nuget: 0, maven: 0, composer: 0, golang: 0, crates: 0 };
+
+    packages.forEach(pkg => {
+      if (!pkg) return;
+      const eco = (pkg.ecosystem || 'npm').toLowerCase();
+      if (ecosystems.hasOwnProperty(eco)) ecosystems[eco]++;
+
+      const advCount = Number(pkg.advisoriesCount || (Array.isArray(pkg.advisories) ? pkg.advisories.length : 0));
+      advisories += advCount;
+
+      if (pkg.error) {
+        errors++;
+      } else if (pkg.isUnregistered) {
+        critical++;
+      } else {
+        safe++;
+      }
+    });
+
+    const exposedCount = exposedFiles.length;
+    // Dominant signals: Unregistered packages (dependency confusion) = 25 pts each, CVEs = 6 pts each, exposed files = 4 pts each
+    const score = Math.min(100, (critical * 25) + (advisories * 6) + (exposedCount * 4));
+
+    return {
+      score,
+      critical,
+      safe,
+      errors,
+      advisories,
+      exposedCount,
+      ecosystems,
+      totalFindings: packages.length + exposedCount
+    };
+  }
+
+  function updateSupplyStatsUI() {
+    const stats = calculateSupplyStats();
+
+    if (supplyRiskScore) supplyRiskScore.textContent = stats.score;
+    if (supplyRiskMeterFill) {
+      supplyRiskMeterFill.style.width = `${stats.score}%`;
+      if (stats.score >= 70 || stats.critical > 0) {
+        supplyRiskMeterFill.style.background = 'var(--neon-red)';
+      } else if (stats.score >= 40 || stats.advisories > 0) {
+        supplyRiskMeterFill.style.background = '#f97316';
+      } else {
+        supplyRiskMeterFill.style.background = 'var(--neon-green)';
+      }
+    }
+
+    if (supplyRiskLevelBadge) {
+      if (stats.critical > 0 || stats.score >= 75) {
+        supplyRiskLevelBadge.textContent = 'CRITICAL';
+        supplyRiskLevelBadge.className = 'badge-risk-level level-critical font-mono';
+      } else if (stats.advisories > 0 || stats.score >= 45) {
+        supplyRiskLevelBadge.textContent = 'HIGH RISK';
+        supplyRiskLevelBadge.className = 'badge-risk-level level-high font-mono';
+      } else if (stats.score > 0) {
+        supplyRiskLevelBadge.textContent = 'MEDIUM';
+        supplyRiskLevelBadge.className = 'badge-risk-level level-high font-mono';
+      } else {
+        supplyRiskLevelBadge.textContent = 'SAFE';
+        supplyRiskLevelBadge.className = 'badge-risk-level level-low font-mono';
+      }
+    }
+
+    if (supplyStatCritical) supplyStatCritical.textContent = stats.critical;
+    if (supplyStatCves) supplyStatCves.textContent = stats.advisories;
+    if (supplyStatSafe) supplyStatSafe.textContent = stats.safe;
+    if (supplyStatExposed) supplyStatExposed.textContent = stats.exposedCount;
+
+    if (tabSupplyChainBadge) {
+      const threatCount = stats.critical + stats.advisories;
+      tabSupplyChainBadge.textContent = threatCount;
+      if (threatCount > 0) {
+        tabSupplyChainBadge.className = 'nav-badge badge-magenta';
+      } else {
+        tabSupplyChainBadge.className = 'nav-badge badge-cyan';
+      }
+    }
+
+    // Update ecosystem breakdown counts
+    if (ecoCountNpm) ecoCountNpm.textContent = stats.ecosystems.npm;
+    if (ecoCountPypi) ecoCountPypi.textContent = stats.ecosystems.pypi;
+    if (ecoCountRubygems) ecoCountRubygems.textContent = stats.ecosystems.rubygems;
+    if (ecoCountNuget) ecoCountNuget.textContent = stats.ecosystems.nuget;
+    if (ecoCountMaven) ecoCountMaven.textContent = stats.ecosystems.maven;
+    if (ecoCountComposer) ecoCountComposer.textContent = stats.ecosystems.composer;
+    if (ecoCountGolang) ecoCountGolang.textContent = stats.ecosystems.golang;
+    if (ecoCountCrates) ecoCountCrates.textContent = stats.ecosystems.crates;
+  }
+
+  function getFilteredSupplyFindings() {
+    const q = supplyState.filters.search.toLowerCase().trim();
+    const sev = supplyState.filters.severity;
+    const ecoFilter = supplyState.filters.eco;
+
+    const filteredPackages = supplyState.packages.filter(pkg => {
+      if (!pkg) return false;
+      const name = (pkg.name || '').toLowerCase();
+      const version = (pkg.version || '').toLowerCase();
+      const eco = (pkg.ecosystem || 'npm').toLowerCase();
+      const advCount = Number(pkg.advisoriesCount || (Array.isArray(pkg.advisories) ? pkg.advisories.length : 0));
+
+      // Ecosystem filter
+      if (ecoFilter !== 'all' && eco !== ecoFilter) return false;
+
+      // Severity filter
+      if (sev === 'critical' && !pkg.isUnregistered) return false;
+      if (sev === 'cve' && advCount === 0) return false;
+      if (sev === 'safe' && (pkg.isUnregistered || advCount > 0 || pkg.error)) return false;
+      if (sev === 'error' && !pkg.error) return false;
+      if (sev === 'exposed') return false; // Handled in exposed files
+
+      // Search match
+      if (q) {
+        const matchesName = name.includes(q);
+        const matchesVer = version.includes(q);
+        const matchesAdv = Array.isArray(pkg.advisories) && pkg.advisories.some(a => (a.id || '').toLowerCase().includes(q) || (a.summary || '').toLowerCase().includes(q));
+        const matchesSource = Array.isArray(pkg.sources) && pkg.sources.some(s => (s.url || '').toLowerCase().includes(q));
+        if (!matchesName && !matchesVer && !matchesAdv && !matchesSource) return false;
+      }
+
+      return true;
+    });
+
+    const filteredExposed = (sev === 'all' || sev === 'exposed') ? supplyState.exposedFiles.filter(file => {
+      if (!file) return false;
+      if (ecoFilter !== 'all') return false;
+      const path = (file.path || '').toLowerCase();
+      if (q && !path.includes(q)) return false;
+      return true;
+    }) : [];
+
+    return { filteredPackages, filteredExposed };
+  }
+
+  function renderSupplyTable() {
+    if (!supplyTbody) return;
+
+    const { filteredPackages, filteredExposed } = getFilteredSupplyFindings();
+    const totalCount = filteredPackages.length + filteredExposed.length;
+
+    if (supplyCountLabel) {
+      supplyCountLabel.textContent = `${totalCount} finding${totalCount === 1 ? '' : 's'}`;
+    }
+
+    if (totalCount === 0) {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        supplyTbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="empty-state">
+              No supply chain findings yet. Click <strong>"Audit Active Tab"</strong> or paste packages into the audit console above!
+            </td>
+          </tr>
+        `;
+      } else {
+        supplyTbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="empty-state">
+              No findings match your active search or severity filter.
+            </td>
+          </tr>
+        `;
+      }
+      return;
+    }
+
+    let rowsHtml = '';
+    let rowIdx = 1;
+
+    // 1. Exposed Configuration Files
+    filteredExposed.forEach(file => {
+      const path = escapeHtml(file.path || 'unknown');
+      const status = file.status || 200;
+      const contentType = file.contentType || 'text/plain';
+      const risk = (file.risk || 'MEDIUM').toUpperCase();
+
+      rowsHtml += `
+        <tr class="supply-finding-row" style="background: rgba(0, 240, 255, 0.03);">
+          <td class="font-mono" style="color: var(--text-muted);">${rowIdx++}</td>
+          <td><span class="eco-pill eco-pill-npm">CONFIG</span></td>
+          <td>
+            <div class="pkg-name-cell">
+              <span class="pkg-name-text glow-cyan" style="font-weight: 700;">${path}</span>
+              <span class="pkg-ver-text">HTTP ${status} · ${contentType}</span>
+            </div>
+          </td>
+          <td>
+            <span class="badge-risk-high">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              EXPOSED FILE
+            </span>
+          </td>
+          <td>
+            <span class="font-mono" style="font-size: 11px; color: var(--text-muted);">Publicly accessible manifest/secret file</span>
+          </td>
+          <td>
+            <span class="font-mono" style="font-size: 11px; color: var(--neon-cyan);">High Exposure</span>
+          </td>
+          <td>
+            <span class="font-mono" style="font-size: 11px; color: var(--text-secondary); word-break: break-all;">${escapeHtml(file.url || path)}</span>
+          </td>
+          <td>
+            <div class="action-btn-group">
+              <button class="btn btn-glass btn-sm btn-copy-text" data-copy="${escapeHtml(file.url || path)}" title="Copy File URL">Copy</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    // 2. Analyzed Packages
+    filteredPackages.forEach(pkg => {
+      const eco = (pkg.ecosystem || 'npm').toLowerCase();
+      const name = escapeHtml(pkg.name || 'unknown');
+      const version = pkg.version && pkg.version !== '?' ? `@${escapeHtml(pkg.version)}` : '';
+      const isUnreg = Boolean(pkg.isUnregistered);
+      const advCount = Number(pkg.advisoriesCount || (Array.isArray(pkg.advisories) ? pkg.advisories.length : 0));
+      const downloads = pkg.weeklyDownloads != null ? formatNumber(pkg.weeklyDownloads) : '—';
+
+      // Status Badge
+      let statusBadge = '';
+      if (pkg.error) {
+        statusBadge = `<span class="badge-risk-error font-mono">ERROR: ${escapeHtml(pkg.error)}</span>`;
+      } else if (isUnreg) {
+        statusBadge = `
+          <span class="badge-risk-critical">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            CONFUSION (UNREG)
+          </span>
+        `;
+      } else if (advCount > 0) {
+        statusBadge = `
+          <span class="badge-risk-high">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            ${advCount} VULNERABLE
+          </span>
+        `;
+      } else {
+        statusBadge = `
+          <span class="badge-risk-safe">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            REGISTERED SAFE
+          </span>
+        `;
+      }
+
+      // Advisories Cell
+      let advMarkup = '';
+      if (Array.isArray(pkg.advisories) && pkg.advisories.length > 0) {
+        advMarkup = `<div class="advisories-cell">` + pkg.advisories.slice(0, 3).map(adv => {
+          const sevClass = `adv-sev-${(adv.severity || 'MEDIUM').toLowerCase()}`;
+          const advUrl = `https://osv.dev/vulnerability/${encodeURIComponent(adv.id)}`;
+          return `
+            <a href="${advUrl}" target="_blank" rel="noreferrer" class="adv-badge" title="${escapeHtml(adv.summary || adv.id)}">
+              <span class="adv-sev-pill ${sevClass}">${escapeHtml(adv.severity || 'MED')}</span>
+              <span>${escapeHtml(adv.id)}</span>
+            </a>
+          `;
+        }).join('') + (pkg.advisories.length > 3 ? `<span class="font-mono" style="font-size: 10px; color: var(--text-muted);">+${pkg.advisories.length - 3} more</span>` : '') + `</div>`;
+      } else if (isUnreg) {
+        advMarkup = `<span class="font-mono threat-text" style="font-size: 11px;">⚠️ Public claimable namespace (Critical)</span>`;
+      } else {
+        advMarkup = `<span class="font-mono" style="font-size: 11px; color: var(--neon-green);">✓ No active OSV CVEs</span>`;
+      }
+
+      // Detection Sources Context
+      let sourcesMarkup = '—';
+      if (Array.isArray(pkg.sources) && pkg.sources.length > 0) {
+        const firstSrc = pkg.sources[0];
+        const srcUrl = firstSrc.url ? escapeHtml(firstSrc.url) : 'DOM Script';
+        const chunkName = firstSrc.chunkName ? ` [${escapeHtml(firstSrc.chunkName)}]` : '';
+        sourcesMarkup = `<div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); word-break: break-all;">${srcUrl}${chunkName}</div>`;
+      }
+
+      // Registry Link
+      let regLink = '#';
+      if (eco === 'npm') regLink = `https://www.npmjs.com/package/${encodeURIComponent(pkg.name)}`;
+      else if (eco === 'pypi') regLink = `https://pypi.org/project/${encodeURIComponent(pkg.name)}/`;
+      else if (eco === 'rubygems') regLink = `https://rubygems.org/gems/${encodeURIComponent(pkg.name)}`;
+      else if (eco === 'crates') regLink = `https://crates.io/crates/${encodeURIComponent(pkg.name)}`;
+      else if (eco === 'composer') regLink = `https://packagist.org/packages/${encodeURIComponent(pkg.name)}`;
+
+      rowsHtml += `
+        <tr class="supply-finding-row ${isUnreg ? 'confusion-row' : ''}">
+          <td class="font-mono" style="color: var(--text-muted);">${rowIdx++}</td>
+          <td><span class="eco-pill eco-pill-${eco}">${eco}</span></td>
+          <td>
+            <div class="pkg-name-cell">
+              <span class="pkg-name-text ${isUnreg ? 'threat-text' : ''}">${name}</span>
+              ${version ? `<span class="pkg-ver-text">${version}</span>` : ''}
+            </div>
+          </td>
+          <td>${statusBadge}</td>
+          <td>${advMarkup}</td>
+          <td>
+            <div class="pkg-health-cell">
+              <span class="health-downloads">${downloads} dl/wk</span>
+              ${pkg.riskReasons && pkg.riskReasons.length > 0 ? `<span class="health-notes">${escapeHtml(pkg.riskReasons[0])}</span>` : ''}
+            </div>
+          </td>
+          <td>${sourcesMarkup}</td>
+          <td>
+            <div class="action-btn-group">
+              <button class="btn btn-glass btn-sm btn-copy-text" data-copy="${name}" title="Copy Package Name">Copy</button>
+              ${regLink !== '#' ? `<a href="${regLink}" target="_blank" rel="noreferrer" class="btn btn-glass btn-sm" title="View in Public Registry">↗</a>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    supplyTbody.innerHTML = rowsHtml;
+
+    // Attach copy button listeners
+    supplyTbody.querySelectorAll('.btn-copy-text').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const text = btn.getAttribute('data-copy');
+        if (text) {
+          await navigator.clipboard.writeText(text);
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 1200);
+        }
+      });
+    });
+  }
+
+  function refreshSupplyChainView() {
+    updateSupplyStatsUI();
+    renderSupplyTable();
+  }
+
+  // Active Tab Audit
+  async function scanActiveTabSupplyChain(forceRescan = false) {
+    if (supplyStatusTag) {
+      supplyStatusTag.textContent = 'SCANNING...';
+      supplyStatusTag.className = 'supply-status-tag active';
+    }
+    if (supplyProgressWrap) {
+      supplyProgressWrap.style.display = 'flex';
+      if (supplyProgressFill) supplyProgressFill.style.width = '15%';
+      if (supplyProgressText) supplyProgressText.textContent = forceRescan ? 'Triggering full rescan on active tab...' : 'Querying active tab content script...';
+    }
+
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tab = tabs[0];
+      if (!tab) {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'NO TAB'; supplyStatusTag.className = 'supply-status-tag'; }
+        if (supplyProgressText) supplyProgressText.textContent = 'No active browser tab found.';
+        return;
+      }
+
+      supplyState.activeTabId = tab.id;
+      supplyState.targetUrl = tab.url || 'unknown';
+      if (supplyTargetUrl) supplyTargetUrl.textContent = tab.url || '—';
+
+      // Check if restricted URL
+      const restrictedPrefixes = ['chrome://', 'edge://', 'chrome-extension://', 'about:', 'view-source:'];
+      if (restrictedPrefixes.some(p => (tab.url || '').startsWith(p))) {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'RESTRICTED'; supplyStatusTag.className = 'supply-status-tag'; }
+        if (supplyProgressText) supplyProgressText.textContent = 'System & browser internal pages cannot be audited. Please open a target website.';
+        return;
+      }
+
+      // Check content script connection or execute script dynamically
+      let response = null;
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, { action: forceRescan ? 'forceRescan' : 'getScanStatus' });
+      } catch (err) {
+        // Content script might not be injected yet if page was loaded prior to extension reload.
+        if (chrome.scripting && chrome.scripting.executeScript) {
+          if (supplyProgressText) supplyProgressText.textContent = 'Injecting scanner into page...';
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js']
+            });
+            // Wait 600ms for init
+            await new Promise(r => setTimeout(r, 600));
+            response = await chrome.tabs.sendMessage(tab.id, { action: 'getScanStatus' });
+          } catch (injectErr) {
+            console.warn('Script injection failed:', injectErr);
+          }
+        }
+      }
+
+      // If still no direct response, check background state cache
+      if (!response) {
+        const bgResult = await chrome.runtime.sendMessage({ action: 'getResults', tabId: tab.id });
+        if (bgResult && (bgResult.suspiciousPackages?.length || bgResult.exposedFiles?.length)) {
+          supplyState.packages = bgResult.suspiciousPackages || [];
+          supplyState.exposedFiles = bgResult.exposedFiles || [];
+          finishSupplyAudit(true);
+          return;
+        }
+      }
+
+      if (response) {
+        handleSupplyScanResponse(response);
+        if (response.scanning || (!response.complete && !response.packages?.length)) {
+          startPollingTabStatus(tab.id);
+        } else {
+          finishSupplyAudit(true);
+        }
+      } else {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'READY'; supplyStatusTag.className = 'supply-status-tag clean'; }
+        if (supplyProgressText) supplyProgressText.textContent = 'Scanner connected. If results do not appear, refresh the target tab and retry.';
+        setTimeout(() => { if (supplyProgressWrap) supplyProgressWrap.style.display = 'none'; }, 2500);
+      }
+    } catch (e) {
+      console.error('scanActiveTabSupplyChain error:', e);
+      if (supplyStatusTag) { supplyStatusTag.textContent = 'ERROR'; supplyStatusTag.className = 'supply-status-tag threat'; }
+      if (supplyProgressText) supplyProgressText.textContent = `Audit error: ${e.message}`;
+    }
+  }
+
+  function handleSupplyScanResponse(response) {
+    if (!response) return;
+
+    if (response.url && supplyTargetUrl) {
+      supplyState.targetUrl = response.url;
+      supplyTargetUrl.textContent = response.url;
+    }
+
+    if (Array.isArray(response.packages)) {
+      supplyState.packages = response.packages;
+    }
+
+    if (Array.isArray(response.exposedFiles)) {
+      supplyState.exposedFiles = response.exposedFiles;
+    }
+
+    if (response.stage) {
+      const pct = Math.max(10, Math.min(100, Math.round((response.stage.progress || 0) * 100)));
+      if (supplyProgressFill) supplyProgressFill.style.width = `${pct}%`;
+      if (supplyProgressText) supplyProgressText.textContent = response.stage.text || 'Auditing dependencies...';
+    }
+
+    updateSupplyStatsUI();
+    renderSupplyTable();
+  }
+
+  function startPollingTabStatus(tabId) {
+    clearInterval(supplyState.pollTimer);
+    supplyState.pollAttempts = 0;
+
+    supplyState.pollTimer = setInterval(async () => {
+      supplyState.pollAttempts++;
+      try {
+        const res = await chrome.tabs.sendMessage(tabId, { action: 'getScanStatus' });
+        if (res) {
+          handleSupplyScanResponse(res);
+          if (res.complete || (!res.scanning && res.packages?.length > 0)) {
+            clearInterval(supplyState.pollTimer);
+            finishSupplyAudit(true);
+          }
+        }
+      } catch (err) {
+        // Tab closed or script unloaded
+        if (supplyState.pollAttempts > 15) {
+          clearInterval(supplyState.pollTimer);
+          finishSupplyAudit(false);
+        }
+      }
+
+      if (supplyState.pollAttempts > 30) {
+        clearInterval(supplyState.pollTimer);
+        finishSupplyAudit(false);
+      }
+    }, 1200);
+  }
+
+  function finishSupplyAudit(isSuccess) {
+    clearInterval(supplyState.pollTimer);
+    if (supplyProgressFill) supplyProgressFill.style.width = '100%';
+    const stats = calculateSupplyStats();
+
+    if (supplyStatusTag) {
+      if (stats.critical > 0) {
+        supplyStatusTag.textContent = 'THREAT DETECTED';
+        supplyStatusTag.className = 'supply-status-tag threat';
+      } else if (stats.advisories > 0) {
+        supplyStatusTag.textContent = 'VULNERABLE';
+        supplyStatusTag.className = 'supply-status-tag threat';
+      } else {
+        supplyStatusTag.textContent = 'AUDIT COMPLETE';
+        supplyStatusTag.className = 'supply-status-tag clean';
+      }
+    }
+
+    if (supplyProgressText) {
+      supplyProgressText.textContent = `Completed: ${stats.totalFindings} total findings (${stats.critical} unregistered, ${stats.advisories} CVEs).`;
+    }
+
+    setTimeout(() => {
+      if (supplyProgressWrap) supplyProgressWrap.style.display = 'none';
+    }, 3000);
+
+    updateSupplyStatsUI();
+    renderSupplyTable();
+  }
+
+  // On-Demand Package / Manifest Audit
+  async function runManualPackageAudit(rawInput, eco = 'npm') {
+    const input = (rawInput || '').trim();
+    if (!input) return;
+
+    // Check version syntax: name@1.2.3 or name
+    let name = input;
+    let version = '';
+    if (input.includes('@') && !input.startsWith('@')) {
+      const parts = input.split('@');
+      name = parts[0];
+      version = parts[1];
+    } else if (input.startsWith('@') && input.lastIndexOf('@') > 0) {
+      const atIdx = input.lastIndexOf('@');
+      name = input.substring(0, atIdx);
+      version = input.substring(atIdx + 1);
+    }
+
+    if (btnRunManualAudit) {
+      btnRunManualAudit.disabled = true;
+      btnRunManualAudit.textContent = 'Analyzing...';
+    }
+
+    try {
+      const analysis = await chrome.runtime.sendMessage({
+        action: 'analyzePackage',
+        name,
+        ecosystem: eco,
+        version,
+        sources: [{ url: 'Manual Console Audit' }],
+        options: { osvLookup: true }
+      });
+
+      if (analysis) {
+        // Upsert into packages array
+        const existingIdx = supplyState.packages.findIndex(p => p.name === analysis.name && (p.ecosystem || 'npm') === (analysis.ecosystem || 'npm'));
+        if (existingIdx >= 0) {
+          supplyState.packages[existingIdx] = analysis;
+        } else {
+          supplyState.packages.unshift(analysis);
+        }
+        updateSupplyStatsUI();
+        renderSupplyTable();
+        engine.log('inf', `Supply chain analysis completed for ${name}: ${analysis.isUnregistered ? 'UNREGISTERED/MISSING' : 'SAFE'} (${analysis.advisoriesCount || 0} CVEs)`);
+      }
+    } catch (e) {
+      console.error('Manual package audit failed:', e);
+      alert(`Package audit failed: ${e.message}`);
+    } finally {
+      if (btnRunManualAudit) {
+        btnRunManualAudit.disabled = false;
+        btnRunManualAudit.textContent = 'Audit Package';
+      }
+    }
+  }
+
+  async function runBatchManifestAudit(rawText) {
+    if (!rawText || !rawText.trim()) {
+      alert('Please enter or paste package names or a manifest file.');
+      return;
+    }
+
+    const trimmed = rawText.trim();
+    const pkgList = []; // { name, version, eco }
+    let detectedEco = (manualAuditEco && manualAuditEco.value) || 'npm';
+
+    // Try parsing as package.json
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        detectedEco = 'npm';
+        const allDeps = {
+          ...(parsed.dependencies || {}),
+          ...(parsed.devDependencies || {}),
+          ...(parsed.peerDependencies || {}),
+          ...(parsed.optionalDependencies || {})
+        };
+        for (const [name, ver] of Object.entries(allDeps)) {
+          const cleanVer = String(ver).replace(/^[\^~>=<]+/, '');
+          pkgList.push({ name, version: cleanVer, eco: 'npm' });
+        }
+      } catch (e) {
+        // Fall back to line-by-line
+      }
+    }
+
+    // If not JSON, parse line-by-line (requirements.txt or raw list)
+    if (pkgList.length === 0) {
+      const lines = trimmed.split(/\r?\n/);
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith('#')) continue;
+
+        // Python requirements.txt: pkg==1.0.0, pkg>=2.0
+        if (line.includes('==') || line.includes('>=') || line.includes('~=')) {
+          detectedEco = 'pypi';
+          const [n, v] = line.split(/[=><~]+/);
+          if (n) pkgList.push({ name: n.trim(), version: (v || '').trim(), eco: 'pypi' });
+        } else if (line.includes('@') && !line.startsWith('@')) {
+          const [n, v] = line.split('@');
+          pkgList.push({ name: n.trim(), version: (v || '').trim(), eco: detectedEco });
+        } else {
+          pkgList.push({ name: line.trim(), version: '', eco: detectedEco });
+        }
+      }
+    }
+
+    if (pkgList.length === 0) {
+      alert('No valid packages parsed from input.');
+      return;
+    }
+
+    if (btnAuditBatch) {
+      btnAuditBatch.disabled = true;
+      btnAuditBatch.textContent = `Auditing ${pkgList.length} packages...`;
+    }
+
+    engine.log('inf', `Beginning batch supply chain analysis of ${pkgList.length} packages...`);
+
+    let done = 0;
+    for (const item of pkgList) {
+      try {
+        const analysis = await chrome.runtime.sendMessage({
+          action: 'analyzePackage',
+          name: item.name,
+          ecosystem: item.eco,
+          version: item.version,
+          sources: [{ url: 'Batch Manifest Audit' }],
+          options: { osvLookup: true }
+        });
+
+        if (analysis) {
+          const existingIdx = supplyState.packages.findIndex(p => p.name === analysis.name && (p.ecosystem || 'npm') === (analysis.ecosystem || 'npm'));
+          if (existingIdx >= 0) {
+            supplyState.packages[existingIdx] = analysis;
+          } else {
+            supplyState.packages.unshift(analysis);
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to audit ${item.name}:`, err);
+      }
+      done++;
+      if (btnAuditBatch) btnAuditBatch.textContent = `Audited ${done}/${pkgList.length}...`;
+      updateSupplyStatsUI();
+      renderSupplyTable();
+    }
+
+    if (btnAuditBatch) {
+      btnAuditBatch.disabled = false;
+      btnAuditBatch.textContent = 'Audit Batch Manifest';
+    }
+
+    engine.log('inf', `Batch supply chain audit completed for ${pkgList.length} packages.`);
+  }
+
+  // HTML Report Generator
+  function generateSupplyChainHtmlReport() {
+    const stats = calculateSupplyStats();
+    const generatedAt = new Date().toLocaleString();
+    const target = supplyState.targetUrl || 'Crawlizer Standalone Audit';
+
+    let pkgRows = '';
+    supplyState.packages.forEach((pkg, i) => {
+      const advCount = Number(pkg.advisoriesCount || (Array.isArray(pkg.advisories) ? pkg.advisories.length : 0));
+      const statusText = pkg.isUnregistered ? 'MISSING / DEPENDENCY CONFUSION' : (advCount > 0 ? `${advCount} CVEs` : 'SAFE');
+      const statusColor = pkg.isUnregistered ? '#ff3366' : (advCount > 0 ? '#f97316' : '#00ff88');
+      const advisoriesList = Array.isArray(pkg.advisories) ? pkg.advisories.map(a => `${a.id} (${a.severity || 'MED'})`).join(', ') : 'None';
+
+      pkgRows += `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <td style="padding: 10px; font-family: monospace;">${i + 1}</td>
+          <td style="padding: 10px; font-family: monospace; text-transform: uppercase;">${escapeHtml(pkg.ecosystem || 'npm')}</td>
+          <td style="padding: 10px; font-family: monospace; font-weight: bold;">${escapeHtml(pkg.name)}${pkg.version ? `@${escapeHtml(pkg.version)}` : ''}</td>
+          <td style="padding: 10px; font-family: monospace; color: ${statusColor}; font-weight: bold;">${statusText}</td>
+          <td style="padding: 10px; font-family: monospace; font-size: 11px;">${escapeHtml(advisoriesList)}</td>
+          <td style="padding: 10px; font-family: monospace;">${pkg.weeklyDownloads != null ? formatNumber(pkg.weeklyDownloads) : '—'}</td>
+        </tr>
+      `;
+    });
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crawlizer Supply Chain Security Report</title>
+  <style>
+    body { margin: 0; padding: 32px; background: #0a0e14; color: #d0d7de; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+    .container { max-width: 1100px; margin: 0 auto; background: #101622; border: 1px solid #1f293d; border-radius: 12px; padding: 28px; box-shadow: 0 16px 48px rgba(0,0,0,0.7); }
+    h1 { margin: 0 0 6px; color: #00f0ff; letter-spacing: -0.5px; }
+    .sub { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 20px 0; }
+    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px; }
+    .card-val { font-size: 28px; font-weight: bold; font-family: monospace; margin: 0; }
+    .card-lbl { font-size: 11px; text-transform: uppercase; color: #8b949e; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid rgba(255,255,255,0.15); color: #00f0ff; font-size: 12px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Crawlizer — Supply Chain & NPM Security Audit</h1>
+    <div class="sub">Target: ${escapeHtml(target)} · Generated: ${escapeHtml(generatedAt)}</div>
+    <div class="stats-grid">
+      <div class="card"><div class="card-val" style="color: #00f0ff;">${stats.score}/100</div><div class="card-lbl">Risk Score</div></div>
+      <div class="card"><div class="card-val" style="color: #ff3366;">${stats.critical}</div><div class="card-lbl">Dependency Confusion (Missing)</div></div>
+      <div class="card"><div class="card-val" style="color: #ff2bd6;">${stats.advisories}</div><div class="card-lbl">OSV CVE / GHSA Advisories</div></div>
+      <div class="card"><div class="card-val" style="color: #00ff88;">${stats.safe}</div><div class="card-lbl">Safe Registered Packages</div></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Ecosystem</th>
+          <th>Package Name</th>
+          <th>Status / Risk</th>
+          <th>OSV Advisories</th>
+          <th>Weekly Downloads</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pkgRows || '<tr><td colspan="6" style="padding: 20px; text-align: center; color: #8b949e;">No packages evaluated.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+  }
+
+  // Bind Event Listeners for Supply Chain Tab
+  if (btnScanActiveTab) {
+    btnScanActiveTab.addEventListener('click', () => scanActiveTabSupplyChain(false));
+  }
+
+  if (btnSupplyRescan) {
+    btnSupplyRescan.addEventListener('click', () => scanActiveTabSupplyChain(true));
+  }
+
+  if (btnToggleManualAudit && manualAuditBody) {
+    btnToggleManualAudit.addEventListener('click', () => {
+      const isHidden = manualAuditBody.style.display === 'none';
+      manualAuditBody.style.display = isHidden ? 'block' : 'none';
+      if (manualAuditArrow) manualAuditArrow.classList.toggle('open', isHidden);
+    });
+  }
+
+  if (btnRunManualAudit && manualAuditInput) {
+    btnRunManualAudit.addEventListener('click', () => {
+      const pkg = manualAuditInput.value.trim();
+      const eco = (manualAuditEco && manualAuditEco.value) || 'npm';
+      if (pkg) {
+        runManualPackageAudit(pkg, eco);
+      }
+    });
+
+    manualAuditInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        btnRunManualAudit.click();
+      }
+    });
+  }
+
+  if (btnAuditBatch && manualAuditTextarea) {
+    btnAuditBatch.addEventListener('click', () => {
+      runBatchManifestAudit(manualAuditTextarea.value);
+    });
+  }
+
+  if (btnLoadSampleManifest && manualAuditTextarea) {
+    btnLoadSampleManifest.addEventListener('click', () => {
+      manualAuditTextarea.value = JSON.stringify({
+        "name": "target-vulnerable-app",
+        "version": "1.0.0",
+        "dependencies": {
+          "lodash": "4.17.20",
+          "express": "4.18.2",
+          "axios": "0.21.1",
+          "@corp-internal/sso-authenticator": "1.0.0",
+          "internal-private-telemetry": "2.4.1",
+          "minimist": "1.2.5"
+        },
+        "devDependencies": {
+          "webpack": "5.76.0"
+        }
+      }, null, 2);
+      if (manualAuditBody && manualAuditBody.style.display === 'none') {
+        manualAuditBody.style.display = 'block';
+        if (manualAuditArrow) manualAuditArrow.classList.add('open');
+      }
+    });
+  }
+
+  if (supplySearch) {
+    supplySearch.addEventListener('input', () => {
+      supplyState.filters.search = supplySearch.value;
+      renderSupplyTable();
+    });
+  }
+
+  if (supplyFilterSeverity) {
+    supplyFilterSeverity.addEventListener('change', () => {
+      supplyState.filters.severity = supplyFilterSeverity.value;
+      renderSupplyTable();
+    });
+  }
+
+  if (supplyFilterEco) {
+    supplyFilterEco.addEventListener('change', () => {
+      supplyState.filters.eco = supplyFilterEco.value;
+      renderSupplyTable();
+    });
+  }
+
+  // Clickable ecosystem pills in the header strip
+  if (supplyEcoStrip) {
+    supplyEcoStrip.querySelectorAll('.eco-tag').forEach(tag => {
+      tag.addEventListener('click', () => {
+        const eco = tag.getAttribute('data-eco');
+        if (supplyState.filters.eco === eco) {
+          supplyState.filters.eco = 'all';
+          tag.classList.remove('active');
+          if (supplyFilterEco) supplyFilterEco.value = 'all';
+        } else {
+          supplyEcoStrip.querySelectorAll('.eco-tag').forEach(t => t.classList.remove('active'));
+          supplyState.filters.eco = eco;
+          tag.classList.add('active');
+          if (supplyFilterEco) supplyFilterEco.value = eco;
+        }
+        renderSupplyTable();
+      });
+    });
+  }
+
+  if (btnExportSupplyHtml) {
+    btnExportSupplyHtml.addEventListener('click', () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        alert('No supply chain findings to export.');
+        return;
+      }
+      const html = generateSupplyChainHtmlReport();
+      downloadFile(html, 'crawlizer-supply-chain-report.html', 'text/html');
+      engine.log('inf', 'Exported supply chain audit report to HTML.');
+    });
+  }
+
+  if (btnExportSupplyJson) {
+    btnExportSupplyJson.addEventListener('click', () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        alert('No supply chain findings to export.');
+        return;
+      }
+      const data = {
+        targetUrl: supplyState.targetUrl,
+        timestamp: new Date().toISOString(),
+        stats: calculateSupplyStats(),
+        packages: supplyState.packages,
+        exposedFiles: supplyState.exposedFiles
+      };
+      downloadFile(JSON.stringify(data, null, 2), 'crawlizer-supply-chain.json', 'application/json');
+      engine.log('inf', 'Exported supply chain findings to JSON.');
+    });
+  }
+
+  if (btnExportSupplyCsv) {
+    btnExportSupplyCsv.addEventListener('click', () => {
+      if (supplyState.packages.length === 0 && supplyState.exposedFiles.length === 0) {
+        alert('No supply chain findings to export.');
+        return;
+      }
+      let csv = 'Ecosystem,PackageName,Version,IsUnregistered,RiskLevel,OSVAdvisoriesCount,WeeklyDownloads,Sources\n';
+      const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+      supplyState.packages.forEach(p => {
+        const advCount = p.advisoriesCount || (p.advisories ? p.advisories.length : 0);
+        const sources = Array.isArray(p.sources) ? p.sources.map(s => s.url).join('; ') : '';
+        csv += `${esc(p.ecosystem || 'npm')},${esc(p.name)},${esc(p.version)},${p.isUnregistered ? 'YES' : 'NO'},${esc(p.riskLevel)},${advCount},${p.weeklyDownloads || 0},${esc(sources)}\n`;
+      });
+      downloadFile(csv, 'crawlizer-supply-chain.csv', 'text/csv');
+      engine.log('inf', 'Exported supply chain findings to CSV.');
+    });
+  }
+
+  if (btnCopySupplyBad) {
+    btnCopySupplyBad.addEventListener('click', async () => {
+      const bad = supplyState.packages.filter(p => p.isUnregistered);
+      if (bad.length === 0) {
+        alert('No unregistered / dependency confusion packages found to copy.');
+        return;
+      }
+      const list = bad.map(p => `${p.ecosystem || 'npm'}:${p.name}${p.version ? `@${p.version}` : ''}`).join('\n');
+      await navigator.clipboard.writeText(list);
+      alert(`Copied ${bad.length} unregistered / missing packages to clipboard!`);
+    });
+  }
+
+  if (btnClearSupply) {
+    btnClearSupply.addEventListener('click', () => {
+      if (confirm('Clear all supply chain findings?')) {
+        supplyState.packages = [];
+        supplyState.exposedFiles = [];
+        updateSupplyStatsUI();
+        renderSupplyTable();
+        engine.log('inf', 'Supply chain findings cleared.');
+      }
+    });
+  }
+
+  function formatNumber(num) {
+    const value = Number(num || 0);
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+    return `${value}`;
   }
 
   function escapeHtml(str) {

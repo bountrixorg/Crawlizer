@@ -991,14 +991,12 @@ class KatanaCrawlerEngine {
    * Crawl a single target URL using the dedicated browser tab
    */
   async crawlItemSingleTab(item) {
-    const pageTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Page crawl safety timeout on ${item.url}`)), 8500)
-    );
+    // NOTE: Do NOT put a short outer timeout here — all inner operations (nav, button clicks,
+    // JS fetching, CSS fetching, source maps) already have their own individual timeouts.
+    // A short outer race would kill _executeCrawlItemSingleTab BEFORE it reaches the enqueuing
+    // step (~line 1477), leaving the queue empty and stopping the crawl completely.
     try {
-      await Promise.race([
-        this._executeCrawlItemSingleTab(item),
-        pageTimeout
-      ]);
+      await this._executeCrawlItemSingleTab(item);
     } catch (err) {
       this.log('wrn', `Notice on ${item.url}: ${err.message}`);
     }
@@ -1287,6 +1285,30 @@ class KatanaCrawlerEngine {
       for (const metaVal of tabData.metaLinks || []) {
         const normalized = this.normalizeUrl(metaVal, effectivePageUrl);
         if (normalized) discoveredInItem.push({ url: normalized, type: 'meta-link', sourceUrl: effectivePageUrl });
+      }
+
+      // ── EARLY ENQUEUE: Phase A ───────────────────────────────────────────────
+      // Immediately enqueue navigable in-scope links from fast DOM extraction
+      // BEFORE the slow phases (JS bundle fetching, button clicking, source maps).
+      // This guarantees depth traversal begins even if a later phase is slow or hangs.
+      for (const d of discoveredInItem) {
+        if (!d.url || this.shouldIgnoreExtension(d.url)) continue;
+        const canonical = this.canonicalUrl(d.url);
+        if (!canonical) continue;
+        if (this.isInScope(canonical, effectiveSeedUrl) &&
+            depth < this.config.maxDepth &&
+            this.isNavigableInTab(canonical) &&
+            !this.visitedUrls.has(canonical) &&
+            !this.enqueuedUrls.has(canonical)) {
+          this.enqueuedUrls.add(canonical);
+          this.queue.push({
+            url: canonical,
+            seedUrl: effectiveSeedUrl,
+            depth: depth + 1,
+            targetId: null
+          });
+          this.log('inf', `[Early Queue] [Depth ${depth + 1}/${this.config.maxDepth}] ${canonical}`);
+        }
       }
     }
 

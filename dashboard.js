@@ -1253,6 +1253,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     return `<span class="badge-tag ${tagClass}">${label}</span>`;
   }
 
+  function renderCodeContextBlock(context) {
+    if (!context) return '';
+    const trimmed = String(context).trim();
+    if (!trimmed) return '';
+
+    const isMultiLine = trimmed.includes('\n');
+    const needsToggle = trimmed.length > 75 || isMultiLine;
+
+    if (!needsToggle) {
+      return `
+        <div class="secret-context-wrap">
+          <div class="secret-context-snippet font-mono">${escapeHtml(trimmed)}</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="secret-context-wrap">
+        <div class="secret-context-snippet is-compact font-mono">${escapeHtml(trimmed)}</div>
+        <button class="snippet-toggle-btn font-mono" type="button" aria-expanded="false" title="Expand or collapse code context">
+          <span>View more</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toggle-icon"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    `;
+  }
+
   function renderSourceItem(src) {
     return `
       <div class="secret-location-item">
@@ -1260,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           ${formatSourceTag(src.type)}
           <a href="${escapeHtml(src.url)}" target="_blank" class="url-cell text-xs" style="color: var(--neon-cyan);">${escapeHtml(src.url)}</a>
         </div>
-        ${src.context ? `<div class="secret-context-snippet font-mono">${escapeHtml(src.context)}</div>` : ''}
+        ${renderCodeContextBlock(src.context)}
       </div>
     `;
   }
@@ -1279,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const typeTag = formatSourceTag(src.type || (rawUrl.includes('.js') ? 'js-bundle' : 'code'));
-    const contextHtml = src.context ? `<div class="secret-context-snippet font-mono">${escapeHtml(src.context)}</div>` : '';
+    const contextHtml = renderCodeContextBlock(src.context);
 
     return `
       <div class="secret-location-item">
@@ -1445,6 +1472,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+
+  // Global event delegation for compact code context snippet toggles (Secrets & Supply Chain)
+  document.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('.snippet-toggle-btn');
+    if (!toggleBtn) return;
+    const wrap = toggleBtn.closest('.secret-context-wrap');
+    const snippet = wrap ? wrap.querySelector('.secret-context-snippet') : null;
+    if (!snippet) return;
+
+    const isCompact = snippet.classList.contains('is-compact');
+    const labelSpan = toggleBtn.querySelector('span');
+    const icon = toggleBtn.querySelector('.toggle-icon');
+
+    if (isCompact) {
+      snippet.classList.remove('is-compact');
+      snippet.classList.add('is-expanded');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      if (labelSpan) labelSpan.textContent = 'View less';
+      if (icon) icon.innerHTML = '<path d="M18 15l-6-6-6 6"/>';
+    } else {
+      snippet.classList.add('is-compact');
+      snippet.classList.remove('is-expanded');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      if (labelSpan) labelSpan.textContent = 'View more';
+      if (icon) icon.innerHTML = '<path d="M6 9l6 6 6-6"/>';
+    }
+  });
 
   if (secretsSearch) secretsSearch.addEventListener('input', debouncedRefreshSecrets);
   if (secretsFilterSeverity) secretsFilterSeverity.addEventListener('change', refreshSecretsTable);
@@ -1897,7 +1951,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         sourcesMarkup = `
           <div class="secret-locations-list">
             <div class="secret-location-item">
-              <div class="secret-context-snippet font-mono">${escapeHtml(pkg.context)}</div>
+              ${renderCodeContextBlock(pkg.context)}
             </div>
           </div>
         `;

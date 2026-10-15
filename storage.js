@@ -65,7 +65,6 @@ class KatanaStorage {
   async init() {
     if (this.isLocalServer()) {
       this.initLocalServerWs();
-      return true;
     }
 
     if (this.db) return this.db;
@@ -376,10 +375,20 @@ class KatanaStorage {
   }
 
   async updateTarget(id, updates) {
-    if (this.isLocalServer()) return;
+    if (this.isLocalServer()) {
+      try {
+        await fetch(`/api/targets/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch {}
+      return;
+    }
 
     await this.init();
     return new Promise((resolve, reject) => {
+      if (!this.db || !this.db.objectStoreNames.contains('targets')) return resolve();
       const tx = this.db.transaction('targets', 'readwrite');
       const store = tx.objectStore('targets');
       const req = store.get(id);
@@ -414,6 +423,14 @@ class KatanaStorage {
   }
 
   async reactivateAllTargets() {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/targets/reactivate', { method: 'POST' });
+        const data = await res.json();
+        return data.count || 0;
+      } catch { return 0; }
+    }
+
     await this.init();
     const all = await this.getAllTargets();
     if (all.length === 0) return 0;
@@ -571,6 +588,17 @@ class KatanaStorage {
   // ==========================================
   async saveSecrets(secretsList) {
     if (!secretsList || secretsList.length === 0) return { newCount: 0, updatedCount: 0 };
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/secrets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(secretsList)
+        });
+        const data = await res.json();
+        return { newCount: data.count || 0, updatedCount: 0 };
+      } catch { return { newCount: 0, updatedCount: 0 }; }
+    }
     await this.init();
 
     const now = Date.now();
@@ -1099,9 +1127,18 @@ class KatanaStorage {
   }
 
   async clearDiscoveredUrlsOnly() {
+    if (this.isLocalServer()) {
+      try {
+        await fetch('/api/urls', { method: 'DELETE' });
+      } catch {}
+      this.knownUrlSet.clear();
+      return;
+    }
+
     await this.init();
     this.knownUrlSet.clear();
     return new Promise((resolve, reject) => {
+      if (!this.db || !this.db.objectStoreNames.contains('discovered_urls')) return resolve();
       const tx = this.db.transaction('discovered_urls', 'readwrite');
       tx.objectStore('discovered_urls').clear();
 
@@ -1111,7 +1148,17 @@ class KatanaStorage {
   }
 
   async getSetting(key, defaultValue = null) {
+    if (this.isLocalServer()) {
+      try {
+        const val = localStorage.getItem('crawlizer_setting_' + key);
+        return val !== null ? JSON.parse(val) : defaultValue;
+      } catch {
+        return defaultValue;
+      }
+    }
+
     await this.init();
+    if (!this.db || !this.db.objectStoreNames.contains('settings')) return defaultValue;
     return new Promise((resolve) => {
       const tx = this.db.transaction('settings', 'readonly');
       const store = tx.objectStore('settings');
@@ -1122,7 +1169,15 @@ class KatanaStorage {
   }
 
   async saveSetting(key, value) {
+    if (this.isLocalServer()) {
+      try {
+        localStorage.setItem('crawlizer_setting_' + key, JSON.stringify(value));
+      } catch {}
+      return;
+    }
+
     await this.init();
+    if (!this.db || !this.db.objectStoreNames.contains('settings')) return;
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('settings', 'readwrite');
       const store = tx.objectStore('settings');

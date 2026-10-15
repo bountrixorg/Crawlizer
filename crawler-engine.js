@@ -919,6 +919,7 @@ class KatanaCrawlerEngine {
   }
 
   async focusTab() {
+    if (this.isLocalServer() || typeof chrome === 'undefined' || !chrome.tabs) return;
     return this.focusCrawlerTab();
   }
 
@@ -1746,7 +1747,12 @@ class KatanaCrawlerEngine {
 
     if (this.isLocalServer()) {
       try {
-        await fetch('/api/crawl/start', { method: 'POST' });
+        const targetList = (targets || []).map(t => (typeof t === 'string' ? t : (t.url || t)));
+        await fetch('/api/crawl/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targets: targetList })
+        });
         this.isRunning = true;
         this.log('inf', `Crawl job dispatched to Local Server (Port 4488) and Chrome Extension Agent.`);
         if (this.onStateChange) this.onStateChange('running');

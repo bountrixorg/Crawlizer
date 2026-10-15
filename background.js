@@ -852,9 +852,32 @@ class LocalServerAgent {
     this.ws = null;
     this.connected = false;
     this.reconnectTimer = null;
+    this.heartbeatTimer = null;
     this.activeCrawlerTabId = null;
     this.secretScanner = (typeof KatanaSecretScanner !== 'undefined') ? new KatanaSecretScanner() : null;
     this.supplyScanner = (typeof KatanaSupplyChainScanner !== 'undefined') ? new KatanaSupplyChainScanner() : null;
+  }
+
+  startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(async () => {
+      if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.send({ type: 'ping' });
+        try {
+          // Touch Chrome API to reset service worker 30s inactivity timer
+          await chrome.runtime.getPlatformInfo();
+        } catch {}
+      } else {
+        this.connect();
+      }
+    }, 12000);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   connect() {
@@ -872,6 +895,8 @@ class LocalServerAgent {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
         }
+
+        this.startHeartbeat();
 
         this.send({
           type: 'register:agent',
@@ -894,12 +919,14 @@ class LocalServerAgent {
 
       this.ws.onclose = () => {
         this.connected = false;
+        this.stopHeartbeat();
         chrome.storage.local.set({ localServerConnected: false });
         this.scheduleReconnect();
       };
 
       this.ws.onerror = () => {
         this.connected = false;
+        this.stopHeartbeat();
         try { this.ws.close(); } catch {}
       };
     } catch (err) {
@@ -922,6 +949,7 @@ class LocalServerAgent {
   }
 
   async handleServerCommand(msg) {
+    if (msg.type === 'pong') return;
     if (msg.type === 'crawl:job') {
       await this.executeCrawlJob(msg.url);
     } else if (msg.type === 'crawl:active_tab') {
@@ -1103,6 +1131,20 @@ class LocalServerAgent {
 
 const localServerAgent = new LocalServerAgent(4488);
 localServerAgent.connect();
+
+// Periodic watchdog alarm to prevent MV3 service worker dormancy
+try {
+  if (typeof chrome !== 'undefined' && chrome.alarms) {
+    chrome.alarms.create('crawlizer_agent_watchdog', { periodInMinutes: 0.3 });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === 'crawlizer_agent_watchdog') {
+        if (!localServerAgent.connected) {
+          localServerAgent.connect();
+        }
+      }
+    });
+  }
+} catch {}
 
 // ============================================================================
 // EVENT LISTENERS & LIFECYCLE

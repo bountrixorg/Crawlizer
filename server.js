@@ -395,6 +395,7 @@ class CrawlOrchestrator {
   }
 
   setAgentSocket(ws, info = {}) {
+    this.removeUISocket(ws);
     this.agentSocket = ws;
     this.agentInfo = {
       connected: true,
@@ -446,11 +447,21 @@ class CrawlOrchestrator {
     });
   }
 
-  startCrawl() {
+  startCrawl(customTargets = null) {
     if (this.state === 'running') return;
 
     this.state = 'running';
     db.addLog('inf', '[Crawler] Crawl session initiated.');
+
+    // If explicit targets provided, push to queue
+    if (Array.isArray(customTargets) && customTargets.length > 0) {
+      customTargets.forEach(u => {
+        const trimmed = String(u || '').trim();
+        if (trimmed && !this.pendingQueue.includes(trimmed)) {
+          this.pendingQueue.push(trimmed);
+        }
+      });
+    }
 
     // Populate queue with pending seed targets if queue is empty
     if (this.pendingQueue.length === 0) {
@@ -462,8 +473,21 @@ class CrawlOrchestrator {
       });
     }
 
+    // If still empty but we have targets in db, reset visited set and re-queue all targets
     if (this.pendingQueue.length === 0) {
+      const targets = db.getTargets();
+      if (targets.length > 0) {
+        this.visitedUrls.clear();
+        targets.forEach(t => this.pendingQueue.push(t.url));
+        db.addLog('inf', `[Crawler] Re-queued ${targets.length} targets for a new crawl run.`);
+      }
+    }
+
+    if (this.pendingQueue.length === 0) {
+      this.state = 'idle';
       db.addLog('wrn', '[Crawler] Target queue is empty. Add targets to begin crawling!');
+      this.broadcastToUI({ type: 'crawl:state', state: this.state, queueCount: 0 });
+      return;
     }
 
     this.broadcastToUI({ type: 'crawl:state', state: this.state, queueCount: this.pendingQueue.length });
@@ -509,11 +533,6 @@ class CrawlOrchestrator {
     if (this.state !== 'running') return;
     if (this.currentJob) return;
 
-    if (!this.agentSocket || this.agentSocket.readyState !== WebSocket.OPEN) {
-      db.addLog('wrn', '[Crawler] Waiting for Chrome Extension agent to connect before scanning...');
-      return;
-    }
-
     if (this.pendingQueue.length === 0) {
       this.state = 'idle';
       db.addLog('inf', '[Crawler] Queue completed. All seed targets and in-scope links processed.');
@@ -525,17 +544,144 @@ class CrawlOrchestrator {
     this.visitedUrls.add(nextUrl);
     this.currentJob = { url: nextUrl, startedAt: Date.now() };
 
-    db.addLog('inf', `[Browser] Instructing Agent to open and scan tab: ${nextUrl}`);
     this.broadcastToUI({
       type: 'crawl:job_started',
       url: nextUrl,
       queueCount: this.pendingQueue.length
     });
 
-    this.agentSocket.send(JSON.stringify({
-      type: 'crawl:job',
-      url: nextUrl
-    }));
+    if (this.agentSocket && this.agentSocket.readyState === WebSocket.OPEN) {
+      db.addLog('inf', `[Browser Tab Agent] Instructing Chrome to open and scan tab: ${nextUrl}`);
+      this.agentSocket.send(JSON.stringify({
+        type: 'crawl:job',
+        url: nextUrl
+      }));
+    } else {
+      db.addLog('wrn', `[Server Crawler] Agent offline; scanning ${nextUrl} directly via HTTP...`);
+      this.executeServerSideScan(nextUrl);
+    }
+  }
+
+  async executeServerSideScan(targetUrl) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
+
+      const res = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.0.5',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      const html = await res.text();
+      const effectiveUrl = res.url || targetUrl;
+      const findings = this.extractFromHtmlText(effectiveUrl, html);
+      this.handleJobCompleted(targetUrl, findings);
+    } catch (err) {
+      db.addLog('wrn', `[Server Scan] Request notice for ${targetUrl}: ${err.message}`);
+      this.handleJobCompleted(targetUrl, { urls: [], secrets: [], supplyChain: [] });
+    }
+  }
+
+  extractFromHtmlText(baseUrl, html) {
+    const urls = [];
+    const secrets = [];
+    const supplyChain = [];
+    if (!html || typeof html !== 'string') return { urls, secrets, supplyChain };
+
+    let origin = '';
+    try { origin = new URL(baseUrl).origin; } catch {}
+
+    const addUrl = (raw, type) => {
+      if (!raw || typeof raw !== 'string') return;
+      raw = raw.trim();
+      if (raw.startsWith('#') || raw.startsWith('javascript:') || raw.startsWith('mailto:') || raw.startsWith('data:')) return;
+      try {
+        const resolved = new URL(raw, baseUrl).href;
+        const scope = (new URL(resolved).origin === origin) ? 'in-scope' : 'out-of-scope';
+        urls.push({
+          url: resolved,
+          type,
+          scope,
+          sourceUrl: baseUrl,
+          discoveredAt: new Date().toISOString()
+        });
+      } catch {}
+    };
+
+    // Links & scripts
+    const hrefRegex = /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi;
+    let m;
+    while ((m = hrefRegex.exec(html)) !== null) addUrl(m[1], 'href');
+
+    const scriptRegex = /<script\s+(?:[^>]*?\s+)?src=["']([^"']+)["']/gi;
+    while ((m = scriptRegex.exec(html)) !== null) addUrl(m[1], 'script');
+
+    const linkRegex = /<link\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi;
+    while ((m = linkRegex.exec(html)) !== null) addUrl(m[1], 'link');
+
+    // Endpoints inside strings
+    const fullUrlRegex = /https?:\/\/[a-zA-Z0-9_\-.]+(?::[0-9]+)?(?:\/[^\s"'\`<>]*)*[^\s"'\`<>.,;]/g;
+    while ((m = fullUrlRegex.exec(html)) !== null) addUrl(m[0], 'regex-url');
+
+    const apiPathRegex = /["'](\/(?:api|v[0-9]+|graphql|auth|users|admin|rest|internal)\/[a-zA-Z0-9_\-\/]+(?:\?[^\s"'\`]*)?)["']/gi;
+    while ((m = apiPathRegex.exec(html)) !== null) addUrl(m[1], 'api-endpoint');
+
+    // Pattern-based Secret Scanning Rules
+    const secretRules = [
+      { name: 'AWS Access Key ID', regex: /\b(AKIA[0-9A-Z]{16})\b/g, severity: 'critical', category: 'Cloud' },
+      { name: 'GitHub Personal Access Token', regex: /\b(gh[pousr]_[A-Za-z0-9_]{36,255})\b/g, severity: 'critical', category: 'Dev' },
+      { name: 'Generic API Key', regex: /["'](?:api[_-]?key|access[_-]?token|auth[_-]?token)["']\s*[:=]\s*["']([A-Za-z0-9_\-]{20,80})["']/gi, severity: 'high', category: 'API' },
+      { name: 'Slack Bot / Webhook Token', regex: /\b(xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,34})\b/g, severity: 'critical', category: 'Chat' },
+      { name: 'JWT Bearer Token', regex: /\b(eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g, severity: 'medium', category: 'Auth' },
+      { name: 'Google API Key', regex: /\b(AIza[0-9A-Za-z_-]{35})\b/g, severity: 'high', category: 'Cloud' },
+      { name: 'Stripe Secret Key', regex: /\b(sk_live_[0-9a-zA-Z]{24})\b/g, severity: 'critical', category: 'Payment' }
+    ];
+
+    secretRules.forEach(rule => {
+      let secMatch;
+      while ((secMatch = rule.regex.exec(html)) !== null) {
+        const val = secMatch[1] || secMatch[0];
+        if (val && val.length > 8) {
+          secrets.push({
+            ruleName: rule.name,
+            severity: rule.severity,
+            category: rule.category,
+            match: val,
+            masked: val.slice(0, 4) + '••••••••' + val.slice(-4),
+            sourceUrl: baseUrl,
+            sourceType: 'html',
+            context: html.slice(Math.max(0, secMatch.index - 50), Math.min(html.length, secMatch.index + val.length + 50))
+          });
+        }
+      }
+    });
+
+    // Supply Chain Package Hints (CDNs)
+    const npmCdnRegex = /(?:cdn\.jsdelivr\.net\/npm\/|unpkg\.com\/)(@?[a-zA-Z0-9_\-\.\/]+)@([0-9]+\.[0-9]+(?:\.[0-9a-zA-Z_-]+)?)/g;
+    let pkgMatch;
+    while ((pkgMatch = npmCdnRegex.exec(html)) !== null) {
+      let rawPkg = pkgMatch[1];
+      let ver = pkgMatch[2];
+      if (rawPkg.includes('/')) rawPkg = rawPkg.split('/')[0];
+      supplyChain.push({
+        name: rawPkg,
+        version: ver,
+        ecosystem: 'npm',
+        sourceUrl: baseUrl,
+        sourceType: 'cdn-script',
+        riskLevel: 'LOW',
+        isUnregistered: false,
+        advisories: [],
+        advisoriesCount: 0,
+        context: pkgMatch[0]
+      });
+    }
+
+    return { urls, secrets, supplyChain };
   }
 
   handleJobCompleted(url, findings = {}) {
@@ -664,6 +810,27 @@ app.post('/api/targets', (req, res) => {
   res.json({ success: true, added, targets: db.getTargets() });
 });
 
+app.patch('/api/targets/:id', (req, res) => {
+  const t = db.targets.find(item => String(item.id) === String(req.params.id));
+  if (t) {
+    Object.assign(t, req.body);
+    db.scheduleSave();
+    return res.json({ success: true, target: t });
+  }
+  res.status(404).json({ error: 'Target not found' });
+});
+
+app.post('/api/targets/reactivate', (req, res) => {
+  let count = 0;
+  db.targets.forEach(t => {
+    t.status = 'pending';
+    t.error = null;
+    count++;
+  });
+  db.scheduleSave();
+  res.json({ success: true, count });
+});
+
 app.delete('/api/targets', (req, res) => {
   db.clearTargets();
   res.json({ success: true });
@@ -685,6 +852,13 @@ app.post('/api/urls', (req, res) => {
     orchestrator.broadcastToUI({ type: 'data:urls', items: added, metrics: db.getMetrics() });
   }
   res.json({ success: true, count: added.length });
+});
+
+app.delete('/api/urls', (req, res) => {
+  db.urls = [];
+  db.urlSet.clear();
+  db.scheduleSave();
+  res.json({ success: true });
 });
 
 // Secrets
@@ -731,6 +905,107 @@ app.post('/api/supply-chain', (req, res) => {
   res.json({ success: true, count: added.length });
 });
 
+app.post('/api/supply-chain/analyze', async (req, res) => {
+  const { name, ecosystem = 'npm', version = '' } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Package name required' });
+
+  try {
+    const result = {
+      name,
+      ecosystem: (ecosystem || 'npm').toLowerCase(),
+      version: version || '',
+      isUnregistered: false,
+      riskLevel: 'LOW',
+      riskReasons: [],
+      weeklyDownloads: 0,
+      advisories: [],
+      advisoriesCount: 0
+    };
+
+    // 1. Registry query
+    if (result.ecosystem === 'npm') {
+      try {
+        const regRes = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (regRes.status === 404) {
+          result.isUnregistered = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered package on npm (Critical dependency confusion risk)');
+        } else if (regRes.ok) {
+          const regData = await regRes.json();
+          result.version = version || (regData['dist-tags'] && regData['dist-tags'].latest) || '';
+          if (!regData.repository && !regData.homepage) {
+            result.riskLevel = 'HIGH';
+            result.riskReasons.push('No public source repository or homepage listed');
+          }
+        }
+      } catch (e) {
+        console.warn(`npm registry check notice for ${name}:`, e.message);
+      }
+
+      // Download count
+      try {
+        const dlRes = await fetch(`https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(name)}`, {
+          signal: AbortSignal.timeout(3000)
+        });
+        if (dlRes.ok) {
+          const dlData = await dlRes.json();
+          result.weeklyDownloads = dlData.downloads || 0;
+        }
+      } catch {}
+    } else if (result.ecosystem === 'pypi') {
+      try {
+        const pyRes = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (pyRes.status === 404) {
+          result.isUnregistered = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered package on PyPI (Dependency confusion risk)');
+        } else if (pyRes.ok) {
+          const pyData = await pyRes.json();
+          result.version = version || (pyData.info && pyData.info.version) || '';
+        }
+      } catch {}
+    }
+
+    // 2. OSV.dev CVE Query
+    try {
+      const osvEcoMap = { npm: 'npm', pypi: 'PyPI', rubygems: 'RubyGems', nuget: 'NuGet', maven: 'Maven', composer: 'Packagist', golang: 'Go', crates: 'crates.io' };
+      const osvBody = { package: { name, ecosystem: osvEcoMap[result.ecosystem] || 'npm' } };
+      if (result.version) osvBody.version = result.version;
+
+      const osvRes = await fetch('https://api.osv.dev/v1/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(osvBody),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (osvRes.ok) {
+        const osvData = await osvRes.json();
+        const vulns = osvData.vulns || [];
+        result.advisoriesCount = vulns.length;
+        result.advisories = vulns.map(v => ({
+          id: v.id,
+          cveId: (v.aliases && v.aliases.find(a => a.startsWith('CVE-'))) || v.id,
+          summary: (v.summary || v.details || '').slice(0, 200),
+          severity: (v.database_specific && v.database_specific.severity) || 'MEDIUM'
+        }));
+        if (vulns.length > 0 && result.riskLevel !== 'CRITICAL') {
+          result.riskLevel = 'HIGH';
+          result.riskReasons.push(`Affected by ${vulns.length} known security advisory(ies)`);
+        }
+      }
+    } catch {}
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/supply-chain', (req, res) => {
   db.supplyChain = [];
   db.supplyMap.clear();
@@ -758,7 +1033,8 @@ app.delete('/api/logs', (req, res) => {
 
 // Crawl Controls
 app.post('/api/crawl/start', (req, res) => {
-  orchestrator.startCrawl();
+  const customTargets = req.body && req.body.targets;
+  orchestrator.startCrawl(customTargets);
   res.json({ success: true, state: orchestrator.state });
 });
 
@@ -803,6 +1079,14 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (raw) => {
     try {
       const msg = JSON.parse(raw);
+
+      // Ping/Pong keepalive
+      if (msg.type === 'ping') {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pong' }));
+        }
+        return;
+      }
 
       // Chrome Extension Agent Registration
       if (msg.type === 'register:agent') {

@@ -865,46 +865,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   async function startCrawling() {
-    const config = {
-      mode: cfgMode?.value || 'single-tab',
-      scopeMode: cfgScope?.value || 'same-domain',
-      scopeRegex: cfgScopeRegex?.value?.trim() || '',
-      tabRenderDelay: parseInt(cfgTabDelay?.value, 10) || 400,
-      concurrency: (cfgMode?.value === 'single-tab') ? 1 : (parseInt(cfgConcurrency?.value, 10) || 10),
-      maxDepth: Math.max(3, parseInt(cfgDepth?.value, 10) || 3),
-      timeout: (parseInt(cfgTimeout?.value, 10) || 8) * 1000,
-      subdomainCrawl: cfgSubdomainCrawl ? cfgSubdomainCrawl.checked : true,
-      openFoundUrlsInTab: cfgOpenInTab ? cfgOpenInTab.checked : true,
-      autoClickButtons: cfgClickButtons ? cfgClickButtons.checked : true,
-      crawlJavascript: cfgCrawlJs ? cfgCrawlJs.checked : true,
-      parseRobotsAndSitemaps: cfgRobotsSitemap ? cfgRobotsSitemap.checked : true,
-      userAgent: cfgUserAgent?.value?.trim() || navigator.userAgent
-    };
+    try {
+      const config = {
+        mode: cfgMode?.value || 'single-tab',
+        scopeMode: cfgScope?.value || 'same-domain',
+        scopeRegex: cfgScopeRegex?.value?.trim() || '',
+        tabRenderDelay: parseInt(cfgTabDelay?.value, 10) || 400,
+        concurrency: (cfgMode?.value === 'single-tab') ? 1 : (parseInt(cfgConcurrency?.value, 10) || 10),
+        maxDepth: Math.max(3, parseInt(cfgDepth?.value, 10) || 3),
+        timeout: (parseInt(cfgTimeout?.value, 10) || 8) * 1000,
+        subdomainCrawl: cfgSubdomainCrawl ? cfgSubdomainCrawl.checked : true,
+        openFoundUrlsInTab: cfgOpenInTab ? cfgOpenInTab.checked : true,
+        autoClickButtons: cfgClickButtons ? cfgClickButtons.checked : true,
+        crawlJavascript: cfgCrawlJs ? cfgCrawlJs.checked : true,
+        parseRobotsAndSitemaps: cfgRobotsSitemap ? cfgRobotsSitemap.checked : true,
+        userAgent: cfgUserAgent?.value?.trim() || navigator.userAgent
+      };
 
-    engine.configure(config);
-    await storage.saveSetting('crawler_config', config);
+      engine.configure(config);
+      await storage.saveSetting('crawler_config', config);
 
-    // Reset any targets stuck in 'crawling' status from a previously aborted session
-    const allExistingTargets = await storage.getAllTargets();
-    const stuckCrawling = allExistingTargets.filter(t => t.status === 'crawling');
-    for (const s of stuckCrawling) {
-      await storage.updateTarget(s.id, { status: 'pending' });
+      // Reset any targets stuck in 'crawling' status from a previously aborted session
+      const allExistingTargets = await storage.getAllTargets();
+      const stuckCrawling = allExistingTargets.filter(t => t.status === 'crawling');
+      for (const s of stuckCrawling) {
+        await storage.updateTarget(s.id, { status: 'pending' });
+      }
+
+      let pending = await storage.getPendingTargets();
+      if (pending.length === 0 && allExistingTargets.length > 0) {
+        engine.log('inf', `Re-activating ${allExistingTargets.length} seed targets for new crawl session...`);
+        await storage.reactivateAllTargets();
+        pending = await storage.getPendingTargets();
+      }
+
+      if (pending.length === 0) {
+        alert('No pending targets to crawl. Please upload a .txt file or paste seed URLs.');
+        switchTab('tab-upload');
+        return;
+      }
+
+      await engine.start(pending);
+    } catch (err) {
+      console.error('startCrawling error:', err);
+      engine.log('err', `Start crawl failed: ${err.message}`);
     }
-
-    let pending = await storage.getPendingTargets();
-    if (pending.length === 0 && allExistingTargets.length > 0) {
-      engine.log('inf', `Re-activating ${allExistingTargets.length} seed targets for new crawl session...`);
-      await storage.reactivateAllTargets();
-      pending = await storage.getPendingTargets();
-    }
-
-    if (pending.length === 0) {
-      alert('No pending targets to crawl. Please upload a .txt file or paste seed URLs.');
-      switchTab('tab-upload');
-      return;
-    }
-
-    await engine.start(pending);
   }
 
   // ==========================================
@@ -2148,7 +2153,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (supplyProgressText) supplyProgressText.textContent = 'Inspecting active tab DOM & scripts...';
     }
 
+    // LOCAL SERVER MODE: Dispatch to Chrome Extension Agent via WebSocket
+    if (storage && storage.isLocalServer && storage.isLocalServer()) {
+      if (supplyProgressText) supplyProgressText.textContent = 'Instructing Chrome Extension Agent to audit current active browser tab...';
+      try {
+        const res = await fetch('/api/crawl/active-tab', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          if (supplyProgressText) supplyProgressText.textContent = 'Chrome Agent auditing tab and streaming findings back...';
+        } else {
+          if (supplyStatusTag) { supplyStatusTag.textContent = 'AGENT OFFLINE'; supplyStatusTag.className = 'supply-status-tag'; }
+          if (supplyProgressText) supplyProgressText.textContent = 'Chrome Extension Agent is standing by. Click the Crawlizer extension icon in your toolbar to activate.';
+        }
+      } catch (e) {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'SERVER ERROR'; supplyStatusTag.className = 'supply-status-tag'; }
+      }
+      setTimeout(() => { if (supplyProgressWrap) supplyProgressWrap.style.display = 'none'; }, 4000);
+      return;
+    }
+
     try {
+      if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.query) {
+        if (supplyStatusTag) { supplyStatusTag.textContent = 'STANDALONE'; supplyStatusTag.className = 'supply-status-tag'; }
+        if (supplyProgressText) supplyProgressText.textContent = 'Please use the Manual Audit section below or connect the Crawlizer extension.';
+        setTimeout(() => { if (supplyProgressWrap) supplyProgressWrap.style.display = 'none'; }, 4000);
+        return;
+      }
+
       const restrictedPrefixes = ['chrome://', 'edge://', 'chrome-extension://', 'about:', 'view-source:'];
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       let tab = tabs[0];
@@ -2340,6 +2371,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSupplyTable();
   }
 
+  // Universal package analysis (works on Local Server & Chrome Extension)
+  async function analyzePackageUniversal(name, ecosystem = 'npm', version = '', sources = [{ url: 'Manual Console Audit' }]) {
+    // 1. If running on local server, use /api/supply-chain/analyze
+    if (storage && storage.isLocalServer && storage.isLocalServer()) {
+      try {
+        const res = await fetch('/api/supply-chain/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, ecosystem, version })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            ...data,
+            sources,
+            type: 'package',
+            discoveredAt: Date.now()
+          };
+        }
+      } catch (e) {
+        console.warn('Local server analyzePackage error:', e);
+      }
+    }
+
+    // 2. If running inside Chrome Extension, use runtime message
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      return await chrome.runtime.sendMessage({
+        action: 'analyzePackage',
+        name,
+        ecosystem,
+        version,
+        sources,
+        options: { osvLookup: true }
+      });
+    }
+
+    return null;
+  }
+
   // On-Demand Package / Manifest Audit
   async function runManualPackageAudit(rawInput, eco = 'npm') {
     const input = (rawInput || '').trim();
@@ -2364,20 +2434,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-      const analysis = await chrome.runtime.sendMessage({
-        action: 'analyzePackage',
-        name,
-        ecosystem: eco,
-        version,
-        sources: [{ url: 'Manual Console Audit' }],
-        options: { osvLookup: true }
-      });
+      const analysis = await analyzePackageUniversal(name, eco, version, [{ url: 'Manual Console Audit' }]);
 
       if (analysis) {
         await storage.saveSupplyChainFindings([analysis]);
         await refreshSupplyChainTable();
         await refreshMetrics();
         engine.log('inf', `Supply chain analysis completed for ${name}: ${analysis.isUnregistered ? 'UNREGISTERED/MISSING' : 'SAFE'} (${analysis.advisoriesCount || 0} CVEs)`);
+      } else {
+        alert(`Could not analyze package ${name}. Ensure local server or Chrome extension is active.`);
       }
     } catch (e) {
       console.error('Manual package audit failed:', e);
@@ -2457,14 +2522,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const batchResults = [];
     for (const item of pkgList) {
       try {
-        const analysis = await chrome.runtime.sendMessage({
-          action: 'analyzePackage',
-          name: item.name,
-          ecosystem: item.eco,
-          version: item.version,
-          sources: [{ url: 'Batch Manifest Audit' }],
-          options: { osvLookup: true }
-        });
+        const analysis = await analyzePackageUniversal(item.name, item.eco, item.version, [{ url: 'Batch Manifest Audit' }]);
 
         if (analysis) {
           batchResults.push(analysis);

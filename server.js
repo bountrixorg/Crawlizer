@@ -558,6 +558,9 @@ class CrawlOrchestrator {
       this.state = 'idle';
       db.addLog('inf', '[Crawler] Queue completed. All seed targets and in-scope links processed.');
       this.broadcastToUI({ type: 'crawl:state', state: this.state, queueCount: 0 });
+      if (this.agentSocket && this.agentSocket.readyState === WebSocket.OPEN) {
+        this.agentSocket.send(JSON.stringify({ type: 'crawl:finished' }));
+      }
       return;
     }
 
@@ -1110,6 +1113,14 @@ app.post('/api/crawl/stop', (req, res) => {
 app.post('/api/crawl/active-tab', (req, res) => {
   const dispatched = orchestrator.triggerActiveTabAudit();
   res.json({ success: dispatched });
+});
+
+app.post('/api/crawl/focus-tab', (req, res) => {
+  if (orchestrator.agentSocket && orchestrator.agentSocket.readyState === WebSocket.OPEN) {
+    orchestrator.agentSocket.send(JSON.stringify({ type: 'crawl:focus_tab' }));
+    return res.json({ success: true });
+  }
+  res.json({ success: false, error: 'Agent offline' });
 });
 
 app.post('/api/wipe', (req, res) => {

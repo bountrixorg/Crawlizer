@@ -954,8 +954,55 @@ class LocalServerAgent {
       await this.executeCrawlJob(msg.url);
     } else if (msg.type === 'crawl:active_tab') {
       await this.executeActiveTabAudit();
-    } else if (msg.type === 'crawl:stop') {
-      await this.abortCurrentJob();
+    } else if (msg.type === 'crawl:focus_tab') {
+      await this.focusCrawlerTab();
+    } else if (msg.type === 'crawl:stop' || msg.type === 'crawl:finished') {
+      await this.closeCrawlerTab();
+    }
+  }
+
+  async ensureCrawlerTab(targetUrl) {
+    if (this.activeCrawlerTabId) {
+      try {
+        const tab = await chrome.tabs.get(this.activeCrawlerTabId);
+        if (tab) {
+          await chrome.tabs.update(this.activeCrawlerTabId, { url: targetUrl });
+          return tab;
+        }
+      } catch {
+        this.activeCrawlerTabId = null;
+      }
+    }
+
+    const tab = await chrome.tabs.create({ url: targetUrl, active: false });
+    this.activeCrawlerTabId = tab.id;
+    return tab;
+  }
+
+  async closeCrawlerTab() {
+    if (this.activeCrawlerTabId) {
+      const idToClose = this.activeCrawlerTabId;
+      this.activeCrawlerTabId = null;
+      try {
+        await chrome.tabs.remove(idToClose);
+      } catch {}
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: 'Crawl session ended. Dedicated scanner tab closed.'
+      });
+    }
+  }
+
+  async focusCrawlerTab() {
+    if (this.activeCrawlerTabId) {
+      try {
+        await chrome.tabs.update(this.activeCrawlerTabId, { active: true });
+        const tab = await chrome.tabs.get(this.activeCrawlerTabId);
+        if (tab && tab.windowId) {
+          await chrome.windows.update(tab.windowId, { focused: true });
+        }
+      } catch {}
     }
   }
 
@@ -965,18 +1012,16 @@ class LocalServerAgent {
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Opening browser tab to scan: ${targetUrl}`
+        message: `Navigating scanner tab to: ${targetUrl}`
       });
-      console.log(`[Crawlizer Agent] Opening background tab to scan: ${targetUrl}`);
-      
-      const tab = await chrome.tabs.create({ url: targetUrl, active: false });
+
+      const tab = await this.ensureCrawlerTab(targetUrl);
       tabId = tab.id;
-      this.activeCrawlerTabId = tabId;
 
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Tab opened (ID ${tabId}) for ${targetUrl}. Loading DOM...`
+        message: `Scanner tab active (ID ${tabId}) -> loading ${targetUrl}...`
       });
 
       await this.waitForTabReady(tabId, 8000);
@@ -984,7 +1029,7 @@ class LocalServerAgent {
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Extracting links, scripts & scanning secrets on ${targetUrl}...`
+        message: `Scanning DOM, endpoints & secrets on ${targetUrl}...`
       });
 
       let extracted = null;
@@ -1006,15 +1051,11 @@ class LocalServerAgent {
       }
       const findings = await this.analyzeExtractedData(targetUrl, extracted);
 
-      try {
-        await chrome.tabs.remove(tabId);
-      } catch {}
-      this.activeCrawlerTabId = null;
-
+      // Dedicated crawler tab intentionally kept open so it navigates seamlessly across all queued URLs
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Tab closed. Discovered ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
+        message: `Scanned ${targetUrl}: discovered ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
       });
 
       this.send({
@@ -1026,12 +1067,7 @@ class LocalServerAgent {
       });
 
     } catch (err) {
-      console.warn(`[Crawlizer Agent] Failed crawling ${targetUrl}:`, err);
-      if (tabId) {
-        try { await chrome.tabs.remove(tabId); } catch {}
-      }
-      this.activeCrawlerTabId = null;
-
+      console.warn(`[Crawlizer Agent] Notice crawling ${targetUrl}:`, err);
       this.send({
         type: 'agent:log',
         level: 'wrn',
@@ -1046,8 +1082,6 @@ class LocalServerAgent {
         supplyChain: []
       });
     }
-  }
-
   async executeActiveTabAudit() {
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1094,15 +1128,6 @@ class LocalServerAgent {
         level: 'err',
         message: `Active tab audit error: ${err.message}`
       });
-    }
-  }
-
-  async abortCurrentJob() {
-    if (this.activeCrawlerTabId) {
-      try {
-        await chrome.tabs.remove(this.activeCrawlerTabId);
-      } catch {}
-      this.activeCrawlerTabId = null;
     }
   }
 
@@ -1263,6 +1288,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
+  if (localServerAgent && localServerAgent.activeCrawlerTabId === tabId) {
+    localServerAgent.activeCrawlerTabId = null;
+  }
   await BadgeManager.clearBadge(tabId);
   state.removeTab(tabId);
 });

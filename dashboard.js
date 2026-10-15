@@ -659,8 +659,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnStart.style.display = 'none';
       btnPause.style.display = 'inline-flex';
       btnResume.style.display = 'none';
-      btnStop.disabled = false;
-      if (cfgMode.value === 'single-tab') btnFocusTab.style.display = 'inline-flex';
+      btnFocusTab.style.display = 'inline-flex';
     } else if (state === 'paused') {
       pauseScanTimer();
       headerStatusDot.classList.add('paused');
@@ -676,6 +675,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnPause.style.display = 'none';
       btnResume.style.display = 'none';
       btnStop.disabled = true;
+      btnFocusTab.style.display = 'none';
       captchaBanner.style.display = 'none';
       refreshMetrics();
       renderTargetsTable();

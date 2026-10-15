@@ -919,7 +919,13 @@ class KatanaCrawlerEngine {
   }
 
   async focusTab() {
-    if (this.isLocalServer() || typeof chrome === 'undefined' || !chrome.tabs) return;
+    if (this.isLocalServer()) {
+      try {
+        await fetch('/api/crawl/focus-tab', { method: 'POST' });
+      } catch {}
+      return;
+    }
+    if (typeof chrome === 'undefined' || !chrome.tabs) return;
     return this.focusCrawlerTab();
   }
 

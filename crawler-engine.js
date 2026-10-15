@@ -1743,25 +1743,33 @@ class KatanaCrawlerEngine {
   }
 
   async start(targets) {
-    if (this.isRunning) return;
-
     if (this.isLocalServer()) {
       try {
         const targetList = (targets || []).map(t => (typeof t === 'string' ? t : (t.url || t)));
-        await fetch('/api/crawl/start', {
+        this.isRunning = true;
+        if (this.onStateChange) this.onStateChange('running');
+        this.log('inf', `[Katana] Dispatched ${targetList.length} targets to Local Server (Port 4488)...`);
+        const res = await fetch('/api/crawl/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targets: targetList })
         });
-        this.isRunning = true;
-        this.log('inf', `Crawl job dispatched to Local Server (Port 4488) and Chrome Extension Agent.`);
-        if (this.onStateChange) this.onStateChange('running');
+        const data = await res.json();
+        if (data.success) {
+          this.log('inf', `[Katana] Local crawl session active. Browser Extension Agent instructed to process queue.`);
+        } else {
+          this.log('wrn', `[Katana] Server status notice: ${data.error || 'Server queue active'}`);
+        }
         return;
       } catch (err) {
+        this.isRunning = false;
+        if (this.onStateChange) this.onStateChange('stopped');
         this.log('err', `Failed to start crawl on Local Server: ${err.message}`);
         return;
       }
     }
+
+    if (this.isRunning) return;
 
     this.isRunning = true;
     this.isPaused = false;

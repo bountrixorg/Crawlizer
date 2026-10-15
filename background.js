@@ -962,26 +962,60 @@ class LocalServerAgent {
   async executeCrawlJob(targetUrl) {
     let tabId = null;
     try {
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Opening browser tab to scan: ${targetUrl}`
+      });
       console.log(`[Crawlizer Agent] Opening background tab to scan: ${targetUrl}`);
       
       const tab = await chrome.tabs.create({ url: targetUrl, active: false });
       tabId = tab.id;
       this.activeCrawlerTabId = tabId;
 
-      await this.waitForTabReady(tabId, 8000);
-
-      const results = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: katanaInTabExtractionScript
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Tab opened (ID ${tabId}) for ${targetUrl}. Loading DOM...`
       });
 
-      const extracted = results && results[0] ? results[0].result : null;
+      await this.waitForTabReady(tabId, 8000);
+
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Extracting links, scripts & scanning secrets on ${targetUrl}...`
+      });
+
+      let extracted = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const tabInfo = await chrome.tabs.get(tabId);
+          if (!tabInfo || !tabInfo.url || tabInfo.url.startsWith('chrome://')) break;
+          const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: katanaInTabExtractionScript
+          });
+          if (results && results[0] && results[0].result) {
+            extracted = results[0].result;
+            break;
+          }
+        } catch (scriptErr) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
       const findings = await this.analyzeExtractedData(targetUrl, extracted);
 
       try {
         await chrome.tabs.remove(tabId);
       } catch {}
       this.activeCrawlerTabId = null;
+
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Tab closed. Discovered ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
+      });
 
       this.send({
         type: 'agent:findings',
@@ -999,6 +1033,12 @@ class LocalServerAgent {
       this.activeCrawlerTabId = null;
 
       this.send({
+        type: 'agent:log',
+        level: 'wrn',
+        message: `Notice while scanning ${targetUrl}: ${err.message}`
+      });
+
+      this.send({
         type: 'agent:findings',
         targetUrl,
         urls: [],
@@ -1012,10 +1052,19 @@ class LocalServerAgent {
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab || !activeTab.id || !activeTab.url || activeTab.url.startsWith('chrome://')) {
+        this.send({
+          type: 'agent:log',
+          level: 'wrn',
+          message: `Active tab is invalid or protected (${activeTab ? activeTab.url : 'no tab'}). Please focus on a target web page tab first.`
+        });
         return;
       }
 
-      console.log(`[Crawlizer Agent] Auditing active tab: ${activeTab.url}`);
+      this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Auditing active browser tab: ${activeTab.url}`
+      });
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: activeTab.id },
@@ -1026,6 +1075,12 @@ class LocalServerAgent {
       const findings = await this.analyzeExtractedData(activeTab.url, extracted);
 
       this.send({
+        type: 'agent:log',
+        level: 'inf',
+        message: `Active tab audit complete for ${activeTab.url}: found ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
+      });
+
+      this.send({
         type: 'agent:findings',
         targetUrl: activeTab.url,
         urls: findings.urls,
@@ -1034,6 +1089,11 @@ class LocalServerAgent {
       });
     } catch (err) {
       console.warn('[Crawlizer Agent] Active tab audit failed:', err);
+      this.send({
+        type: 'agent:log',
+        level: 'err',
+        message: `Active tab audit error: ${err.message}`
+      });
     }
   }
 

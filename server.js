@@ -448,20 +448,33 @@ class CrawlOrchestrator {
   }
 
   startCrawl(customTargets = null) {
-    if (this.state === 'running') return;
-
-    this.state = 'running';
-    db.addLog('inf', '[Crawler] Crawl session initiated.');
-
-    // If explicit targets provided, push to queue
+    // If explicit targets provided, push to db and queue
     if (Array.isArray(customTargets) && customTargets.length > 0) {
       customTargets.forEach(u => {
         const trimmed = String(u || '').trim();
-        if (trimmed && !this.pendingQueue.includes(trimmed)) {
-          this.pendingQueue.push(trimmed);
+        if (trimmed) {
+          db.addTarget(trimmed);
+          if (!this.pendingQueue.includes(trimmed)) {
+            this.pendingQueue.push(trimmed);
+          }
         }
       });
     }
+
+    if (this.state === 'running') {
+      db.addLog('inf', `[Crawler] Crawl session active with ${this.pendingQueue.length} pending targets.`);
+      // If currentJob has stalled for over 18 seconds, auto-recover it
+      if (this.currentJob && Date.now() - this.currentJob.startedAt > 18000) {
+        db.addLog('wrn', `[Crawler Watchdog] Current scan of ${this.currentJob.url} was stalled; recycling job.`);
+        this.handleJobCompleted(this.currentJob.url, { urls: [], secrets: [], supplyChain: [] });
+      } else {
+        this.dispatchNext();
+      }
+      return;
+    }
+
+    this.state = 'running';
+    db.addLog('inf', '[Crawler] Crawl session initiated.');
 
     // Populate queue with pending seed targets if queue is empty
     if (this.pendingQueue.length === 0) {
@@ -478,7 +491,11 @@ class CrawlOrchestrator {
       const targets = db.getTargets();
       if (targets.length > 0) {
         this.visitedUrls.clear();
-        targets.forEach(t => this.pendingQueue.push(t.url));
+        targets.forEach(t => {
+          t.status = 'pending';
+          this.pendingQueue.push(t.url);
+        });
+        db.scheduleSave();
         db.addLog('inf', `[Crawler] Re-queued ${targets.length} targets for a new crawl run.`);
       }
     }
@@ -509,6 +526,10 @@ class CrawlOrchestrator {
   }
 
   stopCrawl() {
+    if (this.jobWatchdog) {
+      clearTimeout(this.jobWatchdog);
+      this.jobWatchdog = null;
+    }
     this.state = 'idle';
     this.currentJob = null;
     this.pendingQueue = [];
@@ -544,11 +565,27 @@ class CrawlOrchestrator {
     this.visitedUrls.add(nextUrl);
     this.currentJob = { url: nextUrl, startedAt: Date.now() };
 
+    // Update target status to crawling in DB
+    const tgt = db.targets.find(t => t.url === nextUrl || t.url === nextUrl.replace(/\/$/, '') || (t.url + '/') === nextUrl);
+    if (tgt) {
+      tgt.status = 'crawling';
+      db.scheduleSave();
+    }
+
     this.broadcastToUI({
       type: 'crawl:job_started',
       url: nextUrl,
       queueCount: this.pendingQueue.length
     });
+
+    // Set a 16-second watchdog timer in case agent tab hangs or fails to respond
+    if (this.jobWatchdog) clearTimeout(this.jobWatchdog);
+    this.jobWatchdog = setTimeout(() => {
+      if (this.currentJob && this.currentJob.url === nextUrl) {
+        db.addLog('wrn', `[Crawler Watchdog] Agent response timeout for ${nextUrl} (16s limit). Moving forward.`);
+        this.handleJobCompleted(nextUrl, { urls: [], secrets: [], supplyChain: [] });
+      }
+    }, 16000);
 
     if (this.agentSocket && this.agentSocket.readyState === WebSocket.OPEN) {
       db.addLog('inf', `[Browser Tab Agent] Instructing Chrome to open and scan tab: ${nextUrl}`);
@@ -685,6 +722,10 @@ class CrawlOrchestrator {
   }
 
   handleJobCompleted(url, findings = {}) {
+    if (this.jobWatchdog) {
+      clearTimeout(this.jobWatchdog);
+      this.jobWatchdog = null;
+    }
     this.currentJob = null;
 
     let addedUrlsCount = 0;
@@ -725,6 +766,16 @@ class CrawlOrchestrator {
       }
     }
 
+    // Update target status in DB
+    const tgt = db.targets.find(t => t.url === url || t.url === url.replace(/\/$/, '') || (t.url + '/') === url);
+    if (tgt) {
+      tgt.status = 'crawled';
+      tgt.crawledAt = new Date().toISOString();
+      tgt.endpointsFound = (tgt.endpointsFound || 0) + addedUrlsCount;
+      tgt.secretsFound = (tgt.secretsFound || 0) + addedSecretsCount;
+      db.scheduleSave();
+    }
+
     db.addLog('inf', `[Scanned] Finished ${url} -> ${addedUrlsCount} new endpoints, ${addedSecretsCount} secrets, ${addedSupplyCount} packages.`);
 
     this.broadcastToUI({
@@ -749,11 +800,14 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// CORS headers to enable seamless interaction from extension & dashboards
+// CORS & No-Cache headers so UI updates and live code are never stale
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.header('Pragma', 'no-cache');
+  res.header('Expires', '0');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -763,8 +817,8 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-// Serve all static files from repository directory
-app.use(express.static(__dirname));
+// Serve all static files from repository directory without aggressive browser caching
+app.use(express.static(__dirname, { etag: false, maxAge: 0 }));
 
 // ============================================================================
 // REST API ROUTES
@@ -1100,11 +1154,32 @@ wss.on('connection', (ws, req) => {
 
       // Chrome Agent Findings from Scanned Tab
       if (msg.type === 'agent:findings') {
-        orchestrator.handleJobCompleted(msg.targetUrl, {
-          urls: msg.urls || [],
-          secrets: msg.secrets || [],
-          supplyChain: msg.supplyChain || []
-        });
+        (async () => {
+          let findings = {
+            urls: msg.urls || [],
+            secrets: msg.secrets || [],
+            supplyChain: msg.supplyChain || []
+          };
+          if (findings.urls.length === 0 && msg.targetUrl) {
+            try {
+              const controller = new AbortController();
+              const to = setTimeout(() => controller.abort(), 4000);
+              const res = await fetch(msg.targetUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.0.5' },
+                signal: controller.signal
+              });
+              clearTimeout(to);
+              if (res.ok) {
+                const html = await res.text();
+                const serverExtracted = orchestrator.extractFromHtmlText(res.url || msg.targetUrl, html);
+                if (serverExtracted.urls.length > 0) findings.urls = serverExtracted.urls;
+                if (serverExtracted.secrets.length > 0) findings.secrets.push(...serverExtracted.secrets);
+                if (serverExtracted.supplyChain.length > 0) findings.supplyChain.push(...serverExtracted.supplyChain);
+              }
+            } catch {}
+          }
+          orchestrator.handleJobCompleted(msg.targetUrl, findings);
+        })();
         return;
       }
 

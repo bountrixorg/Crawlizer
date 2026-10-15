@@ -785,9 +785,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     storage.on('crawl:state', (data) => {
+      engine.isRunning = (data.state === 'running');
+      engine.isPaused = (data.state === 'paused');
       if (data.state === 'running') engine.onStateChange('running');
       else if (data.state === 'paused') engine.onStateChange('paused');
       else engine.onStateChange('stopped');
+    });
+
+    storage.on('crawl:job_started', () => {
+      refreshMetrics();
+      renderTargetsTable();
+    });
+
+    storage.on('crawl:job_finished', () => {
+      refreshMetrics();
+      renderTargetsTable();
+      debouncedRefreshResultsTable();
+      debouncedRefreshSecrets();
+      debouncedRefreshSupplyChain();
     });
 
     storage.on('data:urls', () => {
@@ -866,6 +881,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function startCrawling() {
     try {
+      // Auto-commit any pasted seeds currently sitting in targetTextarea
+      if (targetTextarea && targetTextarea.value.trim()) {
+        const rawPasted = targetTextarea.value.trim();
+        const urls = parseUrlText(rawPasted);
+        if (urls.length > 0) {
+          await storage.addTargets(urls);
+          targetTextarea.value = '';
+          engine.log('inf', `Auto-loaded ${urls.length} targets from input box.`);
+          await refreshMetrics();
+          await renderTargetsTable();
+        }
+      }
+
       const config = {
         mode: cfgMode?.value || 'single-tab',
         scopeMode: cfgScope?.value || 'same-domain',
@@ -905,6 +933,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
+      engine.log('inf', `Starting crawl execution with ${pending.length} targets...`);
       await engine.start(pending);
     } catch (err) {
       console.error('startCrawling error:', err);

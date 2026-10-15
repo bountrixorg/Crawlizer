@@ -633,8 +633,9 @@ class KatanaSecretScanner {
   }
 }
 
+const _rootSecret = (typeof globalThis !== 'undefined') ? globalThis : (typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : this));
+_rootSecret.KatanaSecretScanner = KatanaSecretScanner;
 if (typeof window !== 'undefined') {
-  window.KatanaSecretScanner = KatanaSecretScanner;
   window.katanaSecretScanner = new KatanaSecretScanner();
 }
 if (typeof module !== 'undefined' && module.exports) {

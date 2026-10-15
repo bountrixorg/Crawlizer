@@ -650,8 +650,9 @@ class KatanaSupplyChainScanner {
   }
 }
 
+const _rootSupply = (typeof globalThis !== 'undefined') ? globalThis : (typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : this));
+_rootSupply.KatanaSupplyChainScanner = KatanaSupplyChainScanner;
 if (typeof window !== 'undefined') {
-  window.KatanaSupplyChainScanner = KatanaSupplyChainScanner;
   window.katanaSupplyChainScanner = new KatanaSupplyChainScanner();
 }
 if (typeof module !== 'undefined' && module.exports) {

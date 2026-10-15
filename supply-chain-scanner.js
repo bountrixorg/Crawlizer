@@ -648,6 +648,14 @@ class KatanaSupplyChainScanner {
     this.pendingQueries.set(cacheKey, queryPromise);
     return queryPromise;
   }
+
+  scanCode(code, sourceUrl, sourceType = 'js') {
+    return this.scan(code, sourceUrl, sourceType);
+  }
+
+  scanJson(jsonContent, sourceUrl) {
+    return this.scan(jsonContent, sourceUrl, 'json');
+  }
 }
 
 const _rootSupply = (typeof globalThis !== 'undefined') ? globalThis : (typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : this));

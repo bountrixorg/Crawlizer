@@ -1191,29 +1191,57 @@ class LocalServerAgent {
     (extracted.htmlLinks || []).forEach(u => addUrl(u, 'href'));
     (extracted.scriptSources || []).forEach(u => addUrl(u, 'script'));
     (extracted.metaLinks || []).forEach(u => addUrl(u, 'meta'));
+    (extracted.formActions || []).forEach(f => addUrl(typeof f === 'string' ? f : (f.action || f.url || ''), 'form-action'));
     (extracted.cssSources || []).forEach(u => addUrl(u, 'css'));
-    (extracted.dataEndpoints || []).forEach(d => addUrl(d.value, 'data-endpoint'));
+    (extracted.dataEndpoints || []).forEach(d => addUrl(typeof d === 'string' ? d : (d.value || d.url || ''), 'data-endpoint'));
 
     if (this.secretScanner) {
-      if (extracted.rawHtml) {
-        const sec = this.secretScanner.scanHtml(extracted.rawHtml, pageUrl);
-        discoveredSecrets.push(...sec);
+      try {
+        if (extracted.rawHtml) {
+          const sec = typeof this.secretScanner.scanHtml === 'function'
+            ? this.secretScanner.scanHtml(extracted.rawHtml, pageUrl)
+            : this.secretScanner.scan(extracted.rawHtml, pageUrl, 'html');
+          if (Array.isArray(sec)) discoveredSecrets.push(...sec);
+        }
+      } catch (secErr) {
+        console.warn('[Crawlizer Agent] Secret scan notice (HTML):', secErr.message);
       }
-      (extracted.inlineScripts || []).forEach(s => {
-        const sec = this.secretScanner.scanCode(s, pageUrl, 'inline-script');
-        discoveredSecrets.push(...sec);
-      });
+      try {
+        (extracted.inlineScripts || []).forEach(s => {
+          if (!s || typeof s !== 'string') return;
+          const sec = typeof this.secretScanner.scanCode === 'function'
+            ? this.secretScanner.scanCode(s, pageUrl, 'inline-script')
+            : this.secretScanner.scan(s, pageUrl, 'inline-script');
+          if (Array.isArray(sec)) discoveredSecrets.push(...sec);
+        });
+      } catch (secErr) {
+        console.warn('[Crawlizer Agent] Secret scan notice (scripts):', secErr.message);
+      }
     }
 
     if (this.supplyScanner) {
-      (extracted.inlineScripts || []).forEach(s => {
-        const items = this.supplyScanner.scanCode(s, pageUrl, 'inline-script');
-        discoveredSupply.push(...items);
-      });
-      (extracted.jsonBlobs || []).forEach(blob => {
-        const items = this.supplyScanner.scanJson(blob, pageUrl);
-        discoveredSupply.push(...items);
-      });
+      try {
+        (extracted.inlineScripts || []).forEach(s => {
+          if (!s || typeof s !== 'string') return;
+          const items = typeof this.supplyScanner.scanCode === 'function'
+            ? this.supplyScanner.scanCode(s, pageUrl, 'inline-script')
+            : this.supplyScanner.scan(s, pageUrl, 'inline-script');
+          if (Array.isArray(items)) discoveredSupply.push(...items);
+        });
+      } catch (supErr) {
+        console.warn('[Crawlizer Agent] Supply chain scan notice (scripts):', supErr.message);
+      }
+      try {
+        (extracted.jsonBlobs || []).forEach(blob => {
+          if (!blob) return;
+          const items = typeof this.supplyScanner.scanJson === 'function'
+            ? this.supplyScanner.scanJson(blob, pageUrl)
+            : this.supplyScanner.scan(blob, pageUrl, 'json');
+          if (Array.isArray(items)) discoveredSupply.push(...items);
+        });
+      } catch (supErr) {
+        console.warn('[Crawlizer Agent] Supply chain scan notice (json):', supErr.message);
+      }
     }
 
     return {

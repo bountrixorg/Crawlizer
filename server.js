@@ -536,8 +536,11 @@ class CrawlOrchestrator {
     if (this.pendingQueue.length === 0) {
       const targets = db.getTargets();
       targets.forEach(t => {
-        if (!this.visitedUrls.has(t.url)) {
-          this.pendingQueue.push(t.url);
+        const norm = db.normalizeUrl(t.url);
+        if (t.status === 'pending' || (!this.visitedUrls.has(t.url) && !this.visitedUrls.has(norm))) {
+          if (!this.pendingQueue.includes(t.url)) {
+            this.pendingQueue.push(t.url);
+          }
         }
       });
     }
@@ -622,6 +625,7 @@ class CrawlOrchestrator {
 
     const nextUrl = this.pendingQueue.shift();
     this.visitedUrls.add(nextUrl);
+    this.visitedUrls.add(db.normalizeUrl(nextUrl));
     this.currentJob = { url: nextUrl, startedAt: Date.now() };
 
     // Update target status to crawling in DB
@@ -808,10 +812,16 @@ class CrawlOrchestrator {
         this.broadcastToUI({ type: 'data:urls', items: added });
       }
 
-      // If deep crawl allowed, add newly found in-scope URLs to queue
-      added.forEach(u => {
-        if (u.scope === 'in-scope' && !this.visitedUrls.has(u.url) && !this.pendingQueue.includes(u.url)) {
-          this.pendingQueue.push(u.url);
+      // If deep crawl allowed, add newly found in-scope navigable URLs to queue
+      findings.urls.forEach(u => {
+        if (!u || !u.url) return;
+        const normUrl = db.normalizeUrl(u.url);
+        if (u.scope === 'in-scope' && !this.visitedUrls.has(u.url) && !this.visitedUrls.has(normUrl) && !this.pendingQueue.includes(u.url)) {
+          const lower = u.url.toLowerCase();
+          const isStaticAsset = /\.(png|jpe?g|gif|svg|webp|ico|css|woff2?|ttf|eot|mp4|webm|pdf)(\?.*)?$/i.test(lower);
+          if (!isStaticAsset) {
+            this.pendingQueue.push(u.url);
+          }
         }
       });
     }

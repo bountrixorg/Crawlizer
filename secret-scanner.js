@@ -617,6 +617,14 @@ class KatanaSecretScanner {
     return findings;
   }
 
+  scanHtml(html, sourceUrl) {
+    return this.scan(html, sourceUrl, 'html');
+  }
+
+  scanCode(code, sourceUrl, sourceType = 'js') {
+    return this.scan(code, sourceUrl, sourceType);
+  }
+
   static extractSourceMapUrls(text, baseUrl) {
     if (!text || typeof text !== 'string') return [];
     const mapUrls = [];

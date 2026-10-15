@@ -761,7 +761,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusLabel = document.getElementById('agent-status-label');
   let isExtensionConnected = false;
 
-  function updateAgentStatusUI(connected, version = '1.1.5') {
+  function updateAgentStatusUI(connected, version = '1.1.6') {
     isExtensionConnected = Boolean(connected);
     const sidebarExtStatus = document.getElementById('sidebar-extension-status');
     const sidebarExtDot = document.getElementById('sidebar-ext-dot');

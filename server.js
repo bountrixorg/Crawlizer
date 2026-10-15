@@ -455,7 +455,7 @@ class CrawlOrchestrator {
     this.agentSocket = ws;
     this.agentInfo = {
       connected: true,
-      version: info.version || '1.1.5',
+      version: info.version || '1.1.6',
       name: info.name || 'Chrome Extension Agent',
       lastSeen: Date.now()
     };
@@ -669,7 +669,7 @@ class CrawlOrchestrator {
 
       const res = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.1.5',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.1.6',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         },
         signal: controller.signal
@@ -922,7 +922,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
     port: PORT,
-    version: '1.1.5',
+    version: '1.1.6',
     agent: orchestrator.agentInfo,
     crawler: {
       state: orchestrator.state,
@@ -1281,7 +1281,7 @@ wss.on('connection', (ws, req) => {
         clientRole = 'agent';
         orchestrator.setAgentSocket(ws, {
           name: msg.client || 'Chrome Extension',
-          version: msg.version || '1.1.5'
+          version: msg.version || '1.1.6'
         });
         return;
       }
@@ -1299,7 +1299,7 @@ wss.on('connection', (ws, req) => {
               const controller = new AbortController();
               const to = setTimeout(() => controller.abort(), 4000);
               const res = await fetch(msg.targetUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.1.5' },
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.1.6' },
                 signal: controller.signal
               });
               clearTimeout(to);
@@ -1359,7 +1359,7 @@ wss.on('connection', (ws, req) => {
 server.listen(PORT, HOST, () => {
   const line = '━'.repeat(64);
   console.log(`\n${line}`);
-  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.1.5`);
+  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.1.6`);
   console.log(`   Cyberpunk Web Recon, Secret Spider & Supply Chain Audit`);
   console.log(`${line}`);
   console.log(`📡 Dashboard UI  : http://localhost:${PORT}`);

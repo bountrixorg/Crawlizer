@@ -980,18 +980,12 @@ class LocalServerAgent {
   }
 
   async closeCrawlerTab() {
-    if (this.activeCrawlerTabId) {
-      const idToClose = this.activeCrawlerTabId;
-      this.activeCrawlerTabId = null;
-      try {
-        await chrome.tabs.remove(idToClose);
-      } catch {}
-      this.send({
-        type: 'agent:log',
-        level: 'inf',
-        message: 'Crawl session ended. Dedicated scanner tab closed.'
-      });
-    }
+    // Intentionally keep the tab open so the user can inspect the target page
+    this.send({
+      type: 'agent:log',
+      level: 'inf',
+      message: 'Crawl session completed. Scanner tab remains open for inspection.'
+    });
   }
 
   async focusCrawlerTab() {
@@ -1170,10 +1164,16 @@ class LocalServerAgent {
 
     const addUrl = (url, type) => {
       if (!url || typeof url !== 'string') return;
-      if (url.startsWith('javascript:') || url.startsWith('data:') || url.startsWith('mailto:')) return;
+      if (url.startsWith('javascript:') || url.startsWith('data:') || url.startsWith('mailto:') || url.startsWith('#')) return;
       let scope = 'out-of-scope';
       try {
-        if (new URL(url).origin === origin) scope = 'in-scope';
+        const u = new URL(url);
+        const p = new URL(pageUrl);
+        const uHost = u.hostname.replace(/^www\./i, '').toLowerCase();
+        const pHost = p.hostname.replace(/^www\./i, '').toLowerCase();
+        if (uHost === pHost || uHost.endsWith('.' + pHost) || pHost.endsWith('.' + uHost)) {
+          scope = 'in-scope';
+        }
       } catch {}
       discoveredUrls.push({ url, type, scope, sourceUrl: pageUrl, discoveredAt: new Date().toISOString() });
     };

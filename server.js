@@ -641,7 +641,16 @@ class CrawlOrchestrator {
       if (raw.startsWith('#') || raw.startsWith('javascript:') || raw.startsWith('mailto:') || raw.startsWith('data:')) return;
       try {
         const resolved = new URL(raw, baseUrl).href;
-        const scope = (new URL(resolved).origin === origin) ? 'in-scope' : 'out-of-scope';
+        let scope = 'out-of-scope';
+        try {
+          const u = new URL(resolved);
+          const b = new URL(baseUrl);
+          const uHost = u.hostname.replace(/^www\./i, '').toLowerCase();
+          const bHost = b.hostname.replace(/^www\./i, '').toLowerCase();
+          if (uHost === bHost || uHost.endsWith('.' + bHost) || bHost.endsWith('.' + uHost)) {
+            scope = 'in-scope';
+          }
+        } catch {}
         urls.push({
           url: resolved,
           type,

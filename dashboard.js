@@ -144,6 +144,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.setItem('crawlizer_sidebar_collapsed', appSidebar.classList.contains('collapsed'));
     });
 
+    const sidebarBrand = document.querySelector('.sidebar-brand');
+    if (sidebarBrand) {
+      sidebarBrand.addEventListener('click', (e) => {
+        if (appSidebar.classList.contains('collapsed')) {
+          e.preventDefault();
+          appSidebar.classList.remove('collapsed');
+          localStorage.setItem('crawlizer_sidebar_collapsed', 'false');
+        }
+      });
+    }
+
     if (localStorage.getItem('crawlizer_sidebar_collapsed') === 'true') {
       appSidebar.classList.add('collapsed');
     }

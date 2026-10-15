@@ -172,11 +172,20 @@ body.hacker-app {
 }
 
 .sidebar-header {
-  padding: 18px 16px;
+  height: 64px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-sidebar.collapsed .sidebar-header {
+  padding: 0;
+  justify-content: center;
 }
 
 .sidebar-brand {
@@ -185,6 +194,11 @@ body.hacker-app {
   gap: 12px;
   text-decoration: none;
   overflow: hidden;
+}
+
+.app-sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+  width: 100%;
 }
 
 .sidebar-logo-box {
@@ -198,6 +212,10 @@ body.hacker-app {
   justify-content: center;
   box-shadow: 0 0 16px var(--neon-cyan-glow);
   flex-shrink: 0;
+}
+
+.app-sidebar.collapsed .sidebar-logo-box {
+  margin: 0 auto;
 }
 
 .sidebar-logo-box img {
@@ -248,6 +266,7 @@ body.hacker-app {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .sidebar-toggle-btn:hover {
@@ -256,8 +275,35 @@ body.hacker-app {
   box-shadow: 0 0 10px var(--neon-cyan-glow);
 }
 
+.app-sidebar.collapsed .sidebar-toggle-btn {
+  position: absolute;
+  right: -13px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-glow-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--neon-cyan-glow);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neon-cyan);
+}
+
+.app-sidebar.collapsed .sidebar-toggle-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--neon-cyan);
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 0 16px var(--neon-cyan-glow);
+}
+
 .app-sidebar.collapsed .sidebar-toggle-btn svg {
   transform: rotate(180deg);
+  width: 12px;
+  height: 12px;
 }
 
 /* Sidebar Navigation Items */
@@ -455,20 +501,23 @@ body.hacker-app {
   background: var(--bg-topbar);
   border-bottom: 1px solid var(--border-subtle);
   backdrop-filter: blur(20px);
-  padding: 0 28px;
+  padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   position: sticky;
   top: 0;
   z-index: 100;
+  box-sizing: border-box;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
+  min-width: 0;
+  flex: 1;
 }
 
 /* Prompt Line with Typing Effect */
@@ -479,6 +528,8 @@ body.hacker-app {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--neon-green);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .prompt-symbol {
@@ -489,11 +540,13 @@ body.hacker-app {
 
 .prompt-path {
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .prompt-typing {
   color: var(--text-main);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .cursor-blink {
@@ -519,9 +572,12 @@ body.hacker-app {
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 7px 14px;
+  padding: 7px 12px;
   cursor: pointer;
-  width: 290px;
+  width: 220px;
+  max-width: 220px;
+  min-width: 120px;
+  flex-shrink: 1;
   transition: all 0.2s ease;
 }
 
@@ -541,6 +597,9 @@ body.hacker-app {
   flex: 1;
   font-size: 11.5px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cmd-kbd {
@@ -552,13 +611,15 @@ body.hacker-app {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
 
 /* Topbar Right Controls */
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .status-pill {
@@ -569,6 +630,7 @@ body.hacker-app {
   border: 1px solid var(--border-subtle);
   padding: 5px 12px;
   border-radius: 20px;
+  flex-shrink: 0;
 }
 
 .status-indicator-dot {
@@ -609,7 +671,7 @@ body.hacker-app {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 700;
@@ -619,6 +681,7 @@ body.hacker-app {
   white-space: nowrap;
   user-select: none;
   font-family: var(--font-sans);
+  flex-shrink: 0;
 }
 
 .btn:disabled {
@@ -678,11 +741,14 @@ body.hacker-app {
 }
 
 .btn-icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
 
 .topbar-divider {
@@ -1819,13 +1885,15 @@ body.hacker-app {
 /* Export Dropdown */
 .export-dropdown {
   position: relative;
+  flex-shrink: 0;
 }
 
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 270px;
+  width: 290px;
+  max-width: calc(100vw - 24px);
   background: var(--bg-modal);
   backdrop-filter: blur(24px);
   border: 1px solid var(--border-glow-cyan);
@@ -1834,8 +1902,8 @@ body.hacker-app {
   display: none;
   flex-direction: column;
   z-index: 200;
-  overflow: hidden;
   padding: 6px;
+  box-sizing: border-box;
 }
 
 .dropdown-menu.show {
@@ -1843,12 +1911,13 @@ body.hacker-app {
 }
 
 .dropdown-item {
-  padding: 10px 12px;
+  padding: 10px 14px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-sm);
   transition: all 0.15s ease;
+  user-select: none;
 }
 
 .dropdown-item:hover {
@@ -1862,15 +1931,19 @@ body.hacker-app {
 }
 
 .item-title {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 12px;
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .item-desc {
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-muted);
   margin-top: 3px;
+  white-space: normal;
+  line-height: 1.4;
+  word-break: normal;
 }
 
 .dropdown-divider {
@@ -2457,6 +2530,60 @@ body.hacker-app {
 }
 
 /* Responsive Breakpoints */
+@media (max-width: 1240px) {
+  .app-topbar {
+    padding: 0 18px;
+    gap: 12px;
+  }
+  .cmd-palette-trigger {
+    width: 170px;
+    padding: 7px 10px;
+  }
+  .topbar-right {
+    gap: 8px;
+  }
+  .btn {
+    padding: 7px 12px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .app-topbar {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .topbar-left {
+    gap: 10px;
+  }
+  .cmd-palette-trigger {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .cmd-trigger-text,
+  .cmd-kbd {
+    display: none;
+  }
+  .prompt-breadcrumb {
+    font-size: 11.5px;
+    gap: 6px;
+  }
+  .status-pill {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .status-label {
+    font-size: 9.5px;
+  }
+  #btn-toggle-matrix {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+}
+
 @media (max-width: 900px) {
   .app-sidebar {
     position: fixed;
@@ -2466,9 +2593,6 @@ body.hacker-app {
   }
   .app-sidebar.mobile-open {
     transform: translateX(0);
-  }
-  .cmd-palette-trigger {
-    width: 180px;
   }
   .charts-grid {
     grid-template-columns: 1fr;

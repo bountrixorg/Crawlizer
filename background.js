@@ -1076,6 +1076,8 @@ class LocalServerAgent {
         supplyChain: []
       });
     }
+  }
+
   async executeActiveTabAudit() {
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });

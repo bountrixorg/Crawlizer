@@ -11,6 +11,7 @@ class KatanaStorage {
     this.initPromise = null;
     this.knownUrlSet = new Set(); // In-memory URL deduplication set
     this.knownSecretMap = new Map(); // In-memory unique secret deduplication map: match -> record
+    this.knownSupplyChainMap = new Map(); // In-memory unique supply chain package map: ecosystem:name -> record
     this.listeners = new Map();
     this.wsInitialized = false;
   }
@@ -865,18 +866,19 @@ class KatanaStorage {
     }
 
     await this.init();
-    const targets = await this.getAllTargets();
-    const totalDiscovered = this.knownUrlSet.size;
-    const totalSecrets = this.knownSecretMap.size;
+    const targets = (await this.getAllTargets()) || [];
+    const totalDiscovered = this.knownUrlSet ? this.knownUrlSet.size : 0;
+    const totalSecrets = this.knownSecretMap ? this.knownSecretMap.size : 0;
+    const totalSupplyChain = this.knownSupplyChainMap ? this.knownSupplyChainMap.size : 0;
 
     const stats = {
       totalTargets: targets.length,
       pendingTargets: targets.filter(t => t.status === 'pending').length,
-      crawledTargets: targets.filter(t => t.status === 'completed').length,
+      crawledTargets: targets.filter(t => t.status === 'completed' || t.status === 'crawled').length,
       failedTargets: targets.filter(t => t.status === 'failed').length,
       totalDiscovered: totalDiscovered,
       totalSecrets: totalSecrets,
-      totalSupplyChain: this.knownSupplyChainMap.size
+      totalSupplyChain: totalSupplyChain
     };
 
     return stats;

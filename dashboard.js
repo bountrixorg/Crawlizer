@@ -760,7 +760,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusDot = document.getElementById('agent-status-dot');
   const agentStatusLabel = document.getElementById('agent-status-label');
 
-  function updateAgentStatusUI(connected, version = '1.0.5') {
+  function updateAgentStatusUI(connected, version = '1.1.5') {
     if (!agentStatusPill) return;
     if (connected) {
       agentStatusPill.classList.add('connected');

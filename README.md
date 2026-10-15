@@ -7,7 +7,7 @@
 
 <br/>
 
-[![Version: 1.0.5](https://img.shields.io/badge/Release-v1.0.5-00f0ff?style=for-the-badge&logo=semver&logoColor=black)](package.json)
+[![Version: 1.1.5](https://img.shields.io/badge/Release-v1.1.5-00f0ff?style=for-the-badge&logo=semver&logoColor=black)](package.json)
 [![Default Port: 4488](https://img.shields.io/badge/Port-4488-39ff14?style=for-the-badge&logo=node.js&logoColor=black)](#-quick-start)
 [![Storage: 100% Local Disk](https://img.shields.io/badge/Storage-100%25%20Local%20Disk-ff0055?style=for-the-badge&logo=databricks&logoColor=white)](#-100-local-disk-storage-zero-browser-storage)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](manifest.json)
@@ -41,7 +41,7 @@ Unlike traditional CLI tools that struggle with single-page applications (React,
 | 🖥️ **Local Server Hub (`:4488`)** | Runs on `http://localhost:4488` with `npm run dev`. Provides a standalone dashboard and REST API. |
 | 💾 **100% Local Disk Storage** | **Zero data stored in the browser**. All targets, endpoints, secrets, findings, and settings live in `.data/` on disk. |
 | 🎯 **Dedicated Tab Navigation** | Navigates queued URLs in a single tab without tab churn. **The scanner tab remains open** for manual inspection. |
-| 🔑 **Live Secret Detection** | 25+ high-fidelity entropy and regex rules detecting AWS keys, GitHub PATs, JWTs, Stripe keys, Slack webhooks, and private keys. |
+| 🔑 **Live Secret Detection** | 420+ curated entropy and regex rules detecting AWS keys, GitHub PATs, JWTs, Stripe keys, Slack webhooks, cloud credentials, and private keys. |
 | 📦 **Supply Chain Security Audit** | Identifies frontend dependencies across npm, PyPI, Go, and Maven; queries OSV.dev for CVEs; flags dependency confusion risks. |
 | 🛡️ **Zero-Friction CAPTCHA Solving** | Detects Cloudflare Turnstile, reCAPTCHA, and hCaptcha. Pauses scan, alerts you with audio, and resumes after solving. |
 | 🖱️ **Interactive DOM Exploration** | Monkey-patches `window.fetch` and `XMLHttpRequest`, auto-clicks interactive `<button>` elements, tabs, and menus. |
@@ -250,7 +250,7 @@ Crawlizer/
 ├── popup.html            # Extension popup launcher
 ├── popup.css             # Extension popup stylesheet
 ├── popup.js              # Extension popup controller
-├── secret-scanner.js     # 25+ secret detection regex rules & entropy checks
+├── secret-scanner.js     # 420+ secret detection regex rules & entropy checks
 ├── server.js             # Local Express & WebSocket server hub
 ├── storage.js            # Server-backed client engine (zero browser storage)
 ├── supply-chain-scanner.js# Package dependency & CVE auditing engine

@@ -772,6 +772,26 @@ function katanaInTabExtractionScript() {
     });
   } catch(e) {}
 
+  // Extract runtime scripts via Resource Timing API (Webpack/Vite chunks, dynamic imports)
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+      const resources = performance.getEntriesByType('resource') || [];
+      for (const res of resources) {
+        if (res && res.name && typeof res.name === 'string') {
+          const initiator = res.initiatorType || '';
+          if (initiator === 'script' || initiator === 'link' || /\.js(?:[?#]|$)/i.test(res.name)) {
+            try {
+              const resolved = new URL(res.name, base).href;
+              if (!result.scriptSources.includes(resolved)) result.scriptSources.push(resolved);
+            } catch(e) {
+              if (!result.scriptSources.includes(res.name)) result.scriptSources.push(res.name);
+            }
+          }
+        }
+      }
+    }
+  } catch(e) {}
+
   // Extract Form actions
   try {
     document.querySelectorAll('form[action], input[formaction], button[formaction]').forEach(el => {
@@ -912,7 +932,7 @@ class LocalServerAgent {
         this.send({
           type: 'register:agent',
           client: 'chrome-extension',
-          version: '1.0.5',
+          version: '1.1.5',
           name: 'Chrome Extension Crawler Agent'
         });
       };
@@ -1244,6 +1264,62 @@ class LocalServerAgent {
       }
     }
 
+    // 1. Scan external script URLs immediately for supply-chain packages (CDN, filename patterns)
+    const scriptList = (extracted.scriptSources || []).slice(0, 16);
+    if (this.supplyScanner) {
+      for (const scriptUrl of scriptList) {
+        try {
+          const urlFindings = typeof this.supplyScanner.scanUrl === 'function'
+            ? this.supplyScanner.scanUrl(scriptUrl)
+            : this.supplyScanner.scan(scriptUrl, scriptUrl, 'cdn-url');
+          if (Array.isArray(urlFindings) && urlFindings.length > 0) {
+            discoveredSupply.push(...urlFindings);
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 2. Concurrently fetch external JS files to scan their contents for secrets and bundled supply-chain modules
+    if (scriptList.length > 0 && (this.secretScanner || this.supplyScanner)) {
+      await Promise.allSettled(
+        scriptList.map(async (src) => {
+          try {
+            if (!/^https?:\/\//i.test(src)) return;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(src, {
+              signal: controller.signal,
+              headers: { 'Accept': '*/*' }
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) return;
+            const jsContent = await res.text();
+            if (!jsContent || jsContent.length < 10) return;
+
+            if (this.secretScanner) {
+              const sec = typeof this.secretScanner.scanCode === 'function'
+                ? this.secretScanner.scanCode(jsContent, src, 'js-bundle')
+                : this.secretScanner.scan(jsContent, src, 'js-bundle');
+              if (Array.isArray(sec) && sec.length > 0) {
+                discoveredSecrets.push(...sec);
+              }
+            }
+
+            if (this.supplyScanner) {
+              const items = typeof this.supplyScanner.scanCode === 'function'
+                ? this.supplyScanner.scanCode(jsContent, src, 'js-bundle')
+                : this.supplyScanner.scan(jsContent, src, 'js-bundle');
+              if (Array.isArray(items) && items.length > 0) {
+                discoveredSupply.push(...items);
+              }
+            }
+          } catch (fetchErr) {
+            // Ignore network or CORS aborts on individual external scripts
+          }
+        })
+      );
+    }
+
     return {
       urls: discoveredUrls,
       secrets: discoveredSecrets,
@@ -1343,5 +1419,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 setInterval(() => state.cleanup(), 60000);
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Crawlizer Pro v1.0.5 initialized (with Supply Chain Security Scanner)');
+  console.log('Crawlizer Pro v1.1.5 initialized (with Supply Chain Security Scanner)');
 });

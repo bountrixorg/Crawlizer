@@ -98,6 +98,7 @@ const INTERNAL_MODULE_PATTERNS = [
 const FAST_SCAN_KEYWORDS = [
   'import', 'require', 'define(', '__webpack_require__', 'node_modules',
   'dependencies', 'devdependencies', 'unpkg', 'jsdelivr', 'cdnjs', 'esm.sh', 'skypack',
+  'react', 'vue', 'angular', 'jquery', 'lodash', 'axios', 'sentry', 'core-js', 'moment', 'next', 'nuxt',
   'requirements.txt', 'package.json', 'composer.json', 'go.mod', 'cargo.toml',
   'pom.xml', 'build.gradle', 'packages.config', '.npmrc', '.env'
 ];
@@ -146,7 +147,7 @@ class KatanaSupplyChainScanner {
     // 9. cdnjs.cloudflare.com: cdnjs.cloudflare.com/ajax/libs/<pkg>/[version]
     this.rxCdnjs = /cdnjs\.cloudflare\.com\/ajax\/libs\/([a-zA-Z0-9_.\-]+)(?:\/([0-9a-zA-Z._\-]+))?/g;
 
-    // 10. Sourcemap node_modules paths
+    // 10. Sourcemap & bundled node_modules paths
     this.rxSourceMapModules = /(?:webpack:\/\/\/|\/|^)(?:node_modules|\/~\/)\/(@?[a-zA-Z0-9_.\-]+(?:\/[a-zA-Z0-9_.\-]+)?)/g;
 
     // 11. Python / PyPI requirements.txt format
@@ -170,6 +171,12 @@ class KatanaSupplyChainScanner {
 
     // 17. Exposed config / manifest paths referenced in code
     this.rxConfigPaths = /['"](\/(?:package\.json|package-lock\.json|\.npmrc|\.yarnrc|\.env|\.env\.[a-z]+|requirements\.txt|Pipfile|composer\.json|go\.mod|Cargo\.toml|pom\.xml))['"]/gi;
+
+    // 18. Banner comment library version detection (e.g., /*! React v18.2.0 */ or /*! jQuery v3.6.0 */)
+    this.rxBannerVersion = /(?:\/\*!|\/\*\*?)\s*(?:[^\n*]*\b)?([A-Za-z0-9_.\-]+)\s+(?:v|version\s*:?)\s*([0-9]+\.[0-9]+(?:\.[0-9a-zA-Z_-]+)?)/gi;
+
+    // 19. Filename package detection (e.g., /vendor/jquery-3.6.0.min.js, /react@18.2.0/...)
+    this.rxFilenamePkg = /(?:^|\/)([a-zA-Z0-9_\-]+)[@\-_]([0-9]+\.[0-9]+(?:\.[0-9a-zA-Z._\-]+)?)(?:\.bundle|\.min)?\.(?:js|mjs|cjs)/i;
   }
 
   /**
@@ -178,15 +185,19 @@ class KatanaSupplyChainScanner {
   hasRelevantKeywords(text, sourceUrl = '') {
     if (!text || typeof text !== 'string') return false;
     const lowerUrl = (sourceUrl || '').toLowerCase();
-    if (/(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|pipfile|gemfile|composer\.json|go\.mod|cargo\.toml|pom\.xml|build\.gradle|packages\.config|\.env)$/i.test(lowerUrl)) {
+    const cleanUrl = lowerUrl.split('?')[0].split('#')[0];
+    if (/\.(?:js|mjs|cjs|jsx|tsx|ts|map|json|txt|toml|xml|gradle)$/i.test(cleanUrl)) {
+      return true;
+    }
+    if (/(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|pipfile|gemfile|composer\.json|go\.mod|cargo\.toml|pom\.xml|build\.gradle|packages\.config|\.env)/i.test(lowerUrl)) {
       return true;
     }
     if (lowerUrl.includes('unpkg.com') || lowerUrl.includes('jsdelivr.net') || lowerUrl.includes('cdnjs.cloudflare.com') || lowerUrl.includes('esm.sh') || lowerUrl.includes('skypack.dev')) {
       return true;
     }
-    const lowerText = text.length > 50000 ? (text.slice(0, 25000) + text.slice(-25000)).toLowerCase() : text.toLowerCase();
+    const sample = text.length > 200000 ? (text.slice(0, 100000) + text.slice(-100000)).toLowerCase() : text.toLowerCase();
     for (let i = 0; i < FAST_SCAN_KEYWORDS.length; i++) {
-      if (lowerText.includes(FAST_SCAN_KEYWORDS[i])) return true;
+      if (sample.includes(FAST_SCAN_KEYWORDS[i])) return true;
     }
     return false;
   }
@@ -296,7 +307,7 @@ class KatanaSupplyChainScanner {
       const normalizedName = this.normalizePackageSpecifier(rawName, eco);
       if (!normalizedName) return;
 
-      const cleanVersion = String(version || '').replace(/^[\^~>=<]+/, '').trim();
+      const cleanVersion = String(version || '').replace(/^[\^~>=<]+/, '').replace(/\.(min|bundle|umd|cjs|esm)$/i, '').trim();
       const key = `${eco}:${normalizedName}`;
 
       if (discovered.has(key)) {
@@ -420,11 +431,23 @@ class KatanaSupplyChainScanner {
       registerPackage(m[1], m[2] || '', 'npm', this.extractContext(textToScan, m.index, m[0].length));
     }
 
-    // 11. Sourcemap node_modules paths
-    if (sourceType === 'source-map' || sourceUrl.endsWith('.map') || textToScan.includes('"sources"')) {
+    // 11. Sourcemap & bundled node_modules paths
+    if (sourceType === 'source-map' || sourceType === 'js-bundle' || sourceUrl.endsWith('.map') || textToScan.includes('node_modules')) {
       this.rxSourceMapModules.lastIndex = 0;
       while ((m = this.rxSourceMapModules.exec(textToScan)) !== null) {
-        registerPackage(m[1], '', 'npm', `Source map: ${m[0]}`);
+        registerPackage(m[1], '', 'npm', `Bundled module: ${m[0]}`);
+      }
+    }
+
+    // 11b. Banner comment library version detection (e.g. /*! React v18.2.0 */)
+    if (this.rxBannerVersion) {
+      this.rxBannerVersion.lastIndex = 0;
+      while ((m = this.rxBannerVersion.exec(textToScan)) !== null) {
+        const candidateName = m[1].toLowerCase();
+        const candidateVer = m[2];
+        if (candidateName && candidateVer && candidateName.length >= 2 && candidateName.length <= 40) {
+          registerPackage(candidateName, candidateVer, 'npm', this.extractContext(textToScan, m.index, m[0].length));
+        }
       }
     }
 
@@ -655,6 +678,45 @@ class KatanaSupplyChainScanner {
 
   scanJson(jsonContent, sourceUrl) {
     return this.scan(jsonContent, sourceUrl, 'json');
+  }
+
+  scanUrl(url) {
+    if (!url || typeof url !== 'string') return [];
+    const discovered = [];
+    const findings = this.scan(url, url, 'script-url');
+    if (Array.isArray(findings) && findings.length > 0) {
+      discovered.push(...findings);
+    }
+    if (this.rxFilenamePkg) {
+      this.rxFilenamePkg.lastIndex = 0;
+      const cleanPath = url.split('?')[0].split('#')[0];
+      const match = this.rxFilenamePkg.exec(cleanPath);
+      if (match) {
+        const pkgName = match[1];
+        const pkgVer = (match[2] || '').replace(/\.(min|bundle|umd|cjs|esm)$/i, '');
+        const normalized = this.normalizePackageSpecifier(pkgName, 'npm');
+        if (normalized && !discovered.some(d => d.name === normalized)) {
+          discovered.push({
+            key: `npm:${normalized}`,
+            type: 'package',
+            name: normalized,
+            version: pkgVer || '',
+            ecosystem: 'npm',
+            riskLevel: 'LOW',
+            riskReasons: [],
+            isUnregistered: false,
+            advisories: [],
+            advisoriesCount: 0,
+            weeklyDownloads: 0,
+            sourceUrl: url,
+            sourceType: 'script-url',
+            context: url,
+            discoveredAt: Date.now()
+          });
+        }
+      }
+    }
+    return discovered;
   }
 }
 

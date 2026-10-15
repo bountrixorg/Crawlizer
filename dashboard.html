@@ -114,6 +114,10 @@
             <span class="operator-role">SYSTEM_ACTIVE</span>
           </div>
         </div>
+        <div class="sidebar-extension-status offline" id="sidebar-extension-status" title="Browser Extension Status">
+          <span class="extension-pulse-dot offline" id="sidebar-ext-dot"></span>
+          <span class="sidebar-ext-text font-mono" id="sidebar-ext-text">EXT: DISCONNECTED</span>
+        </div>
       </div>
     </aside>
 
@@ -143,9 +147,12 @@
             <span class="status-label" id="header-status-label">READY</span>
           </div>
 
-          <div class="agent-status-pill" id="agent-status-pill" title="Chrome Extension Crawler Agent Status">
+          <div class="agent-status-pill offline" id="agent-status-pill" title="Browser Extension Connection Status (Click to re-check)">
+            <svg class="extension-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h3.8v-1.5a2.5 2.5 0 0 1 5 0V22H17a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"></path>
+            </svg>
             <span class="agent-indicator-dot offline" id="agent-status-dot"></span>
-            <span class="agent-status-label font-mono" id="agent-status-label">AGENT: WAITING</span>
+            <span class="agent-status-label font-mono" id="agent-status-label">EXTENSION: DISCONNECTED</span>
           </div>
 
           <button id="btn-toggle-matrix" class="btn btn-glass" title="Toggle Matrix Rain Mode">
@@ -264,6 +271,22 @@
           <button id="btn-captcha-solved" class="btn btn-primary">Solved, Continue</button>
           <button id="btn-captcha-skip" class="btn btn-glass">Skip Target</button>
         </div>
+      </div>
+
+      <!-- Browser Extension Disconnected Notice Banner -->
+      <div class="extension-alert-banner" id="extension-alert-banner" style="display: none;">
+        <div class="ext-alert-content">
+          <svg class="ext-alert-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <div class="ext-alert-title">BROWSER EXTENSION NOT CONNECTED</div>
+            <div class="ext-alert-msg">Crawlizer requires the Chromium extension to navigate tabs, bypass bot checks, and intercept API secrets. Open Chrome &rarr; <code>chrome://extensions</code> &rarr; toggle <strong>Developer mode</strong> &rarr; click <strong>Load unpacked</strong> and select this project directory.</div>
+          </div>
+        </div>
+        <button id="btn-recheck-ext" class="btn btn-glass btn-sm">Re-check Connection</button>
       </div>
 
       <!-- Content Container -->

@@ -200,25 +200,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnAuditActive = document.getElementById('btn-audit-active');
   const serverDot = document.getElementById('server-dot');
   const serverLabel = document.getElementById('server-label');
+  const serverTag = document.getElementById('server-status-tag');
 
   async function checkServerStatus() {
     try {
-      const res = await fetch('http://localhost:4488/api/status', { signal: AbortSignal.timeout(1000) });
+      const res = await fetch('http://localhost:4488/api/status', { signal: AbortSignal.timeout(1200) });
       if (res.ok) {
         if (serverDot) {
           serverDot.style.background = '#39ff14';
           serverDot.style.boxShadow = '0 0 8px #39ff14';
         }
-        if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: 4488 (ONLINE)';
+        if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: 4488';
+        if (serverTag) {
+          serverTag.textContent = 'CONNECTED';
+          serverTag.style.color = '#39ff14';
+        }
         return true;
       }
     } catch {}
 
     if (serverDot) {
-      serverDot.style.background = '#64748b';
-      serverDot.style.boxShadow = 'none';
+      serverDot.style.background = '#ff0055';
+      serverDot.style.boxShadow = '0 0 8px #ff0055';
     }
-    if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: OFFLINE (npm run dev)';
+    if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: 4488';
+    if (serverTag) {
+      serverTag.textContent = 'DISCONNECTED';
+      serverTag.style.color = '#ff3366';
+    }
     return false;
   }
 

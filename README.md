@@ -47,6 +47,7 @@ Unlike traditional CLI tools that struggle with single-page applications (React,
 | 🖱️ **Interactive DOM Exploration** | Monkey-patches `window.fetch` and `XMLHttpRequest`, auto-clicks interactive `<button>` elements, tabs, and menus. |
 | 🌐 **Apex & Subdomain Auto-Scoping** | Smart apex domain scoping (`*.domain.com`) handles redirects (e.g. `tesla.com` → `www.tesla.com`) seamlessly. |
 | 🧹 **Strict Canonical Deduplication** | Parameter sorting, port cleansing, and directory traversal normalization to prevent crawling loops. |
+| 🔌 **Live Extension Telemetry** | Unmistakable real-time indicator (`EXTENSION: CONNECTED` vs `EXTENSION: DISCONNECTED`) with auto-heartbeat & reconnection diagnostics. |
 | 🎨 **Cyberpunk Glassmorphism UI** | Modern dark-mode interface with ambient glows, real-time RPS telemetry, matrix background, and audio feedback. |
 
 </div>

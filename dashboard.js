@@ -759,26 +759,85 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusPill = document.getElementById('agent-status-pill');
   const agentStatusDot = document.getElementById('agent-status-dot');
   const agentStatusLabel = document.getElementById('agent-status-label');
+  let isExtensionConnected = false;
 
   function updateAgentStatusUI(connected, version = '1.1.5') {
-    if (!agentStatusPill) return;
-    if (connected) {
-      agentStatusPill.classList.add('connected');
-      if (agentStatusDot) {
-        agentStatusDot.className = 'agent-indicator-dot online';
-      }
-      if (agentStatusLabel) {
-        agentStatusLabel.textContent = `AGENT: ONLINE (v${version})`;
-      }
-    } else {
-      agentStatusPill.classList.remove('connected');
-      if (agentStatusDot) {
-        agentStatusDot.className = 'agent-indicator-dot offline';
-      }
-      if (agentStatusLabel) {
-        agentStatusLabel.textContent = 'AGENT: WAITING';
+    isExtensionConnected = Boolean(connected);
+    const sidebarExtStatus = document.getElementById('sidebar-extension-status');
+    const sidebarExtDot = document.getElementById('sidebar-ext-dot');
+    const sidebarExtText = document.getElementById('sidebar-ext-text');
+    const extAlertBanner = document.getElementById('extension-alert-banner');
+
+    if (agentStatusPill) {
+      if (connected) {
+        agentStatusPill.classList.remove('offline', 'disconnected');
+        agentStatusPill.classList.add('connected');
+        if (agentStatusDot) {
+          agentStatusDot.className = 'agent-indicator-dot online';
+        }
+        if (agentStatusLabel) {
+          agentStatusLabel.textContent = `EXTENSION: CONNECTED`;
+        }
+        agentStatusPill.title = `Browser Extension Connected (v${version}) - Ready to crawl`;
+      } else {
+        agentStatusPill.classList.remove('connected');
+        agentStatusPill.classList.add('offline', 'disconnected');
+        if (agentStatusDot) {
+          agentStatusDot.className = 'agent-indicator-dot offline';
+        }
+        if (agentStatusLabel) {
+          agentStatusLabel.textContent = 'EXTENSION: DISCONNECTED';
+        }
+        agentStatusPill.title = 'Browser Extension Not Connected - Load unpacked extension in Chrome to crawl';
       }
     }
+
+    if (sidebarExtStatus) {
+      if (connected) {
+        sidebarExtStatus.classList.remove('offline');
+        sidebarExtStatus.classList.add('connected');
+        if (sidebarExtDot) sidebarExtDot.className = 'extension-pulse-dot online';
+        if (sidebarExtText) sidebarExtText.textContent = `EXT: CONNECTED (v${version})`;
+      } else {
+        sidebarExtStatus.classList.remove('connected');
+        sidebarExtStatus.classList.add('offline');
+        if (sidebarExtDot) sidebarExtDot.className = 'extension-pulse-dot offline';
+        if (sidebarExtText) sidebarExtText.textContent = 'EXT: DISCONNECTED';
+      }
+    }
+
+    if (extAlertBanner) {
+      extAlertBanner.style.display = connected ? 'none' : 'flex';
+    }
+  }
+
+  // Interactive recheck handlers
+  if (agentStatusPill) {
+    agentStatusPill.addEventListener('click', () => {
+      fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.agent) updateAgentStatusUI(data.agent.connected, data.agent.version);
+        })
+        .catch(() => updateAgentStatusUI(false));
+    });
+  }
+
+  const btnRecheckExt = document.getElementById('btn-recheck-ext');
+  if (btnRecheckExt) {
+    btnRecheckExt.addEventListener('click', () => {
+      btnRecheckExt.textContent = 'Checking...';
+      fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.agent) updateAgentStatusUI(data.agent.connected, data.agent.version);
+          setTimeout(() => { btnRecheckExt.textContent = 'Re-check Connection'; }, 800);
+        })
+        .catch(() => {
+          updateAgentStatusUI(false);
+          btnRecheckExt.textContent = 'Re-check Connection';
+        });
+    });
   }
 
   if (storage && storage.isLocalServer && storage.isLocalServer()) {
@@ -842,12 +901,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
+    // Initial status fetch
     fetch('/api/status')
       .then(r => r.json())
       .then(data => {
         if (data && data.agent) updateAgentStatusUI(data.agent.connected, data.agent.version);
       })
-      .catch(() => {});
+      .catch(() => updateAgentStatusUI(false));
+
+    // Periodic 3-second heartbeat poll to ensure extension connection status stays 100% accurate
+    setInterval(() => {
+      fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.agent) {
+            updateAgentStatusUI(data.agent.connected, data.agent.version);
+          }
+        })
+        .catch(() => updateAgentStatusUI(false));
+    }, 3000);
   }
 
   // ==========================================
@@ -889,6 +961,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function startCrawling() {
     try {
+      if (!isExtensionConnected) {
+        engine.log('wrn', '[Extension Agent] Notice: Browser extension is currently disconnected. Open Chrome and ensure Crawlizer extension is loaded to enable tab crawling & DOM exploration.');
+      }
+
       // Auto-commit any pasted seeds currently sitting in targetTextarea
       if (targetTextarea && targetTextarea.value.trim()) {
         const rawPasted = targetTextarea.value.trim();

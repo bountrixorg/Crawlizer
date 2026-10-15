@@ -660,6 +660,53 @@ body.hacker-app {
   color: var(--text-muted);
 }
 
+.agent-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(6, 10, 16, 0.85);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.agent-status-pill.connected {
+  border-color: var(--border-glow-cyan);
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.agent-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-dim);
+  transition: all 0.3s;
+}
+
+.agent-indicator-dot.online {
+  background-color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan);
+}
+
+.agent-indicator-dot.offline {
+  background-color: var(--text-dim);
+  box-shadow: none;
+}
+
+.agent-status-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.agent-status-pill.connected .agent-status-label {
+  color: var(--neon-cyan);
+}
+
 @keyframes pulse {
   0% { transform: scale(0.9); opacity: 0.8; }
   50% { transform: scale(1.25); opacity: 1; }

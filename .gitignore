@@ -9,3 +9,4 @@ npm-debug.log*
 # Scratch and test files
 scratch/
 *.log
+.data/

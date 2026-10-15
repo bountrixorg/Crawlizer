@@ -216,15 +216,72 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  const btnAuditActive = document.getElementById('btn-audit-active');
+  const serverDot = document.getElementById('server-dot');
+  const serverLabel = document.getElementById('server-label');
+
+  async function checkServerStatus() {
+    try {
+      const res = await fetch('http://localhost:4488/api/status', { signal: AbortSignal.timeout(1000) });
+      if (res.ok) {
+        if (serverDot) {
+          serverDot.style.background = '#39ff14';
+          serverDot.style.boxShadow = '0 0 8px #39ff14';
+        }
+        if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: 4488 (ONLINE)';
+        return true;
+      }
+    } catch {}
+
+    if (serverDot) {
+      serverDot.style.background = '#64748b';
+      serverDot.style.boxShadow = 'none';
+    }
+    if (serverLabel) serverLabel.textContent = 'LOCAL SERVER: OFFLINE (npm run dev)';
+    return false;
+  }
+
+  checkServerStatus();
+
+  if (btnAuditActive) {
+    btnAuditActive.addEventListener('click', async () => {
+      btnAuditActive.disabled = true;
+      btnAuditActive.innerHTML = `<span>Scanning active tab...</span>`;
+      chrome.runtime.sendMessage({ action: 'audit_active_tab' }, () => {
+        btnAuditActive.innerHTML = `<span>✓ Sent to Local Server!</span>`;
+        setTimeout(() => {
+          btnAuditActive.disabled = false;
+          btnAuditActive.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>⚡ Audit Active Tab</span>
+          `;
+        }, 1500);
+      });
+    });
+  }
+
   // Start Crawl - Opens Dashboard and auto-starts
-  btnQuickStart.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html?autostart=true') });
+  btnQuickStart.addEventListener('click', async () => {
+    const isOnline = await checkServerStatus();
+    if (isOnline) {
+      chrome.tabs.create({ url: 'http://localhost:4488?autostart=true' });
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html?autostart=true') });
+    }
     window.close();
   });
 
   // Open Dashboard
-  btnOpenDashboard.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+  btnOpenDashboard.addEventListener('click', async () => {
+    const isOnline = await checkServerStatus();
+    if (isOnline) {
+      chrome.tabs.create({ url: 'http://localhost:4488' });
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+    }
     window.close();
   });
 

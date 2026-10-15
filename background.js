@@ -5,6 +5,12 @@
  * dependency confusion heuristics, and badge notifications.
  */
 
+try {
+  importScripts('secret-scanner.js', 'supply-chain-scanner.js');
+} catch (e) {
+  console.warn('importScripts failed:', e);
+}
+
 // ============================================================================
 // UTILITIES
 // ============================================================================
@@ -661,14 +667,473 @@ class MessageHandler {
 }
 
 // ============================================================================
+// STANDALONE IN-TAB CONTENT EXTRACTION SCRIPT (Runs inside opened tabs)
+// ============================================================================
+
+function katanaInTabExtractionScript() {
+  const result = {
+    captchaDetected: false,
+    challengeType: null,
+    pageUrl: window.location.href,
+    htmlLinks: [],
+    scriptSources: [],
+    formActions: [],
+    inlineScripts: [],
+    dataEndpoints: [],
+    networkResources: [],
+    htmlComments: [],
+    metaLinks: [],
+    jsonBlobs: [],
+    rawHtml: '',
+    cssSources: [],
+    inlineStyles: []
+  };
+
+  try {
+    const title = (document.title || '').toLowerCase();
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().slice(0, 3000);
+    const hasNormalContent = bodyText.length > 500 && !title.includes('just a moment') && !title.includes('attention required');
+
+    const isCloudflare = !hasNormalContent && (
+      title.includes('just a moment') ||
+      title.includes('attention required! | cloudflare') ||
+      document.querySelector('#cf-challenge-running') !== null ||
+      (document.querySelector('#challenge-form') !== null && (title.includes('moment') || bodyText.includes('challenge'))) ||
+      (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null && (title.includes('just a moment') || title.includes('cloudflare')))
+    );
+
+    const isBlockingCaptcha = !hasNormalContent && (
+      (title.includes('captcha') || title.includes('security check') || title.includes('bot verification') || title.includes('are you human')) &&
+      (bodyText.includes('verify you are human') || bodyText.includes('please solve the challenge') || bodyText.includes('confirm you are not a robot'))
+    );
+
+    if (isCloudflare) {
+      result.captchaDetected = true;
+      result.challengeType = 'Cloudflare Challenge / Turnstile';
+      return result;
+    } else if (isBlockingCaptcha) {
+      result.captchaDetected = true;
+      result.challengeType = 'Bot Verification / Captcha';
+      return result;
+    }
+  } catch (e) {}
+
+  const base = document.baseURI || window.location.href;
+
+  // Extract DOM links
+  try {
+    document.querySelectorAll('a[href], link[href], area[href], iframe[src], embed[src], object[data], source[src], video[src], audio[src]').forEach(el => {
+      try {
+        if (el.href && typeof el.href === 'string' && /^https?:\/\//i.test(el.href)) {
+          if (!result.htmlLinks.includes(el.href)) result.htmlLinks.push(el.href);
+        } else if (el.src && typeof el.src === 'string' && /^https?:\/\//i.test(el.src)) {
+          if (!result.htmlLinks.includes(el.src)) result.htmlLinks.push(el.src);
+        }
+        const val = el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data');
+        if (val) {
+          try {
+            const resolved = new URL(val, base).href;
+            if (/^https?:\/\//i.test(resolved) && !result.htmlLinks.includes(resolved)) {
+              result.htmlLinks.push(resolved);
+            }
+          } catch(e) {
+            if (!result.htmlLinks.includes(val)) result.htmlLinks.push(val);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Extract Script sources
+  try {
+    document.querySelectorAll('script[src]').forEach(el => {
+      try {
+        const src = el.src || el.getAttribute('src');
+        if (src) {
+          try {
+            const resolved = new URL(src, base).href;
+            if (!result.scriptSources.includes(resolved)) result.scriptSources.push(resolved);
+          } catch(e) {
+            if (!result.scriptSources.includes(src)) result.scriptSources.push(src);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Extract Form actions
+  try {
+    document.querySelectorAll('form[action], input[formaction], button[formaction]').forEach(el => {
+      try {
+        const rawAction = el.getAttribute('action') || el.getAttribute('formaction') || '';
+        const method = (el.getAttribute('method') || 'GET').toUpperCase();
+        if (rawAction) {
+          try {
+            const resolved = new URL(rawAction, base).href;
+            result.formActions.push({ action: resolved, method });
+          } catch(e) {
+            result.formActions.push({ action: rawAction, method });
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Extract Inline Scripts & JSON routing blobs
+  try {
+    document.querySelectorAll('script:not([src])').forEach(script => {
+      try {
+        const content = script.textContent || '';
+        if (content.length > 5 && content.length < 500000) {
+          const type = (script.getAttribute('type') || '').toLowerCase();
+          const id = (script.id || '').toLowerCase();
+          if (type.includes('json') || type === 'importmap' || id.includes('next') || id.includes('nuxt')) {
+            result.jsonBlobs.push(content);
+          } else {
+            result.inlineScripts.push(content);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Extract Meta tag URLs
+  try {
+    document.querySelectorAll('meta[content*="/"], meta[content*="http"]').forEach(m => {
+      try {
+        const c = m.getAttribute('content');
+        if (c && c.length > 1 && c.length < 2000) {
+          try {
+            const resolved = new URL(c, base).href;
+            result.metaLinks.push(resolved);
+          } catch(e) {
+            result.metaLinks.push(c);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Extract CSS stylesheets
+  try {
+    document.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el => {
+      try {
+        const href = el.href || el.getAttribute('href');
+        if (href) {
+          try {
+            const resolved = new URL(href, base).href;
+            result.cssSources.push(resolved);
+          } catch(e) {
+            result.cssSources.push(href);
+          }
+        }
+      } catch(e) {}
+    });
+  } catch(e) {}
+
+  // Capture HTML slice
+  try {
+    result.rawHtml = document.documentElement ? document.documentElement.outerHTML.slice(0, 300000) : '';
+  } catch(e) {
+    result.rawHtml = '';
+  }
+
+  return result;
+}
+
+// ============================================================================
+// LOCAL SERVER AGENT (Connects to http://localhost:4488)
+// ============================================================================
+
+class LocalServerAgent {
+  constructor(port = 4488) {
+    this.port = port;
+    this.wsUrl = `ws://localhost:${port}/ws`;
+    this.ws = null;
+    this.connected = false;
+    this.reconnectTimer = null;
+    this.activeCrawlerTabId = null;
+    this.secretScanner = (typeof KatanaSecretScanner !== 'undefined') ? new KatanaSecretScanner() : null;
+    this.supplyScanner = (typeof KatanaSupplyChainScanner !== 'undefined') ? new KatanaSupplyChainScanner() : null;
+  }
+
+  connect() {
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
+    try {
+      this.ws = new WebSocket(this.wsUrl);
+
+      this.ws.onopen = () => {
+        this.connected = true;
+        console.log(`[Crawlizer Agent] Connected to Local Server at ${this.wsUrl}`);
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+
+        this.send({
+          type: 'register:agent',
+          client: 'chrome-extension',
+          version: '1.0.5',
+          name: 'Chrome Extension Crawler Agent'
+        });
+
+        chrome.storage.local.set({ localServerConnected: true, localServerPort: this.port });
+      };
+
+      this.ws.onmessage = async (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          await this.handleServerCommand(msg);
+        } catch (e) {
+          console.warn('[Crawlizer Agent] Message parse error:', e);
+        }
+      };
+
+      this.ws.onclose = () => {
+        this.connected = false;
+        chrome.storage.local.set({ localServerConnected: false });
+        this.scheduleReconnect();
+      };
+
+      this.ws.onerror = () => {
+        this.connected = false;
+        try { this.ws.close(); } catch {}
+      };
+    } catch (err) {
+      this.scheduleReconnect();
+    }
+  }
+
+  scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, 3000);
+  }
+
+  send(payload) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
+    }
+  }
+
+  async handleServerCommand(msg) {
+    if (msg.type === 'crawl:job') {
+      await this.executeCrawlJob(msg.url);
+    } else if (msg.type === 'crawl:active_tab') {
+      await this.executeActiveTabAudit();
+    } else if (msg.type === 'crawl:stop') {
+      await this.abortCurrentJob();
+    }
+  }
+
+  async executeCrawlJob(targetUrl) {
+    let tabId = null;
+    try {
+      console.log(`[Crawlizer Agent] Opening background tab to scan: ${targetUrl}`);
+      
+      const tab = await chrome.tabs.create({ url: targetUrl, active: false });
+      tabId = tab.id;
+      this.activeCrawlerTabId = tabId;
+
+      await this.waitForTabReady(tabId, 8000);
+
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: katanaInTabExtractionScript
+      });
+
+      const extracted = results && results[0] ? results[0].result : null;
+      const findings = await this.analyzeExtractedData(targetUrl, extracted);
+
+      try {
+        await chrome.tabs.remove(tabId);
+      } catch {}
+      this.activeCrawlerTabId = null;
+
+      this.send({
+        type: 'agent:findings',
+        targetUrl,
+        urls: findings.urls,
+        secrets: findings.secrets,
+        supplyChain: findings.supplyChain
+      });
+
+    } catch (err) {
+      console.warn(`[Crawlizer Agent] Failed crawling ${targetUrl}:`, err);
+      if (tabId) {
+        try { await chrome.tabs.remove(tabId); } catch {}
+      }
+      this.activeCrawlerTabId = null;
+
+      this.send({
+        type: 'agent:findings',
+        targetUrl,
+        urls: [],
+        secrets: [],
+        supplyChain: []
+      });
+    }
+  }
+
+  async executeActiveTabAudit() {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab || !activeTab.id || !activeTab.url || activeTab.url.startsWith('chrome://')) {
+        return;
+      }
+
+      console.log(`[Crawlizer Agent] Auditing active tab: ${activeTab.url}`);
+
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: katanaInTabExtractionScript
+      });
+
+      const extracted = results && results[0] ? results[0].result : null;
+      const findings = await this.analyzeExtractedData(activeTab.url, extracted);
+
+      this.send({
+        type: 'agent:findings',
+        targetUrl: activeTab.url,
+        urls: findings.urls,
+        secrets: findings.secrets,
+        supplyChain: findings.supplyChain
+      });
+    } catch (err) {
+      console.warn('[Crawlizer Agent] Active tab audit failed:', err);
+    }
+  }
+
+  async abortCurrentJob() {
+    if (this.activeCrawlerTabId) {
+      try {
+        await chrome.tabs.remove(this.activeCrawlerTabId);
+      } catch {}
+      this.activeCrawlerTabId = null;
+    }
+  }
+
+  waitForTabReady(tabId, timeoutMs = 8000) {
+    return new Promise(resolve => {
+      let resolved = false;
+      let timer = null;
+      let listener = null;
+
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        if (timer) clearTimeout(timer);
+        if (listener) chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      };
+
+      timer = setTimeout(finish, timeoutMs);
+
+      listener = (updatedId, changeInfo) => {
+        if (updatedId === tabId && changeInfo.status === 'complete') {
+          setTimeout(finish, 800);
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  async analyzeExtractedData(pageUrl, extracted) {
+    const discoveredUrls = [];
+    const discoveredSecrets = [];
+    const discoveredSupply = [];
+
+    if (!extracted) {
+      return { urls: discoveredUrls, secrets: discoveredSecrets, supplyChain: discoveredSupply };
+    }
+
+    let origin = '';
+    try { origin = new URL(pageUrl).origin; } catch {}
+
+    const addUrl = (url, type) => {
+      if (!url || typeof url !== 'string') return;
+      if (url.startsWith('javascript:') || url.startsWith('data:') || url.startsWith('mailto:')) return;
+      let scope = 'out-of-scope';
+      try {
+        if (new URL(url).origin === origin) scope = 'in-scope';
+      } catch {}
+      discoveredUrls.push({ url, type, scope, sourceUrl: pageUrl, discoveredAt: new Date().toISOString() });
+    };
+
+    (extracted.htmlLinks || []).forEach(u => addUrl(u, 'href'));
+    (extracted.scriptSources || []).forEach(u => addUrl(u, 'script'));
+    (extracted.metaLinks || []).forEach(u => addUrl(u, 'meta'));
+    (extracted.cssSources || []).forEach(u => addUrl(u, 'css'));
+    (extracted.dataEndpoints || []).forEach(d => addUrl(d.value, 'data-endpoint'));
+
+    if (this.secretScanner) {
+      if (extracted.rawHtml) {
+        const sec = this.secretScanner.scanHtml(extracted.rawHtml, pageUrl);
+        discoveredSecrets.push(...sec);
+      }
+      (extracted.inlineScripts || []).forEach(s => {
+        const sec = this.secretScanner.scanCode(s, pageUrl, 'inline-script');
+        discoveredSecrets.push(...sec);
+      });
+    }
+
+    if (this.supplyScanner) {
+      (extracted.inlineScripts || []).forEach(s => {
+        const items = this.supplyScanner.scanCode(s, pageUrl, 'inline-script');
+        discoveredSupply.push(...items);
+      });
+      (extracted.jsonBlobs || []).forEach(blob => {
+        const items = this.supplyScanner.scanJson(blob, pageUrl);
+        discoveredSupply.push(...items);
+      });
+    }
+
+    return {
+      urls: discoveredUrls,
+      secrets: discoveredSecrets,
+      supplyChain: discoveredSupply
+    };
+  }
+}
+
+const localServerAgent = new LocalServerAgent(4488);
+localServerAgent.connect();
+
+// ============================================================================
 // EVENT LISTENERS & LIFECYCLE
 // ============================================================================
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle dashboard opening from popup or other sources
   if (request.action === 'open_dashboard') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-    sendResponse({ status: 'ok' });
+    if (localServerAgent.connected) {
+      chrome.tabs.create({ url: `http://localhost:${localServerAgent.port}` });
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+    }
+    sendResponse({ status: 'ok', serverConnected: localServerAgent.connected });
+    return true;
+  }
+
+  // Handle audit active tab request
+  if (request.action === 'audit_active_tab') {
+    localServerAgent.executeActiveTabAudit().then(() => {
+      sendResponse({ status: 'ok' });
+    });
+    return true;
+  }
+
+  // Get local server agent status
+  if (request.action === 'get_server_status') {
+    sendResponse({
+      connected: localServerAgent.connected,
+      port: localServerAgent.port
+    });
     return true;
   }
 

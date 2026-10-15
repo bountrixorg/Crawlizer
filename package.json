@@ -1,0 +1,25 @@
+{
+  "name": "crawlizer",
+  "version": "1.0.5",
+  "description": "High-velocity web crawler, secret spider & supply chain dependency security scanner with local server dashboard and Chrome tab crawler agent.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "crawler",
+    "spider",
+    "recon",
+    "katana",
+    "security",
+    "secret-scanner",
+    "supply-chain"
+  ],
+  "author": "Crawlizer",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

@@ -746,6 +746,88 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   // ==========================================
+  // Local Server & Agent Integration
+  // ==========================================
+  const agentStatusPill = document.getElementById('agent-status-pill');
+  const agentStatusDot = document.getElementById('agent-status-dot');
+  const agentStatusLabel = document.getElementById('agent-status-label');
+
+  function updateAgentStatusUI(connected, version = '1.0.5') {
+    if (!agentStatusPill) return;
+    if (connected) {
+      agentStatusPill.classList.add('connected');
+      if (agentStatusDot) {
+        agentStatusDot.className = 'agent-indicator-dot online';
+      }
+      if (agentStatusLabel) {
+        agentStatusLabel.textContent = `AGENT: ONLINE (v${version})`;
+      }
+    } else {
+      agentStatusPill.classList.remove('connected');
+      if (agentStatusDot) {
+        agentStatusDot.className = 'agent-indicator-dot offline';
+      }
+      if (agentStatusLabel) {
+        agentStatusLabel.textContent = 'AGENT: WAITING';
+      }
+    }
+  }
+
+  if (storage && storage.isLocalServer && storage.isLocalServer()) {
+    storage.on('agent:status', (data) => {
+      updateAgentStatusUI(data.connected, data.version);
+    });
+
+    storage.on('init:state', (data) => {
+      if (data.agent) updateAgentStatusUI(data.agent.connected, data.agent.version);
+      if (data.crawlState === 'running') engine.onStateChange('running');
+      else if (data.crawlState === 'paused') engine.onStateChange('paused');
+    });
+
+    storage.on('crawl:state', (data) => {
+      if (data.state === 'running') engine.onStateChange('running');
+      else if (data.state === 'paused') engine.onStateChange('paused');
+      else engine.onStateChange('stopped');
+    });
+
+    storage.on('data:urls', () => {
+      debouncedRefreshResultsTable();
+      refreshMetrics();
+    });
+
+    storage.on('data:secrets', () => {
+      debouncedRefreshSecrets();
+      refreshMetrics();
+    });
+
+    storage.on('data:supply', () => {
+      debouncedRefreshSupplyChain();
+      refreshMetrics();
+    });
+
+    storage.on('data:wipe', () => {
+      refreshMetrics();
+      renderTargetsTable();
+      refreshResultsTable();
+      refreshSecretsTable();
+      refreshSupplyChainTable();
+    });
+
+    storage.on('log:new', (data) => {
+      if (data.item) {
+        engine.onLog(data.item);
+      }
+    });
+
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.agent) updateAgentStatusUI(data.agent.connected, data.agent.version);
+      })
+      .catch(() => {});
+  }
+
+  // ==========================================
   // Crawler Controls
   // ==========================================
   btnStart.addEventListener('click', async () => {

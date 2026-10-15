@@ -11,10 +11,63 @@ class KatanaStorage {
     this.initPromise = null;
     this.knownUrlSet = new Set(); // In-memory URL deduplication set
     this.knownSecretMap = new Map(); // In-memory unique secret deduplication map: match -> record
-    this.knownSupplyChainMap = new Map(); // In-memory supply chain deduplication map: key -> record
+    this.listeners = new Map();
+    this.wsInitialized = false;
+  }
+
+  isLocalServer() {
+    if (typeof window === 'undefined') return false;
+    const loc = window.location;
+    return loc.hostname === 'localhost' || loc.hostname === '127.0.0.1' || loc.port === '4488' || (loc.protocol.startsWith('http') && !loc.protocol.startsWith('chrome-extension'));
+  }
+
+  on(event, callback) {
+    if (!this.listeners.has(event)) this.listeners.set(event, []);
+    this.listeners.get(event).push(callback);
+  }
+
+  emit(event, data) {
+    if (this.listeners.has(event)) {
+      this.listeners.get(event).forEach(cb => {
+        try { cb(data); } catch (e) { console.warn(e); }
+      });
+    }
+  }
+
+  initLocalServerWs() {
+    if (this.wsInitialized || !this.isLocalServer()) return;
+    this.wsInitialized = true;
+    try {
+      const loc = window.location;
+      const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${loc.host}/ws`;
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        this.emit('server:connected', true);
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          this.emit(msg.type, msg);
+        } catch {}
+      };
+
+      this.ws.onclose = () => {
+        this.emit('server:connected', false);
+        this.wsInitialized = false;
+        setTimeout(() => this.initLocalServerWs(), 3000);
+      };
+    } catch {}
   }
 
   async init() {
+    if (this.isLocalServer()) {
+      this.initLocalServerWs();
+      return true;
+    }
+
     if (this.db) return this.db;
     if (this.initPromise) return this.initPromise;
 
@@ -249,6 +302,17 @@ class KatanaStorage {
 
   // Save new seed targets from .txt
   async addTargets(targetUrls) {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/targets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: targetUrls })
+        });
+        return await res.json();
+      } catch { return []; }
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('targets', 'readwrite');
@@ -272,6 +336,14 @@ class KatanaStorage {
   }
 
   async getPendingTargets() {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/targets');
+        const list = await res.json();
+        return (list || []).filter(t => t.status === 'pending');
+      } catch { return []; }
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('targets', 'readonly');
@@ -285,6 +357,13 @@ class KatanaStorage {
   }
 
   async getAllTargets() {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/targets');
+        return await res.json();
+      } catch { return []; }
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('targets', 'readonly');
@@ -297,6 +376,8 @@ class KatanaStorage {
   }
 
   async updateTarget(id, updates) {
+    if (this.isLocalServer()) return;
+
     await this.init();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('targets', 'readwrite');
@@ -317,6 +398,11 @@ class KatanaStorage {
   }
 
   async clearTargets() {
+    if (this.isLocalServer()) {
+      await fetch('/api/targets', { method: 'DELETE' });
+      return;
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       if (!this.db || !this.db.objectStoreNames.contains('targets')) return resolve();
@@ -347,6 +433,18 @@ class KatanaStorage {
 
   // Batch insert discovered URLs with deduplication
   async addDiscoveredUrls(urlObjects) {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/urls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(urlObjects)
+        });
+        const data = await res.json();
+        return data.count || 0;
+      } catch { return 0; }
+    }
+
     await this.init();
     const newItems = [];
     const now = Date.now();
@@ -390,6 +488,21 @@ class KatanaStorage {
   }
 
   async getDiscoveredUrls(filters = {}) {
+    if (this.isLocalServer()) {
+      try {
+        const filterObj = (typeof filters === 'number') ? { limit: filters } : (filters || {});
+        const qs = new URLSearchParams();
+        if (filterObj.type) qs.set('type', filterObj.type);
+        if (filterObj.search) qs.set('search', filterObj.search);
+        const res = await fetch('/api/urls?' + qs.toString());
+        let items = await res.json();
+        if (filterObj.limit && typeof filterObj.limit === 'number' && filterObj.limit > 0) {
+          items = items.slice(0, filterObj.limit);
+        }
+        return items;
+      } catch { return []; }
+    }
+
     await this.init();
     const filterObj = (typeof filters === 'number') ? { limit: filters } : (filters || {});
     return new Promise((resolve, reject) => {
@@ -571,6 +684,16 @@ class KatanaStorage {
   }
 
   async getSecrets(filters = {}) {
+    if (this.isLocalServer()) {
+      try {
+        const qs = new URLSearchParams();
+        if (filters && filters.severity) qs.set('severity', filters.severity);
+        if (filters && filters.search) qs.set('search', filters.search);
+        const res = await fetch('/api/secrets?' + qs.toString());
+        return await res.json();
+      } catch { return []; }
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       if (!this.db.objectStoreNames.contains('secrets')) {
@@ -678,10 +801,15 @@ class KatanaStorage {
   }
 
   async clearSecrets() {
+    if (this.isLocalServer()) {
+      await fetch('/api/secrets', { method: 'DELETE' });
+      return;
+    }
+
     await this.init();
     this.knownSecretMap.clear();
     return new Promise((resolve, reject) => {
-      if (!this.db.objectStoreNames.contains('secrets')) return resolve();
+      if (!this.db || !this.db.objectStoreNames.contains('secrets')) return resolve();
       const tx = this.db.transaction('secrets', 'readwrite');
       tx.objectStore('secrets').clear();
       tx.oncomplete = () => resolve();
@@ -690,6 +818,24 @@ class KatanaStorage {
   }
 
   async getStats() {
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        return {
+          totalTargets: (data.metrics && data.metrics.targetsCount) || 0,
+          pendingTargets: (data.crawler && data.crawler.queueCount) || 0,
+          crawledTargets: 0,
+          failedTargets: 0,
+          totalDiscovered: (data.metrics && data.metrics.urls && data.metrics.urls.total) || 0,
+          totalSecrets: (data.metrics && data.metrics.secrets && data.metrics.secrets.total) || 0,
+          totalSupplyChain: (data.metrics && data.metrics.supplyChain && data.metrics.supplyChain.total) || 0
+        };
+      } catch {
+        return { totalTargets: 0, pendingTargets: 0, crawledTargets: 0, failedTargets: 0, totalDiscovered: 0, totalSecrets: 0, totalSupplyChain: 0 };
+      }
+    }
+
     await this.init();
     const targets = await this.getAllTargets();
     const totalDiscovered = this.knownUrlSet.size;
@@ -710,6 +856,19 @@ class KatanaStorage {
 
   async saveSupplyChainFindings(findingsArray) {
     if (!findingsArray || findingsArray.length === 0) return { newCount: 0, updatedCount: 0 };
+
+    if (this.isLocalServer()) {
+      try {
+        const res = await fetch('/api/supply-chain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(findingsArray)
+        });
+        const data = await res.json();
+        return { newCount: data.count || 0, updatedCount: 0 };
+      } catch { return { newCount: 0, updatedCount: 0 }; }
+    }
+
     await this.init();
 
     const now = Date.now();
@@ -835,6 +994,17 @@ class KatanaStorage {
   }
 
   async getSupplyChainFindings(filters = {}) {
+    if (this.isLocalServer()) {
+      try {
+        const qs = new URLSearchParams();
+        if (filters && (filters.ecosystem || filters.eco)) qs.set('ecosystem', filters.ecosystem || filters.eco);
+        if (filters && filters.severity) qs.set('severity', filters.severity);
+        if (filters && filters.search) qs.set('search', filters.search);
+        const res = await fetch('/api/supply-chain?' + qs.toString());
+        return await res.json();
+      } catch { return []; }
+    }
+
     await this.init();
     return new Promise((resolve, reject) => {
       if (!this.db.objectStoreNames.contains('supply_chain')) {
@@ -887,10 +1057,15 @@ class KatanaStorage {
   }
 
   async clearSupplyChainFindings() {
+    if (this.isLocalServer()) {
+      await fetch('/api/supply-chain', { method: 'DELETE' });
+      return;
+    }
+
     await this.init();
     this.knownSupplyChainMap.clear();
     return new Promise((resolve, reject) => {
-      if (!this.db.objectStoreNames.contains('supply_chain')) return resolve();
+      if (!this.db || !this.db.objectStoreNames.contains('supply_chain')) return resolve();
       const tx = this.db.transaction('supply_chain', 'readwrite');
       tx.objectStore('supply_chain').clear();
       tx.oncomplete = () => resolve();
@@ -899,6 +1074,11 @@ class KatanaStorage {
   }
 
   async clearAll() {
+    if (this.isLocalServer()) {
+      await fetch('/api/wipe', { method: 'POST' });
+      return;
+    }
+
     await this.init();
     this.knownUrlSet.clear();
     this.knownSecretMap.clear();

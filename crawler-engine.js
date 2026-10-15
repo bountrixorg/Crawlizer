@@ -1735,8 +1735,27 @@ class KatanaCrawlerEngine {
   // MAIN RUNNER
   // =========================================================================
 
+  isLocalServer() {
+    if (typeof window === 'undefined') return false;
+    const loc = window.location;
+    return loc.hostname === 'localhost' || loc.hostname === '127.0.0.1' || loc.port === '4488' || (loc.protocol.startsWith('http') && !loc.protocol.startsWith('chrome-extension'));
+  }
+
   async start(targets) {
     if (this.isRunning) return;
+
+    if (this.isLocalServer()) {
+      try {
+        await fetch('/api/crawl/start', { method: 'POST' });
+        this.isRunning = true;
+        this.log('inf', `Crawl job dispatched to Local Server (Port 4488) and Chrome Extension Agent.`);
+        if (this.onStateChange) this.onStateChange('running');
+        return;
+      } catch (err) {
+        this.log('err', `Failed to start crawl on Local Server: ${err.message}`);
+        return;
+      }
+    }
 
     this.isRunning = true;
     this.isPaused = false;
@@ -1980,12 +1999,18 @@ class KatanaCrawlerEngine {
   }
 
   pause() {
+    if (this.isLocalServer()) {
+      fetch('/api/crawl/pause', { method: 'POST' }).catch(() => {});
+    }
     this.isPaused = true;
     this.log('inf', 'Crawler paused');
     if (this.onStateChange) this.onStateChange('paused');
   }
 
   resume() {
+    if (this.isLocalServer()) {
+      fetch('/api/crawl/resume', { method: 'POST' }).catch(() => {});
+    }
     this.isPaused = false;
     this.resolveCaptchaManually();
     this.log('inf', 'Crawler resumed');
@@ -1993,6 +2018,9 @@ class KatanaCrawlerEngine {
   }
 
   stop() {
+    if (this.isLocalServer()) {
+      fetch('/api/crawl/stop', { method: 'POST' }).catch(() => {});
+    }
     this.isRunning = false;
     this.isPaused = false;
     this.resolveCaptchaManually();

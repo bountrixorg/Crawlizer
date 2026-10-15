@@ -38,6 +38,15 @@
       </div>
     </header>
 
+    <!-- Local Server Status Banner -->
+    <div class="server-banner" id="server-banner" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(0, 240, 255, 0.06); border: 1px solid var(--border-glow-cyan); border-radius: 6px; margin: 0 16px 12px; font-family: var(--font-mono); font-size: 10.5px;">
+      <span style="display: flex; align-items: center; gap: 6px;">
+        <span class="status-pulse-dot" id="server-dot" style="width: 7px; height: 7px; background: var(--neon-cyan); box-shadow: 0 0 6px var(--neon-cyan);"></span>
+        <span style="color: var(--neon-cyan); font-weight: 700;" id="server-label">LOCAL SERVER: 4488</span>
+      </span>
+      <span style="color: var(--neon-green); font-size: 10px;">ONLINE</span>
+    </div>
+
     <!-- Quick Stats Grid with Mini Sparklines -->
     <section class="stats-grid">
       <div class="stat-card">
@@ -174,6 +183,14 @@
 
     <!-- Action Buttons -->
     <div class="actions-group">
+      <button id="btn-audit-active" class="btn btn-primary" style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.22), rgba(57, 255, 20, 0.15)); border-color: var(--neon-cyan);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>⚡ Audit Active Tab</span>
+      </button>
+
       <button id="btn-quick-start" class="btn btn-primary" disabled>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5 3 19 12 5 21 5 3"/>
@@ -187,7 +204,7 @@
           <line x1="3" y1="9" x2="21" y2="9"/>
           <line x1="9" y1="21" x2="9" y2="9"/>
         </svg>
-        <span>Open Full Dashboard</span>
+        <span>Open Local Dashboard (4488)</span>
         <span class="arrow-indicator">→</span>
       </button>
     </div>

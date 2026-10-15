@@ -718,5 +718,5 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       showAllRisks: false
     });
   }
-  console.log('Crawlizer Pro v1.3.0 initialized (with Supply Chain Security Scanner)');
+  console.log('Crawlizer Pro v1.0.5 initialized (with Supply Chain Security Scanner)');
 });

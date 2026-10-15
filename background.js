@@ -418,32 +418,43 @@ class MessageHandler {
     return { success: true };
   }
 
+  static inMemorySettings = {
+    autoScan: true,
+    deepCrawl: true,
+    osvLookup: true,
+    showAllRisks: false
+  };
+
   static async handleGetSettings() {
     try {
-      const settings = await chrome.storage.sync.get({
-        autoScan: true,
-        deepCrawl: true,
-        osvLookup: true,
-        showAllRisks: false
-      });
-      return settings;
-    } catch (error) {
-      console.error('Failed to get settings:', error);
-      return { autoScan: true, deepCrawl: true, osvLookup: true, showAllRisks: false };
-    }
+      const res = await fetch('http://127.0.0.1:4488/api/settings/extension_settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.value && typeof data.value === 'object') {
+          this.inMemorySettings = { ...this.inMemorySettings, ...data.value };
+        }
+      }
+    } catch {}
+    return this.inMemorySettings;
   }
 
   static async handleSaveSettings(request) {
     try {
       const { settings } = request;
-      await chrome.storage.sync.set(settings);
-      if (settings.autoScan === false) {
+      this.inMemorySettings = { ...this.inMemorySettings, ...settings };
+      try {
+        await fetch('http://127.0.0.1:4488/api/settings/extension_settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: this.inMemorySettings })
+        });
+      } catch {}
+      if (settings && settings.autoScan === false) {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) await BadgeManager.clearBadge(tab.id);
       }
       return { success: true };
     } catch (error) {
-      console.error('Failed to save settings:', error);
       return { success: false, error: error.message };
     }
   }
@@ -848,7 +859,7 @@ function katanaInTabExtractionScript() {
 class LocalServerAgent {
   constructor(port = 4488) {
     this.port = port;
-    this.wsUrl = `ws://localhost:${port}/ws`;
+    this.wsUrl = `ws://127.0.0.1:${port}/ws`;
     this.ws = null;
     this.connected = false;
     this.reconnectTimer = null;
@@ -904,8 +915,6 @@ class LocalServerAgent {
           version: '1.0.5',
           name: 'Chrome Extension Crawler Agent'
         });
-
-        chrome.storage.local.set({ localServerConnected: true, localServerPort: this.port });
       };
 
       this.ws.onmessage = async (event) => {
@@ -920,7 +929,6 @@ class LocalServerAgent {
       this.ws.onclose = () => {
         this.connected = false;
         this.stopHeartbeat();
-        chrome.storage.local.set({ localServerConnected: false });
         this.scheduleReconnect();
       };
 
@@ -1307,13 +1315,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 setInterval(() => state.cleanup(), 60000);
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    await chrome.storage.sync.set({
-      autoScan: true,
-      deepCrawl: true,
-      osvLookup: true,
-      showAllRisks: false
-    });
-  }
   console.log('Crawlizer Pro v1.0.5 initialized (with Supply Chain Security Scanner)');
 });

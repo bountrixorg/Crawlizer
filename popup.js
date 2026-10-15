@@ -40,21 +40,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cfgSubdomains = document.getElementById('popup-cfg-subdomains');
   const cfgClicker = document.getElementById('popup-cfg-clicker');
 
-  // Load saved config toggles
+  // Load saved config toggles (stored locally on disk in .data/settings.json)
   async function loadPopupConfig() {
     try {
-      let savedConfig = await window.katanaStorage.getSetting('crawler_config');
-      if (!savedConfig && chrome && chrome.storage && chrome.storage.local) {
-        const local = await new Promise(r => chrome.storage.local.get(['katana_singletab', 'katana_subdomains', 'katana_clicker'], r));
-        if (local && (local.katana_subdomains !== undefined || local.katana_singletab !== undefined)) {
-          savedConfig = {
-            mode: local.katana_singletab === false ? 'fast-fetch' : 'single-tab',
-            subdomainCrawl: local.katana_subdomains !== undefined ? local.katana_subdomains : true,
-            autoClickButtons: local.katana_clicker !== undefined ? local.katana_clicker : true
-          };
-        }
-      }
-
+      const savedConfig = await window.katanaStorage.getSetting('crawler_config');
       if (savedConfig) {
         if (savedConfig.mode !== undefined) cfgSingleTab.checked = (savedConfig.mode === 'single-tab');
         if (savedConfig.subdomainCrawl !== undefined) cfgSubdomains.checked = Boolean(savedConfig.subdomainCrawl);
@@ -75,14 +64,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       savedConfig.subdomainCrawl = cfgSubdomains.checked;
       savedConfig.autoClickButtons = cfgClicker.checked;
       await window.katanaStorage.saveSetting('crawler_config', savedConfig);
-
-      if (chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          katana_singletab: cfgSingleTab.checked,
-          katana_subdomains: cfgSubdomains.checked,
-          katana_clicker: cfgClicker.checked
-        });
-      }
     } catch (e) {
       console.warn('Could not save config in popup:', e);
     }

@@ -141,7 +141,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (btnSidebarToggle && appSidebar) {
     btnSidebarToggle.addEventListener('click', () => {
       appSidebar.classList.toggle('collapsed');
-      localStorage.setItem('crawlizer_sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+      if (storage && storage.saveSetting) {
+        storage.saveSetting('sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+      }
     });
 
     const sidebarBrand = document.querySelector('.sidebar-brand');
@@ -150,13 +152,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (appSidebar.classList.contains('collapsed')) {
           e.preventDefault();
           appSidebar.classList.remove('collapsed');
-          localStorage.setItem('crawlizer_sidebar_collapsed', 'false');
+          if (storage && storage.saveSetting) {
+            storage.saveSetting('sidebar_collapsed', false);
+          }
         }
       });
     }
 
-    if (localStorage.getItem('crawlizer_sidebar_collapsed') === 'true') {
-      appSidebar.classList.add('collapsed');
+    if (storage && storage.getSetting) {
+      storage.getSetting('sidebar_collapsed', false).then(isCollapsed => {
+        if (isCollapsed) appSidebar.classList.add('collapsed');
+      }).catch(() => {});
     }
   }
 
@@ -166,7 +172,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.preventDefault();
       if (appSidebar) {
         appSidebar.classList.toggle('collapsed');
-        localStorage.setItem('crawlizer_sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+        if (storage && storage.saveSetting) {
+          storage.saveSetting('sidebar_collapsed', appSidebar.classList.contains('collapsed'));
+        }
       }
     }
   });

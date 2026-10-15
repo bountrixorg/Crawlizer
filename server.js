@@ -30,12 +30,29 @@ class LocalDataManager {
     this.secretsFile = path.join(DATA_DIR, 'secrets.json');
     this.supplyChainFile = path.join(DATA_DIR, 'supply_chain.json');
     this.logsFile = path.join(DATA_DIR, 'logs.json');
+    this.settingsFile = path.join(DATA_DIR, 'settings.json');
 
     this.targets = this.loadJson(this.targetsFile, []);
     this.urls = this.loadJson(this.urlsFile, []);
     this.secrets = this.loadJson(this.secretsFile, []);
     this.supplyChain = this.loadJson(this.supplyChainFile, []);
     this.logs = this.loadJson(this.logsFile, []);
+    this.settings = this.loadJson(this.settingsFile, {
+      crawler_config: {
+        mode: 'single-tab',
+        scopeMode: 'same-domain',
+        scopeRegex: '',
+        tabRenderDelay: 400,
+        concurrency: 1,
+        maxDepth: 3,
+        timeout: 8000,
+        subdomainCrawl: true,
+        openFoundUrlsInTab: true,
+        autoClickButtons: true,
+        crawlJavascript: true,
+        parseRobotsAndSitemaps: true
+      }
+    });
 
     // In-memory deduplication lookup sets/maps
     this.urlSet = new Set(this.urls.map(u => this.normalizeUrl(u.url)));
@@ -81,6 +98,7 @@ class LocalDataManager {
         fs.promises.writeFile(this.urlsFile, JSON.stringify(this.urls, null, 2)),
         fs.promises.writeFile(this.secretsFile, JSON.stringify(this.secrets, null, 2)),
         fs.promises.writeFile(this.supplyChainFile, JSON.stringify(this.supplyChain, null, 2)),
+        fs.promises.writeFile(this.settingsFile, JSON.stringify(this.settings, null, 2)),
         fs.promises.writeFile(this.logsFile, JSON.stringify(this.logs.slice(-500), null, 2))
       ]);
     } catch (err) {
@@ -327,6 +345,32 @@ class LocalDataManager {
     this.scheduleSave();
   }
 
+  // --- Settings ---
+  getSettings() {
+    return this.settings || {};
+  }
+
+  getSetting(key, defaultValue = null) {
+    if (!this.settings) return defaultValue;
+    return this.settings[key] !== undefined ? this.settings[key] : defaultValue;
+  }
+
+  saveSetting(key, value) {
+    if (!this.settings) this.settings = {};
+    this.settings[key] = value;
+    this.scheduleSave();
+    return value;
+  }
+
+  saveSettings(newSettings) {
+    if (!this.settings) this.settings = {};
+    if (newSettings && typeof newSettings === 'object') {
+      Object.assign(this.settings, newSettings);
+      this.scheduleSave();
+    }
+    return this.settings;
+  }
+
   // --- Wipe ---
   wipeAll() {
     this.targets = [];
@@ -354,8 +398,20 @@ class LocalDataManager {
     const unregSupply = this.supplyChain.filter(p => p.isUnregistered).length;
     const vulnSupply = this.supplyChain.filter(p => p.advisoriesCount > 0).length;
 
+    const totalTargets = this.targets.length;
+    const pendingTargets = this.targets.filter(t => t.status === 'pending').length;
+    const crawledTargets = this.targets.filter(t => t.status === 'completed' || t.status === 'crawled').length;
+    const failedTargets = this.targets.filter(t => t.status === 'failed').length;
+
     return {
-      targetsCount: this.targets.length,
+      totalTargets,
+      targetsCount: totalTargets,
+      pendingTargets,
+      crawledTargets,
+      failedTargets,
+      totalDiscovered: totalUrls,
+      totalSecrets,
+      totalSupplyChain: totalSupply,
       urls: {
         total: totalUrls,
         inScope: internalUrls,
@@ -854,6 +910,38 @@ app.get('/api/status', (req, res) => {
 app.get('/api/metrics', (req, res) => {
   res.json(db.getMetrics());
 });
+
+app.get('/api/stats', (req, res) => {
+  res.json(db.getMetrics());
+});
+
+// Settings (persisted in .data/settings.json)
+app.get('/api/settings', (req, res) => {
+  res.json(db.getSettings());
+});
+
+app.get('/api/settings/:key', (req, res) => {
+  const val = db.getSetting(req.params.key);
+  res.json({ key: req.params.key, value: val });
+});
+
+app.post('/api/settings', (req, res) => {
+  if (req.body && req.body.key !== undefined && req.body.value !== undefined) {
+    const val = db.saveSetting(req.body.key, req.body.value);
+    return res.json({ success: true, key: req.body.key, value: val });
+  }
+  const saved = db.saveSettings(req.body);
+  res.json({ success: true, settings: saved });
+});
+
+const handleSettingKeyUpdate = (req, res) => {
+  const key = req.params.key;
+  const value = (req.body && req.body.value !== undefined) ? req.body.value : req.body;
+  const saved = db.saveSetting(key, value);
+  res.json({ success: true, key, value: saved });
+};
+app.post('/api/settings/:key', handleSettingKeyUpdate);
+app.put('/api/settings/:key', handleSettingKeyUpdate);
 
 // Targets
 app.get('/api/targets', (req, res) => {

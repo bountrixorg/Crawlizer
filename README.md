@@ -1,22 +1,22 @@
 <div align="center">
 <img width="326" height="58" alt="ascii-art-text" src="https://github.com/user-attachments/assets/1d9d1ee5-a229-4ff7-9110-a292c45ec1ac" />
-                                                                                 
 
-### ⚡ Next-Generation In-Browser Web Spider & Endpoint Discovery Engine ⚡
+### ⚡ Cyberpunk Web Recon, Secret Spider & Supply Chain Audit Engine ⚡
 
-*A browser extension port inspired by [ProjectDiscovery Katana](https://github.com/projectdiscovery/katana), supercharged with interactive single-tab DOM exploration, CAPTCHA bypass capability, automated button discovery, and deep JavaScript regex spidering.*
+*A high-velocity web spider, automated secret detector, and dependency vulnerability scanner featuring a local Node.js backend hub on port 4488 and an interactive Chromium extension agent.*
 
 <br/>
 
+[![Version: 1.0.5](https://img.shields.io/badge/Release-v1.0.5-00f0ff?style=for-the-badge&logo=semver&logoColor=black)](package.json)
+[![Default Port: 4488](https://img.shields.io/badge/Port-4488-39ff14?style=for-the-badge&logo=node.js&logoColor=black)](#-quick-start)
+[![Storage: 100% Local Disk](https://img.shields.io/badge/Storage-100%25%20Local%20Disk-ff0055?style=for-the-badge&logo=databricks&logoColor=white)](#-100-local-disk-storage-zero-browser-storage)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](manifest.json)
-[![Chromium Compatible](https://img.shields.io/badge/Browser-Chrome%20%7C%20Brave%20%7C%20Edge-10b981?style=for-the-badge&logo=googlechrome&logoColor=white)](#-installation)
-[![Security Tested](https://img.shields.io/badge/Bug%20Bounty-Ready-f43f5e?style=for-the-badge&logo=hackthebox&logoColor=white)](#-features)
-[![ProjectDiscovery Katana Engine](https://img.shields.io/badge/Engine-Katana%20Regex%20v1.2-a855f7?style=for-the-badge&logo=coffeescript&logoColor=white)](#-deep-katana-regex-engine)
+[![Chromium Compatible](https://img.shields.io/badge/Browser-Chrome%20%7C%20Brave%20%7C%20Edge-a855f7?style=for-the-badge&logo=googlechrome&logoColor=white)](#-installation)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 <br/>
 
-[🚀 Quick Start](#-installation) • [✨ Key Features](#-features) • [🧠 Architecture](#-architecture--workflow) • [📊 Comparison](#-katana-cli-vs-katana-ext) • [💻 Usage Guide](#-usage-guide) • [📤 Export Formats](#-exporting--pipeline-integration)
+[🚀 Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [💾 Local Storage Architecture](#-100-local-disk-storage-zero-browser-storage) • [🧠 Architecture](#-architecture--workflow) • [📡 REST API](#-rest-api-reference) • [💻 Usage Guide](#-usage-guide) • [📤 Pipeline Integration](#-exporting--pipeline-integration)
 
 </div>
 
@@ -24,46 +24,52 @@
 
 ## 🌟 Overview
 
-**Crawlizer** brings the reconnaissance power of headless web spidering directly into your browser workflow. Instead of dealing with CLI sandboxes, headless Chromium crashes, or IP bans, Crawlizer runs natively inside your Chromium session (Chrome, Brave, Edge).
+**Crawlizer** merges the raw reconnaissance power of headless web crawlers with client-side DOM execution, automated secret discovery, and software supply chain auditing. 
 
-Simply upload or drag & drop your `.txt` target list (such as `alive.txt` from `httpx` or `subfinder`), and Crawlizer automatically explores web routes, executes client-side Single Page Applications (React, Next.js, Vue, Angular), clicks interactive elements, extracts hidden endpoints and secrets from JavaScript source files, and exports deduplicated routes ready for **Nuclei**, **FFUF**, and **Burp Suite**.
+Unlike traditional CLI tools that struggle with single-page applications (React, Next.js, Vue, Angular) and get immediately blocked by anti-bot protections, Crawlizer utilizes a **hybrid architecture**:
+1. **Local Server Hub (`http://localhost:4488`)**: A lightweight Node.js daemon that manages target queues, deduplication, live WebSocket telemetry, OSV.dev CVE audits, and persistent storage saved **100% locally on disk** in `.data/`.
+2. **Chromium Extension Agent**: A Manifest V3 background service worker that navigates targets in a dedicated browser tab using your authenticated browser profile, bypasses CAPTCHAs, executes client-side JavaScript, and streams discovered endpoints, secrets, and dependencies to your local server in real time.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
 <div align="center">
 
 | Feature | Description |
 | :--- | :--- |
-| 🎯 **Single-Tab Interactive Navigation** | Uses **one dedicated browser tab** to navigate targets one-by-one, executing all dynamic JS without eating RAM. |
-| 🛡️ **Zero-Friction CAPTCHA Solving** | Detects Cloudflare Turnstile, reCAPTCHA, and hCaptcha. Pauses, rings an alert, lets you solve it, and resumes! |
-| 🖱️ **Automated Button & Tab Exploration** | Automatically clicks interactive `<button>`, `role="tab"`, and dropdowns while intercepting `fetch`/`XHR`. |
-| 🚫 **Smart Asset Guard** | **Never loads `.js` or `.css` into the tab** (avoids raw code rendering); fetches JS in background for regex extraction. |
-| 🌐 **Apex & Subdomain Spider Mode** | Discovers and recurses into subdomains (`*.target.com`) when enabled, or strictly confines to exact hostname. |
-| 🧹 **Strict Canonical Deduplication** | 3-tier deduplication (Visited, Enqueued, and IndexedDB) with query param sorting and slash normalization. |
-| ⚡ **Deep Katana & LinkFinder Regex** | Parses script files for REST APIs, GraphQL endpoints, routes, actions, and hidden parameters. |
-| 💾 **IndexedDB High-Capacity Storage** | Seamlessly stores 100,000+ endpoints with instant multi-filter search and sub-millisecond query latency. |
-| 🎨 **Sleek Cyber Glassmorphism UI** | Modern dark-mode interface with ambient glows, live RPS telemetry, pill tabs, and real-time logs. |
+| 🖥️ **Local Server Hub (`:4488`)** | Runs on `http://localhost:4488` with `npm run dev`. Provides a standalone dashboard and REST API. |
+| 💾 **100% Local Disk Storage** | **Zero data stored in the browser**. All targets, endpoints, secrets, findings, and settings live in `.data/` on disk. |
+| 🎯 **Dedicated Tab Navigation** | Navigates queued URLs in a single tab without tab churn. **The scanner tab remains open** for manual inspection. |
+| 🔑 **Live Secret Detection** | 25+ high-fidelity entropy and regex rules detecting AWS keys, GitHub PATs, JWTs, Stripe keys, Slack webhooks, and private keys. |
+| 📦 **Supply Chain Security Audit** | Identifies frontend dependencies across npm, PyPI, Go, and Maven; queries OSV.dev for CVEs; flags dependency confusion risks. |
+| 🛡️ **Zero-Friction CAPTCHA Solving** | Detects Cloudflare Turnstile, reCAPTCHA, and hCaptcha. Pauses scan, alerts you with audio, and resumes after solving. |
+| 🖱️ **Interactive DOM Exploration** | Monkey-patches `window.fetch` and `XMLHttpRequest`, auto-clicks interactive `<button>` elements, tabs, and menus. |
+| 🌐 **Apex & Subdomain Auto-Scoping** | Smart apex domain scoping (`*.domain.com`) handles redirects (e.g. `tesla.com` → `www.tesla.com`) seamlessly. |
+| 🧹 **Strict Canonical Deduplication** | Parameter sorting, port cleansing, and directory traversal normalization to prevent crawling loops. |
+| 🎨 **Cyberpunk Glassmorphism UI** | Modern dark-mode interface with ambient glows, real-time RPS telemetry, matrix background, and audio feedback. |
 
 </div>
 
 ---
 
-## 📊 Katana CLI vs. Katana-Ext
+## 💾 100% Local Disk Storage (Zero Browser Storage)
 
-| Capability | ProjectDiscovery Katana (CLI) | Katana-Ext (Browser Extension) |
-| :--- | :---: | :---: |
-| **Execution Environment** | Go Binary / Headless Chrome | Native Chromium Extension (Chrome / Brave / Edge) |
-| **Target Input** | Terminal flags / stdin (`-list`) | **Drag & Drop `.txt` file** (`alive.txt`) or Direct Input |
-| **SPA & Client-Side JS** | Requires external Chrome binary | **Native browser execution** (zero extra binaries) |
-| **Cloudflare / CAPTCHA Handling** | ❌ Blocked / Fails on challenges | ✅ **Detects challenge, pauses, lets you solve in tab, resumes** |
-| **Interactive DOM Clicking** | Limited action triggers | ✅ **Monkey-patches `fetch`/`XHR` + automated button clicks** |
-| **Asset Navigation Guard** | Navigates raw assets if queued | ✅ **Enqueues app routes, parses JS in background only** |
-| **Subdomain Crawl Mode** | CLI scope flags | ✅ **Interactive toggle for `*.domain.com` spidering** |
-| **Authentication & Sessions** | Cookie headers / flags | ✅ **Uses existing browser session cookies & tokens** |
-| **Results Storage & Search** | File outputs (`output.txt`) | ✅ **Persistent IndexedDB database with instant live search** |
-| **One-Click Export** | Custom scripting needed | ✅ **TXT (line-delimited), JSON, CSV, Clipboard** |
+Crawlizer strictly isolates data storage to your local disk. **No data is saved in browser IndexedDB, `localStorage`, or `sessionStorage`**:
+
+```
+d:\EXT\urls\.data/
+├── targets.json        # Enqueued, crawling, and finished seed targets
+├── urls.json           # All discovered endpoints, methods, scopes & types
+├── secrets.json        # Consolidated sensitive findings with source locations
+├── supply_chain.json   # Discovered packages, OSV CVE advisories & risk scores
+├── settings.json       # Crawler depth, timeouts, regex & user preferences
+└── logs.json           # Real-time event log history (last 500 records)
+```
+
+- **Clean Browser Footprint**: Any legacy browser databases are purged automatically on initialization.
+- **Persistent Across Restarts**: Stop and restart `npm run dev` at any time without losing target progress or discovered endpoints.
+- **Direct CLI Access**: Easily inspect or pipe JSON files into command-line utilities like `jq`, `grep`, or custom scripts.
 
 ---
 
@@ -71,224 +77,151 @@ Simply upload or drag & drop your `.txt` target list (such as `alive.txt` from `
 
 ```mermaid
 flowchart TD
-    subgraph INPUT ["Target Ingestion"]
-        A["📁 Upload alive.txt / Seeds"] --> B["Targets Queue & Scope Filter"]
+    subgraph UI ["User Interface (Port 4488)"]
+        DASH["Cyberpunk Dashboard\nhttp://localhost:4488"]
+        POPUP["Extension Popup Quick Launcher"]
     end
 
-    subgraph ENGINE ["Single-Tab Crawler Engine"]
-        B --> C{"Check Visited / Canon Dedupe"}
-        C -- "Already Visited" --> SKIP["Discard Duplicate"]
-        C -- "New Route" --> D{"Is Navigable Route?"}
-        
-        D -- "Yes (HTML / Endpoint)" --> TAB["Navigate Single Dedicated Browser Tab"]
-        D -- "No (.js Script File)" --> BG["Fetch in Background via Fetch API"]
-        
-        TAB --> EXTRACT["In-Tab Extraction Script"]
-        EXTRACT --> CHK{"CAPTCHA / Cloudflare Detected?"}
-        CHK -- "Yes" --> PAUSE["Pause Crawl & Bring Tab to Focus -> User Solves"]
-        PAUSE --> RESUME["User Solves -> Resume Extraction"]
-        RESUME --> DOM["Scrape DOM Links, Forms, Meta, Comments"]
-        CHK -- "No" --> DOM
-        
-        DOM --> CLICK["Interactive Clicker: Buttons, Tabs, Menus"]
-        CLICK --> INTERCEPT["Intercept window.fetch, XHR & pushState"]
-        INTERCEPT --> DISCOVERY["Discovered API Endpoints"]
-        
-        BG --> REGEX["Katana Regex & LinkFinder Engine"]
-        REGEX --> DISCOVERY
-        DOM --> DISCOVERY
+    subgraph SERVER ["Node.js Local Server Hub (:4488)"]
+        SRV["Express REST API & WebSocket Server"]
+        ORCH["Crawl Orchestrator & Queue Manager"]
+        DATA[".data/ Local Disk Store\n(JSON files)"]
+        OSV["OSV.dev & Registry API Client"]
     end
 
-    subgraph DEDUPE ["Canonical Normalizer & Storage"]
-        DISCOVERY --> NORM["Canonical Normalization (Sort params, trim trailing slashes, clean ports)"]
-        NORM --> SUB{"Subdomain Mode Enabled?"}
-        SUB -- "Yes" --> SUB_EXT["Scan *.apex.com & Enqueue Subdomains"]
-        SUB -- "No" --> HOST_CHK["Strict Hostname Matching"]
-        SUB_EXT --> IDB[("IndexedDB KatanaCrawlerDB")]
-        HOST_CHK --> IDB
+    subgraph AGENT ["Chromium Extension Agent (MV3)"]
+        SW["Background Service Worker\nws://127.0.0.1:4488/ws"]
+        TAB["Dedicated Scanner Browser Tab\n(Stays Open for Inspection)"]
+        DOM["In-Tab Extractor:\nDOM, Fetch/XHR Interception, Buttons"]
+        SEC["Secret Scanner (25+ Rules)"]
     end
 
-    subgraph UI ["Interactive Dashboard"]
-        IDB --> DASH["Modern Glassmorphic Dashboard"]
-        DASH --> LOGS["Live RPS & Terminal Stream"]
-        DASH --> TABLE["Filtered Search Table"]
-        TABLE --> EXP["Export to TXT / JSON / CSV"]
-    end
-
-    classDef primary fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
-    classDef highlight fill:#7c3aed,stroke:#c084fc,stroke-width:2px,color:#ffffff;
-    classDef success fill:#059669,stroke:#34d399,stroke-width:2px,color:#ffffff;
-    classDef alert fill:#e11d48,stroke:#fb7185,stroke-width:2px,color:#ffffff;
-
-    class A,B primary;
-    class TAB,CLICK,INTERCEPT highlight;
-    class IDB,DASH,EXP success;
-    class CHK,PAUSE alert;
+    UI <--> |REST & WebSocket| SRV
+    SRV <--> ORCH
+    ORCH <--> DATA
+    ORCH <--> |Job Dispatch & Findings Stream| SW
+    SW --> |Navigate & Execute| TAB
+    TAB --> DOM
+    DOM --> SEC
+    DOM --> |Stream Findings| SW
+    SRV --> OSV
 ```
 
 ---
 
-## 🔍 Deep Dive: How It Works
+## 🚀 Quick Start
 
-<details>
-<summary><b>🛡️ 1. Single-Tab Browser Navigation & CAPTCHA Solver</b></summary>
+### 1. Start the Local Server
+Make sure you have [Node.js](https://nodejs.org/) installed (v18+ recommended):
 
-<br/>
+```bash
+# Clone the repository
+git clone https://github.com/bountrixorg/Crawlizer.git
+cd Crawlizer
 
-Unlike traditional CLI crawlers that spawn headless browsers in temporary profiles (which immediately get fingerprinted and blocked by WAFs), Katana-Ext reuses **a single dedicated browser tab** (`Katana Crawler [Active Tab]`):
+# Install dependencies
+npm install
 
-1. It operates with your real browser fingerprints, extensions, and valid session cookies.
-2. During each page visit, it inspects the DOM for signatures of **Cloudflare Turnstile, Cloudflare Challenge (`cf-chl`), hCaptcha, and Google reCAPTCHA**.
-3. If a challenge is encountered, crawling instantly pauses and emits a visual and audible alert in the dashboard:
-   - Click **Open / Focus Tab** to bring the challenge to front.
-   - Complete the CAPTCHA or wait for the challenge to pass.
-   - Click **"I Solved It, Continue"** (or let the auto-poller detect completion).
-4. The crawler resumes automatically with the authenticated session cookies intact!
+# Start the local server on default port 4488
+npm run dev
+```
 
-</details>
-
-<details>
-<summary><b>🖱️ 2. Automated Button & Interactive DOM Exploration</b></summary>
-
-<br/>
-
-Modern Single Page Applications (SPAs) do not expose their full attack surface in standard `<a href="...">` tags. Katana-Ext injects a lightweight explorer script that:
-
-1. **Monkey-patches browser networking**:
-   - Intercepts `window.fetch` and `XMLHttpRequest.prototype.open` to log all dynamic AJAX/REST endpoints.
-   - Intercepts `window.history.pushState` and `window.history.replaceState` to record client-side route changes.
-2. **Safely simulates clicks** on interactive DOM elements:
-   - `<button>`, `[role="button"]`, `<input type="button">`
-   - Navigation tabs: `[role="tab"]`, `.tab`, `.nav-item`
-   - Dropdown toggles: `[aria-expanded]`, `[data-toggle]`
-3. Discovers hidden modal dialogues, tabs, drawer menus, and dynamic API calls triggered exclusively by user interaction.
-
-</details>
-
-<details>
-<summary><b>🚫 3. Smart Asset Guard (No JS/CSS In-Tab Loading)</b></summary>
-
-<br/>
-
-When spiders find URLs ending in `.js`, `.css`, `.png`, or `.woff2`, opening them in a browser tab causes the browser to render raw source code or binary previews—wasting time and disrupting the crawling session.
-
-- **Katana-Ext differentiates between Navigable Routes and Static Assets**:
-  - **Navigable routes** (`/dashboard`, `/profile`, `/api-docs`, `/app/v2/...`) are queued and opened in the dedicated browser tab.
-  - **JavaScript files** (`/main.bundle.js`, `/vendor.chunk.js`) are intercepted by the asset guard. They are **never loaded into the tab**. Instead, they are fetched silently in the background via the Extension API and passed directly into the **Katana Regex Engine**.
-  - Any internal API routes discovered *inside* those JS files are then enqueued for tab navigation!
-
-</details>
-
-<details>
-<summary><b>🌐 4. Apex & Subdomain Crawl Mode (`*.domain.com`)</b></summary>
-
-<br/>
-
-When crawling an organization or target:
-- **Subdomain Mode OFF (Strict)**: The crawler only explores URLs matching the exact seed hostname (e.g., `https://example.com` stays on `example.com`).
-- **Subdomain Mode ON**: Katana-Ext automatically resolves the target's apex domain (e.g. `example.com`). While crawling, it applies regex to scan all HTML text, scripts, and comments for any hostnames matching `*.example.com` (such as `api.example.com`, `auth.example.com`, `admin.example.com`). Discovered subdomains are automatically enqueued and spidered.
-
-</details>
-
-<details>
-<summary><b>🧹 5. Canonical Deduplication Normalizer</b></summary>
-
-<br/>
-
-Avoid infinite crawling loops and duplicate database records:
-- **Port Standardization**: Normalizes default ports (`http://site.com:80/` -> `http://site.com/`, `https://site.com:443/` -> `https://site.com/`).
-- **Path Cleaning**: Normalizes directory traversals, double slashes (`//api//v1` -> `/api/v1`), and trailing slashes (`/login/` -> `/login`).
-- **Deterministic Parameter Sorting**: Reorders query parameters alphabetically (`?role=admin&user=1` and `?user=1&role=admin` produce the exact same canonical key).
-- **3-Tier Deduplication Gate**:
-  1. In-memory `visitedUrls` Set (fast tab navigation check)
-  2. In-memory `enqueuedUrls` Set (queue deduplication)
-  3. IndexedDB transactional key check with unique indexes
-
-</details>
+The server will initialize on **`http://localhost:4488`** and create the `.data/` directory automatically.
 
 ---
 
-## 🚀 Installation
+### 2. Install the Browser Extension
 
-### Chromium-Based Browsers (Chrome, Brave, Edge, Opera, Vivaldi)
+1. Open your Chromium-based browser (Chrome, Brave, Edge):
+   - **Chrome**: Navigate to `chrome://extensions/`
+   - **Brave**: Navigate to `brave://extensions/`
+   - **Edge**: Navigate to `edge://extensions/`
+2. Enable **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked** (top-left).
+4. Select the project directory (`d:\EXT\urls`).
+5. The **Crawlizer** extension icon will appear in your toolbar!
 
-1. **Clone or Download this repository**:
-   ```bash
-   git clone https://github.com/bountrixorg/Crawlizer.git
-   ```
+---
 
-2. Open your browser and navigate to the Extensions management page:
-   - **Google Chrome**: `chrome://extensions/`
-   - **Brave Browser**: `brave://extensions/`
-   - **Microsoft Edge**: `edge://extensions/`
+### 3. Start Crawling
 
-3. Enable **Developer mode** (toggle switch in the top right corner).
+1. Open your browser and go to **`http://localhost:4488`** (or click the extension icon and select **Open Full Dashboard**).
+2. Paste target URLs or drag & drop a `.txt` seed file (e.g., `alive.txt` from `httpx` or `subfinder`).
+3. Click **⚡ Start Crawl**.
+4. The extension will automatically open a dedicated browser tab, visit each URL, extract all endpoints and secrets, and stream findings back to your dashboard!
 
-4. Click the **Load unpacked** button in the top left corner.
+---
 
-5. Select the cloned folder:
-   ```
-   D:\EXT\urls
-   ```
+## 📡 REST API Reference
 
-6. The **Katana** extension icon will now appear in your browser toolbar! 🗡️
+The local server exposes a clean REST API on `http://localhost:4488`:
+
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/api/status` | `GET` | Returns server health, agent connection status, queue count, and metrics. |
+| `/api/metrics` | `GET` | Returns aggregated statistics (total targets, endpoints, secrets, packages). |
+| `/api/targets` | `GET` | Retrieves all seed targets from `.data/targets.json`. |
+| `/api/targets` | `POST` | Enqueues new target URL(s) (`{ url: "..." }` or `{ urls: [...] }`). |
+| `/api/targets/:id` | `PATCH` | Updates a target's status or metadata. |
+| `/api/targets/reactivate` | `POST` | Resets all targets to `pending` for a fresh crawl run. |
+| `/api/targets` | `DELETE` | Clears all seed targets from disk. |
+| `/api/urls` | `GET` | Queries discovered URLs with optional `?type=`, `?search=`, and `?limit=`. |
+| `/api/urls` | `POST` | Batch-inserts discovered URLs with automatic canonical deduplication. |
+| `/api/urls` | `DELETE` | Clears all discovered endpoints. |
+| `/api/secrets` | `GET` | Queries discovered secrets with optional `?severity=` and `?search=`. |
+| `/api/secrets` | `POST` | Saves discovered secrets with location consolidation. |
+| `/api/secrets` | `DELETE` | Clears all discovered secrets. |
+| `/api/supply-chain` | `GET` | Retrieves supply chain findings with optional `?ecosystem=` and `?severity=`. |
+| `/api/supply-chain/analyze`| `POST` | Performs real-time registry check & OSV.dev CVE scan for a package. |
+| `/api/settings` | `GET` | Returns all configuration settings from `.data/settings.json`. |
+| `/api/settings/:key` | `GET` | Retrieves a specific setting value. |
+| `/api/settings/:key` | `POST` | Saves a specific setting value to disk. |
+| `/api/crawl/start` | `POST` | Starts or resumes the crawl orchestrator (`{ targets: [...] }` optional). |
+| `/api/crawl/pause` | `POST` | Pauses active crawl dispatching. |
+| `/api/crawl/resume` | `POST` | Resumes a paused crawl session. |
+| `/api/crawl/stop` | `POST` | Stops crawling and resets active jobs. |
+| `/api/crawl/active-tab` | `POST` | Triggers immediate audit of the currently active browser tab. |
+| `/api/wipe` | `POST` | Resets all scan data from disk (targets, URLs, secrets, supply chain, logs). |
 
 ---
 
 ## 💻 Usage Guide
 
-### 1. Launch the Dashboard
-Click the **Katana extension icon** in your browser toolbar and choose **Open Full Dashboard** (or access `chrome-extension://<id>/dashboard.html`).
+### Target Scope & Configuration
 
-```
-+---------------------------------------------------------------------------------------+
-|  KATANA // EXTENSION        [Single-Tab: Active]   [Subdomains: ON]   [Depth: 3]     |
-+---------------------------------------------------------------------------------------+
-|  TOTAL DISCOVERED    HTML PAGES     JS SCRIPTS     API ENDPOINTS    DUPLICATES BLOCKED |
-|       1,428              342            89              997                 854        |
-+---------------------------------------------------------------------------------------+
-```
+- **Execution Mode**: Choose **Single-Tab Browser** for full client-side JS execution and interactive CAPTCHA bypass, or **Fast Fetch** for background asset spidering.
+- **Subdomain Crawling (`*.domain.com`)**: Enable to automatically spider all discovered subdomains under the seed's apex domain.
+- **Button Exploration**: Intercepts button clicks, tab switches, and dropdowns to uncover hidden API routes.
+- **Asset Guard**: Never renders `.js` or `.css` files directly in browser tabs; extracts their code in background workers for deep regex parsing.
 
-### 2. Provide Targets
-- **Option A (File Upload)**: Drag & drop your `alive.txt` or any text file containing URLs into the dashed upload area.
-- **Option B (Direct Input)**: Paste URLs directly into the target textarea (one per line).
+### CAPTCHA & WAF Challenge Handling
 
-### 3. Configure Scope & Options
-- **Execution Mode**: Choose **Single-Tab Browser** for full client-side JS rendering and interactive CAPTCHA bypass, or **Headless Background (Fetch)** for ultra-fast asset spidering.
-- **Subdomain Crawl (`*.domain.com`)**: Enable if you want to discover and crawl subdomains belonging to the target's root domain.
-- **Button Exploration**: Keep enabled to click interactive buttons, tabs, and menus.
-- **Crawl Depth & Delay**: Tune concurrency, maximum depth (default: 3), and polite request delay.
-
-### 4. Start Crawling
-Click **Start Crawling**.
-- Katana-Ext will open a single dedicated browser tab.
-- Watch live discovery counters and streaming terminal logs in real-time.
-- If a Cloudflare challenge or CAPTCHA appears, solve it in the focused tab and resume crawling.
-
-### 5. Filter & Search Results
-Switch to the **Discovered Endpoints** tab to search and filter:
-- Filter by Category: `All`, `HTML Pages`, `JS Scripts`, `API Endpoints`, `Network / XHR`.
-- Filter by Extension: `.js`, `.json`, `.php`, `.action`, `.xml`, `.txt`.
-- Live full-text search across all discovered paths.
+When encountering Cloudflare Turnstile, hCaptcha, or Google reCAPTCHA:
+1. Crawlizer **pauses crawling immediately** and triggers an audible alert.
+2. Click **⚡ Focus Tab** to bring the scanner tab into focus.
+3. Solve the challenge manually.
+4. Click **I Solved It, Continue** to resume crawling with valid authenticated cookies!
 
 ---
 
 ## 📤 Exporting & Pipeline Integration
 
-Export your discovered URLs directly into your bug bounty or penetration testing pipeline:
+Export your findings directly into your security workflow:
 
-| Format | Description | Command-Line Pipe Example |
+| Format | Description | Command-Line Example |
 | :--- | :--- | :--- |
-| **TXT** | One URL per line (clean, deduplicated) | `cat katana_export.txt \| nuclei -t http/cves/` |
-| **JSON** | Full metadata array (URL, type, source, depth, date) | `jq '.[] \| select(.type=="api") \| .url' katana.json` |
-| **CSV** | Spreadsheet-ready with timestamp and source URL | Open in Excel, Google Sheets, or LibreOffice Calc |
-| **Clipboard** | Instant copy to system clipboard | Paste directly into Burp Suite target scope |
+| **TXT** | One URL per line (clean, deduplicated) | `cat urls.txt \| nuclei -t http/cves/` |
+| **JSON** | Full metadata array with types and sources | `jq '.[] \| select(.scope=="in-scope") \| .url' urls.json` |
+| **CSV** | Spreadsheet-ready with timestamps | Open in Excel, Google Sheets, or LibreOffice Calc |
+| **Clipboard** | Instant copy to clipboard | Paste directly into Burp Suite Target Scope |
 
-### Pipe with Nuclei & HTTPX:
+### Pipeline with Nuclei & HTTPX:
 ```bash
-# 1. Spider using Katana-Ext and export as katana_urls.txt
+# 1. Export discovered URLs from Crawlizer (or fetch directly from API)
+curl -s http://localhost:4488/api/urls | jq -r '.[].url' > crawlizer_endpoints.txt
+
 # 2. Probe discovered endpoints with httpx
-httpx -l katana_urls.txt -status-code -title -tech-detect -o alive_endpoints.txt
+httpx -l crawlizer_endpoints.txt -status-code -title -tech-detect -o alive_endpoints.txt
 
 # 3. Scan for vulnerabilities using Nuclei
 nuclei -l alive_endpoints.txt -t cves/ -t exposures/ -t vulnerabilities/
@@ -299,22 +232,30 @@ nuclei -l alive_endpoints.txt -t cves/ -t exposures/ -t vulnerabilities/
 ## 📁 Repository Structure
 
 ```
-Katana-ext/
-├── manifest.json         # Chrome Manifest V3 configuration & permissions
-├── background.js         # Service worker & extension lifecycle management
-├── crawler-engine.js     # Single-tab browser manager, LinkFinder regex & clicker
-├── storage.js            # IndexedDB database engine & canonical deduplication
-├── dashboard.html        # Sleek glassmorphic cybersecurity control center
-├── dashboard.css         # Modern dark-mode styling, ambient glows & animations
-├── dashboard.js          # Dashboard controller, search filter & export handlers
-├── popup.html            # Toolbar popup quick launcher
-├── popup.css             # Toolbar popup styling
-├── popup.js              # Toolbar popup interaction handler
+Crawlizer/
+├── .data/                # Local persistent data directory (stored 100% on disk)
+│   ├── targets.json      # Seed targets
+│   ├── urls.json         # Discovered URLs
+│   ├── secrets.json      # Sensitive secrets
+│   ├── supply_chain.json # Dependency audits
+│   ├── settings.json     # User configuration
+│   └── logs.json         # System event logs
+├── background.js         # Chrome extension background agent & WebSocket client
+├── crawler-engine.js     # Single-tab browser manager & link extractor
+├── dashboard.html        # Modern Cyberpunk Control Center UI
+├── dashboard.css         # Dark cyberpunk glassmorphism stylesheet
+├── dashboard.js          # Dashboard controller, charts, filters & exports
+├── manifest.json         # Chrome Manifest V3 extension configuration
+├── package.json          # Node.js dependencies & npm scripts (default: 4488)
+├── popup.html            # Extension popup launcher
+├── popup.css             # Extension popup stylesheet
+├── popup.js              # Extension popup controller
+├── secret-scanner.js     # 25+ secret detection regex rules & entropy checks
+├── server.js             # Local Express & WebSocket server hub
+├── storage.js            # Server-backed client engine (zero browser storage)
+├── supply-chain-scanner.js# Package dependency & CVE auditing engine
 ├── icons/                # High-resolution extension icon suite
-│   ├── icon16.png
-│   ├── icon48.png
-│   └── icon128.png
-├── alive.txt             # Example seed target file
+├── alive.txt             # Sample seed targets file
 └── README.md             # Project documentation
 ```
 
@@ -323,19 +264,7 @@ Katana-ext/
 ## 🛡️ Responsible Use & Disclaimer
 
 > [!WARNING]
-> **Katana-Ext** is designed for authorized penetration testing, security research, and educational purposes only. Only test systems you own or have explicit, documented permission to assess. Unsolicited crawling may violate terms of service or applicable computer fraud laws.
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+> **Crawlizer** is designed for authorized penetration testing, bug bounty hunting, and defensive security auditing. Only test systems you own or have explicit, documented permission to assess. Unsolicited scanning of third-party systems may violate terms of service or applicable computer fraud laws.
 
 ---
 
@@ -349,7 +278,6 @@ Crafted with ⚡ for the cybersecurity & bug bounty community by [bountrixorg](h
 
 </div>
 
-
 ## Contributors & Credits
 
 <table>
@@ -360,5 +288,13 @@ Crafted with ⚡ for the cybersecurity & bug bounty community by [bountrixorg](h
         <br />
         <strong>bytes-Knight</strong>
       </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/bountrixorg">
+        <img src="https://github.com/bountrixorg.png" width="80" height="80" alt="bountrixorg"/>
+        <br />
+        <strong>bountrixorg</strong>
+      </a>
+    </td>
   </tr>
 </table>

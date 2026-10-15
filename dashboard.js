@@ -761,7 +761,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusLabel = document.getElementById('agent-status-label');
   let isExtensionConnected = false;
 
-  function updateAgentStatusUI(connected, version = '1.1.6') {
+  function updateAgentStatusUI(connected, version = '1.1.7') {
     isExtensionConnected = Boolean(connected);
     const sidebarExtStatus = document.getElementById('sidebar-extension-status');
     const sidebarExtDot = document.getElementById('sidebar-ext-dot');
@@ -1453,41 +1453,63 @@ document.addEventListener('DOMContentLoaded', async () => {
     return `<span class="badge-tag ${tagClass}">${label}</span>`;
   }
 
-  function renderCodeContextBlock(context) {
+  function renderCodeContextBlock(context, matchSecret = '') {
     if (!context) return '';
     const trimmed = String(context).trim();
     if (!trimmed) return '';
 
-    const isMultiLine = trimmed.includes('\n');
-    const needsToggle = trimmed.length > 75 || isMultiLine;
+    const lineCount = (trimmed.match(/\n/g) || []).length + 1;
+    // Genuine overflow check: only long snippets need collapse/expand (> 220 chars or > 2 lines)
+    const needsToggle = trimmed.length > 220 || lineCount > 2;
+
+    // Highlight the matched secret inside the snippet so it's instantly identifiable
+    let displayHtml = escapeHtml(trimmed);
+    if (matchSecret && matchSecret.length >= 4) {
+      const escMatch = escapeHtml(matchSecret);
+      displayHtml = displayHtml.split(escMatch).join(`<mark class="secret-code-highlight">${escMatch}</mark>`);
+    }
 
     if (!needsToggle) {
+      // Short snippet fits completely: do NOT show a useless "View more" button!
       return `
         <div class="secret-context-wrap">
-          <div class="secret-context-snippet font-mono">${escapeHtml(trimmed)}</div>
+          <div class="secret-context-snippet font-mono">${displayHtml}</div>
+          <div class="snippet-actions-row">
+            <button class="snippet-copy-btn font-mono" type="button" title="Copy code context snippet">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
         </div>
       `;
     }
 
+    // Long snippet: compact view shows 2 lines, clicking expands to show full content
     return `
-      <div class="secret-context-wrap">
-        <div class="secret-context-snippet is-compact font-mono">${escapeHtml(trimmed)}</div>
-        <button class="snippet-toggle-btn font-mono" type="button" aria-expanded="false" title="Expand or collapse code context">
-          <span>View more</span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toggle-icon"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
+      <div class="secret-context-wrap has-overflow">
+        <div class="secret-context-snippet is-compact font-mono" data-full-text="${escapeHtml(trimmed)}">${displayHtml}</div>
+        <div class="snippet-actions-row">
+          <button class="snippet-toggle-btn font-mono" type="button" aria-expanded="false" data-chars="${trimmed.length}" title="Expand or collapse code context">
+            <span>View full context (${trimmed.length} chars)</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toggle-icon"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button class="snippet-copy-btn font-mono" type="button" title="Copy code context snippet">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy snippet</span>
+          </button>
+        </div>
       </div>
     `;
   }
 
-  function renderSourceItem(src) {
+  function renderSourceItem(src, matchSecret = '') {
     return `
       <div class="secret-location-item">
         <div style="display: flex; align-items: center; gap: 8px;">
           ${formatSourceTag(src.type)}
-          <a href="${escapeHtml(src.url)}" target="_blank" class="url-cell text-xs" style="color: var(--neon-cyan);">${escapeHtml(src.url)}</a>
+          <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer" class="url-cell text-xs" style="color: var(--neon-cyan);">${escapeHtml(src.url)}</a>
         </div>
-        ${renderCodeContextBlock(src.context)}
+        ${renderCodeContextBlock(src.context, matchSecret)}
       </div>
     `;
   }
@@ -1578,13 +1600,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let locationsHtml = `<div class="secret-locations-list">`;
       initialSources.forEach(src => {
-        locationsHtml += renderSourceItem(src);
+        locationsHtml += renderSourceItem(src, s.match);
       });
 
       if (remainingSources.length > 0) {
         locationsHtml += `<div class="secret-locations-extra" style="display: none;">`;
         remainingSources.forEach(src => {
-          locationsHtml += renderSourceItem(src);
+          locationsHtml += renderSourceItem(src, s.match);
         });
         locationsHtml += `</div>`;
         locationsHtml += `<button class="btn btn-glass secret-more-toggle" style="padding: 2px 8px; font-size: 10px; align-self: flex-start; margin-top: 4px;" data-count="${remainingSources.length}">+ ${remainingSources.length} more location(s)</button>`;
@@ -1673,8 +1695,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Global event delegation for compact code context snippet toggles (Secrets & Supply Chain)
-  document.addEventListener('click', (e) => {
+  // Global event delegation for compact code context snippet toggles & copy (Secrets & Supply Chain)
+  document.addEventListener('click', async (e) => {
+    const copySnippetBtn = e.target.closest('.snippet-copy-btn');
+    if (copySnippetBtn) {
+      const wrap = copySnippetBtn.closest('.secret-context-wrap');
+      const snippet = wrap ? wrap.querySelector('.secret-context-snippet') : null;
+      if (snippet) {
+        const textToCopy = snippet.getAttribute('data-full-text') || snippet.innerText || snippet.textContent || '';
+        try {
+          await navigator.clipboard.writeText(textToCopy.trim());
+          const span = copySnippetBtn.querySelector('span');
+          if (span) {
+            const oldText = span.textContent;
+            span.textContent = 'Copied!';
+            setTimeout(() => { span.textContent = oldText; }, 1500);
+          }
+        } catch (err) {
+          console.warn('Failed to copy snippet:', err);
+        }
+      }
+      return;
+    }
+
     const toggleBtn = e.target.closest('.snippet-toggle-btn');
     if (!toggleBtn) return;
     const wrap = toggleBtn.closest('.secret-context-wrap');
@@ -1684,18 +1727,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isCompact = snippet.classList.contains('is-compact');
     const labelSpan = toggleBtn.querySelector('span');
     const icon = toggleBtn.querySelector('.toggle-icon');
+    const charCount = toggleBtn.getAttribute('data-chars') || (snippet.textContent ? snippet.textContent.trim().length : 0);
 
     if (isCompact) {
       snippet.classList.remove('is-compact');
       snippet.classList.add('is-expanded');
       toggleBtn.setAttribute('aria-expanded', 'true');
-      if (labelSpan) labelSpan.textContent = 'View less';
+      if (labelSpan) labelSpan.textContent = 'Collapse context';
       if (icon) icon.innerHTML = '<path d="M18 15l-6-6-6 6"/>';
     } else {
       snippet.classList.add('is-compact');
       snippet.classList.remove('is-expanded');
       toggleBtn.setAttribute('aria-expanded', 'false');
-      if (labelSpan) labelSpan.textContent = 'View more';
+      if (labelSpan) labelSpan.textContent = `View full context (${charCount} chars)`;
       if (icon) icon.innerHTML = '<path d="M6 9l6 6 6-6"/>';
     }
   });

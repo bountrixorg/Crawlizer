@@ -1715,12 +1715,12 @@ body.hacker-app {
 .secret-context-snippet {
   font-family: var(--font-mono);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: #e2e8f0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(4, 7, 12, 0.9);
   border: 1px solid var(--border-glow-cyan);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 8px 12px;
   margin-top: 0;
   width: 100%;
   max-width: 100%;
@@ -1730,48 +1730,92 @@ body.hacker-app {
 }
 
 .secret-context-snippet.is-compact {
-  max-height: 48px;
+  max-height: 42px;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent);
-  mask-image: linear-gradient(180deg, #000 50%, transparent);
+  position: relative;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
   transition: max-height 0.25s ease;
 }
 
 .secret-context-snippet.is-expanded {
-  max-height: 800px;
-  overflow-x: auto;
+  max-height: 600px;
+  overflow-y: auto;
   -webkit-mask-image: none;
   mask-image: none;
   transition: max-height 0.3s ease;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+.snippet-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+  gap: 8px;
 }
 
 .snippet-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
+  gap: 5px;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.2);
   color: var(--neon-cyan);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
-  padding: 3px 6px;
-  margin-top: 3px;
-  border-radius: 3px;
-  transition: all 0.15s ease;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
   user-select: none;
-  letter-spacing: 0.3px;
 }
 
 .snippet-toggle-btn:hover {
-  background: rgba(0, 240, 255, 0.12);
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--neon-cyan);
   color: #fff;
-  text-shadow: 0 0 6px var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan);
 }
 
 .snippet-toggle-btn .toggle-icon {
   transition: transform 0.2s ease;
+}
+
+.snippet-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  margin-left: auto;
+}
+
+.snippet-copy-btn:hover {
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+}
+
+mark.secret-code-highlight {
+  background: rgba(255, 0, 85, 0.35);
+  color: #ffffff;
+  border-bottom: 2px solid #ff0055;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.5);
 }
 
 .secret-loc-count-badge {

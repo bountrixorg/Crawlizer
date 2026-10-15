@@ -276,9 +276,9 @@ class KatanaSupplyChainScanner {
   }
 
   extractContext(content, matchIndex, matchLength) {
-    const start = Math.max(0, matchIndex - 60);
-    const end = Math.min(content.length, matchIndex + matchLength + 60);
-    let snippet = content.slice(start, end).replace(/[\r\n]+/g, ' ').trim();
+    const start = Math.max(0, matchIndex - 250);
+    const end = Math.min(content.length, matchIndex + matchLength + 250);
+    let snippet = content.slice(start, end).trim();
     if (start > 0) snippet = '...' + snippet;
     if (end < content.length) snippet = snippet + '...';
     return snippet;

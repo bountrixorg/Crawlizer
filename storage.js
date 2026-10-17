@@ -350,6 +350,23 @@ class KatanaStorage {
     } catch {}
   }
 
+  // --- Logs ---
+  async getLogs(limit = 200) {
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/api/logs?limit=${limit}`);
+      const list = await res.json();
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async clearLogs() {
+    try {
+      await fetch(`${this.getBaseUrl()}/api/logs`, { method: 'DELETE' });
+    } catch {}
+  }
+
   // --- Statistics & Metrics ---
   async getStats() {
     try {

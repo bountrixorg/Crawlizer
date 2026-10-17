@@ -10,6 +10,13 @@ const { WebSocketServer, WebSocket } = require('ws');
 const path = require('path');
 const fs = require('fs');
 
+process.on('uncaughtException', (err) => {
+  console.error('[Crawlizer Server] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Crawlizer Server] Unhandled rejection:', reason);
+});
+
 const PORT = parseInt(process.env.PORT, 10) || 4488;
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = path.join(__dirname, '.data');
@@ -459,6 +466,8 @@ class LocalDataManager {
     const criticalSecrets = this.secrets.filter(s => s.severity === 'critical').length;
     const highSecrets = this.secrets.filter(s => s.severity === 'high').length;
     const mediumSecrets = this.secrets.filter(s => s.severity === 'medium').length;
+    const lowSecrets = this.secrets.filter(s => s.severity === 'low').length;
+    const infoSecrets = this.secrets.filter(s => s.severity === 'info' || !['critical', 'high', 'medium', 'low'].includes(s.severity)).length;
 
     const totalSupply = this.supplyChain.length;
     const unregSupply = this.supplyChain.filter(p => p.isUnregistered).length;
@@ -539,7 +548,9 @@ class LocalDataManager {
         total: totalSecrets,
         critical: criticalSecrets,
         high: highSecrets,
-        medium: mediumSecrets
+        medium: mediumSecrets,
+        low: lowSecrets,
+        info: infoSecrets
       },
       supplyChain: {
         total: totalSupply,
@@ -572,7 +583,7 @@ class CrawlOrchestrator {
     this.agentSocket = ws;
     this.agentInfo = {
       connected: true,
-      version: info.version || '1.2.2',
+      version: info.version || '1.2.3',
       name: info.name || 'Chrome Extension Agent',
       lastSeen: Date.now()
     };
@@ -716,6 +727,26 @@ class CrawlOrchestrator {
     this.broadcastToUI({ type: 'crawl:state', state: this.state, queueCount: 0 });
   }
 
+  skipCurrentJob() {
+    if (this.jobWatchdog) {
+      clearTimeout(this.jobWatchdog);
+      this.jobWatchdog = null;
+    }
+    if (this.currentJob) {
+      const skippedUrl = this.currentJob.url;
+      db.addLog('wrn', `[Crawler] User skipped target: ${skippedUrl}`);
+      const tgt = db.targets.find(t => t.url === skippedUrl || t.url === skippedUrl.replace(/\/$/, '') || (t.url + '/') === skippedUrl);
+      if (tgt) {
+        tgt.status = 'skipped';
+        db.scheduleSave();
+      }
+      this.currentJob = null;
+    }
+    if (this.state === 'running') {
+      this.dispatchNext();
+    }
+  }
+
   triggerActiveTabAudit() {
     if (!this.agentSocket || this.agentSocket.readyState !== WebSocket.OPEN) {
       db.addLog('err', '[Audit] No Chrome Extension Agent connected to audit active tab.');
@@ -763,15 +794,17 @@ class CrawlOrchestrator {
     this.jobWatchdog = setTimeout(() => {
       if (this.currentJob && this.currentJob.url === nextUrl) {
         db.addLog('wrn', `[Crawler Watchdog] Agent response timeout for ${nextUrl} (16s limit). Moving forward.`);
-        this.handleJobCompleted(nextUrl, { urls: [], secrets: [], supplyChain: [] });
+        this.handleJobCompleted(nextUrl, { urls: [], secrets: [], supplyChain: [] }, { error: 'Agent timeout (16s limit)' });
       }
     }, 16000);
 
     if (this.agentSocket && this.agentSocket.readyState === WebSocket.OPEN) {
       db.addLog('inf', `[Browser Tab Agent] Instructing Chrome to open and scan tab: ${nextUrl}`);
+      const crawlerConfig = db.getSetting('crawler_config', {});
       this.agentSocket.send(JSON.stringify({
         type: 'crawl:job',
-        url: nextUrl
+        url: nextUrl,
+        config: crawlerConfig
       }));
     } else {
       db.addLog('wrn', `[Server Crawler] Agent offline; scanning ${nextUrl} directly via HTTP...`);
@@ -786,7 +819,7 @@ class CrawlOrchestrator {
 
       const res = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.2',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.3',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         },
         signal: controller.signal
@@ -799,7 +832,7 @@ class CrawlOrchestrator {
       this.handleJobCompleted(targetUrl, findings);
     } catch (err) {
       db.addLog('wrn', `[Server Scan] Request notice for ${targetUrl}: ${err.message}`);
-      this.handleJobCompleted(targetUrl, { urls: [], secrets: [], supplyChain: [] });
+      this.handleJobCompleted(targetUrl, { urls: [], secrets: [], supplyChain: [] }, { error: err.message });
     }
   }
 
@@ -967,7 +1000,7 @@ class CrawlOrchestrator {
     return { urls, secrets, supplyChain };
   }
 
-  handleJobCompleted(url, findings = {}) {
+  handleJobCompleted(url, findings = {}, options = {}) {
     if (this.jobWatchdog) {
       clearTimeout(this.jobWatchdog);
       this.jobWatchdog = null;
@@ -983,7 +1016,7 @@ class CrawlOrchestrator {
       const added = db.addUrls(findings.urls);
       addedUrlsCount = added.length;
       if (added.length > 0) {
-        this.broadcastToUI({ type: 'data:urls', items: added });
+        this.broadcastToUI({ type: 'data:urls', items: added, metrics: db.getMetrics() });
       }
 
       // If deep crawl allowed, add newly found in-scope navigable URLs to queue
@@ -1005,7 +1038,7 @@ class CrawlOrchestrator {
       const added = db.addSecrets(findings.secrets);
       addedSecretsCount = added.length;
       if (added.length > 0) {
-        this.broadcastToUI({ type: 'data:secrets', items: added });
+        this.broadcastToUI({ type: 'data:secrets', items: added, metrics: db.getMetrics() });
       }
     }
 
@@ -1014,21 +1047,31 @@ class CrawlOrchestrator {
       const added = db.addSupplyChain(findings.supplyChain);
       addedSupplyCount = added.length;
       if (added.length > 0) {
-        this.broadcastToUI({ type: 'data:supply', items: added });
+        this.broadcastToUI({ type: 'data:supply', items: added, metrics: db.getMetrics() });
       }
     }
 
     // Update target status in DB
     const tgt = db.targets.find(t => t.url === url || t.url === url.replace(/\/$/, '') || (t.url + '/') === url);
     if (tgt) {
-      tgt.status = 'crawled';
+      if (options.error) {
+        tgt.status = 'failed';
+        tgt.error = options.error;
+      } else {
+        tgt.status = 'crawled';
+        tgt.error = null;
+      }
       tgt.crawledAt = new Date().toISOString();
       tgt.endpointsFound = (tgt.endpointsFound || 0) + addedUrlsCount;
       tgt.secretsFound = (tgt.secretsFound || 0) + addedSecretsCount;
       db.scheduleSave();
     }
 
-    db.addLog('inf', `[Scanned] Finished ${url} -> ${addedUrlsCount} new endpoints, ${addedSecretsCount} secrets, ${addedSupplyCount} packages.`);
+    if (options.error) {
+      db.addLog('wrn', `[Scanned] Failed ${url}: ${options.error}`);
+    } else {
+      db.addLog('inf', `[Scanned] Finished ${url} -> ${addedUrlsCount} new endpoints, ${addedSecretsCount} secrets, ${addedSupplyCount} packages.`);
+    }
 
     this.broadcastToUI({
       type: 'crawl:job_finished',
@@ -1039,6 +1082,43 @@ class CrawlOrchestrator {
 
     // Dispatch next URL in queue
     setTimeout(() => this.dispatchNext(), 250);
+  }
+
+  handleAuditCompleted(url, findings = {}) {
+    let addedUrlsCount = 0;
+    let addedSecretsCount = 0;
+    let addedSupplyCount = 0;
+
+    if (findings.urls && Array.isArray(findings.urls)) {
+      const added = db.addUrls(findings.urls);
+      addedUrlsCount = added.length;
+      if (added.length > 0) {
+        this.broadcastToUI({ type: 'data:urls', items: added, metrics: db.getMetrics() });
+      }
+    }
+
+    if (findings.secrets && Array.isArray(findings.secrets)) {
+      const added = db.addSecrets(findings.secrets);
+      addedSecretsCount = added.length;
+      if (added.length > 0) {
+        this.broadcastToUI({ type: 'data:secrets', items: added, metrics: db.getMetrics() });
+      }
+    }
+
+    if (findings.supplyChain && Array.isArray(findings.supplyChain)) {
+      const added = db.addSupplyChain(findings.supplyChain);
+      addedSupplyCount = added.length;
+      if (added.length > 0) {
+        this.broadcastToUI({ type: 'data:supply', items: added, metrics: db.getMetrics() });
+      }
+    }
+
+    db.addLog('inf', `[Audit] Completed active tab audit of ${url} -> ${addedUrlsCount} new endpoints, ${addedSecretsCount} secrets, ${addedSupplyCount} packages.`);
+    this.broadcastToUI({
+      type: 'audit:finished',
+      url,
+      metrics: db.getMetrics()
+    });
   }
 }
 
@@ -1080,7 +1160,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
     port: PORT,
-    version: '1.2.2',
+    version: '1.2.3',
     agent: orchestrator.agentInfo,
     crawler: {
       state: orchestrator.state,
@@ -1257,25 +1337,39 @@ app.post('/api/supply-chain/analyze', async (req, res) => {
       riskReasons: [],
       weeklyDownloads: 0,
       advisories: [],
-      advisoriesCount: 0
+      advisoriesCount: 0,
+      suspicious: false
     };
 
     // 1. Registry query
     if (result.ecosystem === 'npm') {
       try {
-        const regRes = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+        const encoded = encodeURIComponent(name);
+        // Request /latest first to download ~2KB instead of 10MB packument
+        let regRes = await fetch(`https://registry.npmjs.org/${encoded}/latest`, {
           headers: { 'Accept': 'application/json' },
           signal: AbortSignal.timeout(4000)
         });
         if (regRes.status === 404) {
-          result.isUnregistered = true;
-          result.riskLevel = 'CRITICAL';
-          result.riskReasons.push('Unregistered package on npm (Critical dependency confusion risk)');
-        } else if (regRes.ok) {
+          const rootRes = await fetch(`https://registry.npmjs.org/${encoded}`, {
+            headers: { 'Accept': 'application/vnd.npm.install-v1+json' },
+            signal: AbortSignal.timeout(4000)
+          });
+          if (rootRes.status === 404) {
+            result.isUnregistered = true;
+            result.suspicious = true;
+            result.riskLevel = 'CRITICAL';
+            result.riskReasons.push('Unregistered package on npm (Critical dependency confusion risk)');
+          } else if (rootRes.ok) {
+            regRes = rootRes;
+          }
+        }
+        if (regRes && regRes.ok && !result.isUnregistered) {
           const regData = await regRes.json();
-          result.version = version || (regData['dist-tags'] && regData['dist-tags'].latest) || '';
+          result.version = version || (regData['dist-tags'] && regData['dist-tags'].latest) || regData.version || '';
           if (!regData.repository && !regData.homepage) {
             result.riskLevel = 'HIGH';
+            result.suspicious = true;
             result.riskReasons.push('No public source repository or homepage listed');
           }
         }
@@ -1291,6 +1385,10 @@ app.post('/api/supply-chain/analyze', async (req, res) => {
         if (dlRes.ok) {
           const dlData = await dlRes.json();
           result.weeklyDownloads = dlData.downloads || 0;
+          if (result.weeklyDownloads < 100 && result.riskLevel === 'HIGH') {
+            result.suspicious = true;
+            result.riskReasons.push('Low weekly downloads (<100)');
+          }
         }
       } catch {}
     } else if (result.ecosystem === 'pypi') {
@@ -1300,11 +1398,76 @@ app.post('/api/supply-chain/analyze', async (req, res) => {
         });
         if (pyRes.status === 404) {
           result.isUnregistered = true;
+          result.suspicious = true;
           result.riskLevel = 'CRITICAL';
           result.riskReasons.push('Unregistered package on PyPI (Dependency confusion risk)');
         } else if (pyRes.ok) {
           const pyData = await pyRes.json();
           result.version = version || (pyData.info && pyData.info.version) || '';
+        }
+      } catch {}
+    } else if (result.ecosystem === 'rubygems') {
+      try {
+        const res = await fetch(`https://rubygems.org/api/v1/gems/${encodeURIComponent(name)}.json`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 404) {
+          result.isUnregistered = true;
+          result.suspicious = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered package on RubyGems (Dependency confusion risk)');
+        } else if (res.ok) {
+          const data = await res.json();
+          result.version = version || data.version || '';
+        }
+      } catch {}
+    } else if (result.ecosystem === 'nuget') {
+      try {
+        const res = await fetch(`https://api.nuget.org/v3-flatcontainer/${encodeURIComponent(name.toLowerCase())}/index.json`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 404) {
+          result.isUnregistered = true;
+          result.suspicious = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered package on NuGet (Dependency confusion risk)');
+        }
+      } catch {}
+    } else if (result.ecosystem === 'composer') {
+      try {
+        const res = await fetch(`https://repo.packagist.org/p2/${encodeURIComponent(name).replace(/%2F/g, '/')}.json`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 404) {
+          result.isUnregistered = true;
+          result.suspicious = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered package on Packagist (Dependency confusion risk)');
+        }
+      } catch {}
+    } else if (result.ecosystem === 'golang') {
+      try {
+        const res = await fetch(`https://proxy.golang.org/${encodeURIComponent(name).replace(/%2F/g, '/')}/@v/list`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 404) {
+          result.isUnregistered = true;
+          result.suspicious = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered module on Go proxy (Dependency confusion risk)');
+        }
+      } catch {}
+    } else if (result.ecosystem === 'crates') {
+      try {
+        const res = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`, {
+          headers: { 'User-Agent': 'Crawlizer-Security-Scanner (contact@crawlizer.io)' },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 404) {
+          result.isUnregistered = true;
+          result.suspicious = true;
+          result.riskLevel = 'CRITICAL';
+          result.riskReasons.push('Unregistered crate on crates.io (Dependency confusion risk)');
         }
       } catch {}
     }
@@ -1331,9 +1494,12 @@ app.post('/api/supply-chain/analyze', async (req, res) => {
           summary: (v.summary || v.details || '').slice(0, 200),
           severity: (v.database_specific && v.database_specific.severity) || 'MEDIUM'
         }));
-        if (vulns.length > 0 && result.riskLevel !== 'CRITICAL') {
-          result.riskLevel = 'HIGH';
-          result.riskReasons.push(`Affected by ${vulns.length} known security advisory(ies)`);
+        if (vulns.length > 0) {
+          result.suspicious = true;
+          if (result.riskLevel !== 'CRITICAL') {
+            result.riskLevel = 'HIGH';
+            result.riskReasons.push(`Affected by ${vulns.length} known security advisory(ies)`);
+          }
         }
       }
     } catch {}
@@ -1391,6 +1557,11 @@ app.post('/api/crawl/stop', (req, res) => {
   res.json({ success: true, state: orchestrator.state });
 });
 
+app.post('/api/crawl/skip', (req, res) => {
+  orchestrator.skipCurrentJob();
+  res.json({ success: true, state: orchestrator.state });
+});
+
 app.post('/api/crawl/active-tab', (req, res) => {
   const dispatched = orchestrator.triggerActiveTabAudit();
   res.json({ success: dispatched });
@@ -1410,6 +1581,17 @@ app.post('/api/wipe', (req, res) => {
   orchestrator.broadcastToUI({ type: 'data:wipe', metrics: db.getMetrics() });
   db.addLog('wrn', '[Database] Wipe completed. All endpoints, secrets, and supply chain records cleared.');
   res.json({ success: true });
+});
+
+// Global error handling middleware (catches JSON parse errors, broken pipes, etc.)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+  if (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  }
+  next();
 });
 
 // ============================================================================
@@ -1439,7 +1621,18 @@ wss.on('connection', (ws, req) => {
         clientRole = 'agent';
         orchestrator.setAgentSocket(ws, {
           name: msg.client || 'Chrome Extension',
-          version: msg.version || '1.2.2'
+          version: msg.version || '1.2.3'
+        });
+        return;
+      }
+
+      // CAPTCHA / Challenge Alert from Browser Agent
+      if (msg.type === 'agent:captcha') {
+        db.addLog('wrn', `[CAPTCHA] ${msg.challengeType || 'Challenge'} detected on ${msg.url}! Use 'Focus Tab' to solve.`);
+        orchestrator.broadcastToUI({
+          type: 'crawl:captcha',
+          url: msg.url,
+          challengeType: msg.challengeType
         });
         return;
       }
@@ -1457,7 +1650,7 @@ wss.on('connection', (ws, req) => {
               const controller = new AbortController();
               const to = setTimeout(() => controller.abort(), 4000);
               const res = await fetch(msg.targetUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.2' },
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.3' },
                 signal: controller.signal
               });
               clearTimeout(to);
@@ -1470,7 +1663,11 @@ wss.on('connection', (ws, req) => {
               }
             } catch {}
           }
-          orchestrator.handleJobCompleted(msg.targetUrl, findings);
+          if (msg.isAudit || msg.audit) {
+            orchestrator.handleAuditCompleted(msg.targetUrl, findings);
+          } else {
+            orchestrator.handleJobCompleted(msg.targetUrl, findings, { error: msg.error });
+          }
         })();
         return;
       }
@@ -1487,6 +1684,7 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'ui:crawl_pause') orchestrator.pauseCrawl();
       if (msg.type === 'ui:crawl_resume') orchestrator.resumeCrawl();
       if (msg.type === 'ui:crawl_stop') orchestrator.stopCrawl();
+      if (msg.type === 'ui:crawl_skip') orchestrator.skipCurrentJob();
       if (msg.type === 'ui:active_tab') orchestrator.triggerActiveTabAudit();
       if (msg.type === 'ui:log') {
         const item = db.addLog(msg.level || 'inf', msg.message);
@@ -1517,7 +1715,7 @@ wss.on('connection', (ws, req) => {
 server.listen(PORT, HOST, () => {
   const line = '━'.repeat(64);
   console.log(`\n${line}`);
-  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.2.2`);
+  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.2.3`);
   console.log(`   Cyberpunk Web Recon, Secret Spider & Supply Chain Audit`);
   console.log(`${line}`);
   console.log(`📡 Dashboard UI  : http://localhost:${PORT}`);

@@ -1743,6 +1743,11 @@ class KatanaCrawlerEngine {
       this.captchaResolver();
       this.captchaResolver = null;
     }
+    if (this.isLocalServer()) {
+      try {
+        fetch('/api/crawl/skip', { method: 'POST' }).catch(() => {});
+      } catch {}
+    }
   }
 
   // =========================================================================

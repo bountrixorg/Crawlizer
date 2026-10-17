@@ -915,6 +915,169 @@ function katanaInTabExtractionScript() {
   return result;
 }
 
+function katanaInTabClickExplorationScript(maxClicks = 8) {
+  return new Promise((resolve) => {
+    const clickedResults = {
+      clickedCount: 0,
+      interceptedRequests: [],
+      newDomLinks: [],
+      navigatedRoutes: []
+    };
+
+    const origAlert = window.alert;
+    const origConfirm = window.confirm;
+    const origPrompt = window.prompt;
+    try {
+      window.alert = () => {};
+      window.confirm = () => false;
+      window.prompt = () => null;
+    } catch(e) {}
+
+    const originalFetch = window.fetch;
+    const originalXhrOpen = XMLHttpRequest.prototype.open;
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    try {
+      window.fetch = function(...args) {
+        try {
+          const u = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+          if (u) clickedResults.interceptedRequests.push(u);
+        } catch(e) {}
+        return originalFetch.apply(this, args);
+      };
+
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        try {
+          if (url) clickedResults.interceptedRequests.push(url);
+        } catch(e) {}
+        return originalXhrOpen.apply(this, [method, url, ...rest]);
+      };
+
+      history.pushState = function(state, unused, url) {
+        if (url) clickedResults.navigatedRoutes.push(url);
+        return originalPushState.apply(this, arguments);
+      };
+
+      history.replaceState = function(state, unused, url) {
+        if (url) clickedResults.navigatedRoutes.push(url);
+        return originalReplaceState.apply(this, arguments);
+      };
+    } catch(e) {}
+
+    let isFinished = false;
+    let safetyTimer = null;
+
+    function cleanup() {
+      if (isFinished) return;
+      isFinished = true;
+      try {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        window.alert = origAlert;
+        window.confirm = origConfirm;
+        window.prompt = origPrompt;
+        window.fetch = originalFetch;
+        XMLHttpRequest.prototype.open = originalXhrOpen;
+        history.pushState = originalPushState;
+        history.replaceState = originalReplaceState;
+
+        const base = document.baseURI || window.location.href;
+        document.querySelectorAll('a[href], link[href], form[action]').forEach(el => {
+          const val = el.href || el.getAttribute('href') || el.getAttribute('action');
+          if (val) {
+            try {
+              clickedResults.newDomLinks.push(new URL(val, base).href);
+            } catch(e) {
+              clickedResults.newDomLinks.push(val);
+            }
+          }
+        });
+
+        performance.getEntriesByType('resource').forEach(r => {
+          if (r.name && !r.name.startsWith('data:') && !r.name.startsWith('blob:')) {
+            clickedResults.interceptedRequests.push(r.name);
+          }
+        });
+      } catch(e) {}
+    }
+
+    safetyTimer = setTimeout(() => {
+      cleanup();
+      resolve(clickedResults);
+    }, 1200);
+
+    const destructiveRegex = /log\s*out|sign\s*out|delete|remove|destroy|trash|cancel\s*account|submit|checkout|buy|pay|leave|exit/i;
+    const selectors = [
+      'button:not([type="submit"])',
+      'input[type="button"]',
+      '[role="button"]',
+      '[role="tab"]',
+      '[role="menuitem"]',
+      'a[href="#"]',
+      'a[href^="javascript:"]',
+      '.btn:not([type="submit"])',
+      '.button:not([type="submit"])',
+      '.tab',
+      '.nav-link'
+    ];
+
+    let elements = [];
+    try {
+      elements = document.querySelectorAll(selectors.join(', '));
+    } catch(e) {}
+
+    const candidates = [];
+    for (const el of elements) {
+      try {
+        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+        if (el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.type))) continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+
+        const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+        if (destructiveRegex.test(text)) continue;
+
+        candidates.push(el);
+        if (candidates.length >= maxClicks) break;
+      } catch(e) {}
+    }
+
+    if (candidates.length === 0) {
+      cleanup();
+      resolve(clickedResults);
+      return;
+    }
+
+    let idx = 0;
+    function clickNext() {
+      if (isFinished) return;
+      if (idx >= candidates.length) {
+        cleanup();
+        resolve(clickedResults);
+        return;
+      }
+
+      const el = candidates[idx++];
+      try {
+        clickedResults.clickedCount++;
+        const preventNav = (e) => {
+          if (el.tagName === 'A' || el.closest('form') || el.type === 'submit') {
+            e.preventDefault();
+          }
+        };
+        el.addEventListener('click', preventNav, { capture: true, once: true });
+        el.click();
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      } catch(e) {}
+
+      setTimeout(clickNext, 40);
+    }
+
+    clickNext();
+  });
+}
+
 // ============================================================================
 // LOCAL SERVER AGENT (Connects to http://localhost:4488)
 // ============================================================================
@@ -975,7 +1138,7 @@ class LocalServerAgent {
         this.send({
           type: 'register:agent',
           client: 'chrome-extension',
-          version: '1.2.2',
+          version: '1.2.3',
           name: 'Chrome Extension Crawler Agent'
         });
       };
@@ -1022,7 +1185,7 @@ class LocalServerAgent {
   async handleServerCommand(msg) {
     if (msg.type === 'pong') return;
     if (msg.type === 'crawl:job') {
-      await this.executeCrawlJob(msg.url);
+      await this.executeCrawlJob(msg.url, msg.config);
     } else if (msg.type === 'crawl:active_tab') {
       await this.executeActiveTabAudit();
     } else if (msg.type === 'crawl:focus_tab') {
@@ -1071,7 +1234,7 @@ class LocalServerAgent {
     }
   }
 
-  async executeCrawlJob(targetUrl) {
+  async executeCrawlJob(targetUrl, config = {}) {
     let tabId = null;
     try {
       this.send({
@@ -1089,7 +1252,8 @@ class LocalServerAgent {
         message: `Scanner tab active (ID ${tabId}) -> loading ${targetUrl}...`
       });
 
-      await this.waitForTabReady(tabId, 8000);
+      const waitTimeout = (config && config.timeout) ? Math.min(config.timeout, 15000) : 8000;
+      await this.waitForTabReady(tabId, waitTimeout, config?.tabRenderDelay || 800);
 
       this.send({
         type: 'agent:log',
@@ -1114,6 +1278,42 @@ class LocalServerAgent {
           await new Promise(r => setTimeout(r, 600));
         }
       }
+
+      // Check for bot challenges or CAPTCHA triggers
+      if (extracted && extracted.captchaDetected) {
+        this.send({
+          type: 'agent:captcha',
+          url: targetUrl,
+          challengeType: extracted.challengeType || 'CAPTCHA / Cloudflare Challenge'
+        });
+        this.send({
+          type: 'agent:log',
+          level: 'wrn',
+          message: `CAPTCHA or Bot Challenge detected on ${targetUrl} (${extracted.challengeType || 'challenge'}). Focus scanner tab to solve if necessary.`
+        });
+      }
+
+      // Interactive button clicking & route discovery (SPA navigation, dynamic forms)
+      if (extracted && (!config || config.autoClickButtons !== false)) {
+        try {
+          const clickResults = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: katanaInTabClickExplorationScript
+          });
+          if (clickResults && clickResults[0] && clickResults[0].result) {
+            const clickData = clickResults[0].result;
+            if (Array.isArray(clickData.newDomLinks) && clickData.newDomLinks.length > 0) {
+              extracted.htmlLinks = (extracted.htmlLinks || []).concat(clickData.newDomLinks);
+            }
+            if (Array.isArray(clickData.interceptedRequests) && clickData.interceptedRequests.length > 0) {
+              extracted.dataEndpoints = (extracted.dataEndpoints || []).concat(clickData.interceptedRequests);
+            }
+          }
+        } catch (clickErr) {
+          // Non-critical: button click exploration failed or tab navigated away
+        }
+      }
+
       const findings = await this.analyzeExtractedData(targetUrl, extracted);
 
       // Dedicated crawler tab intentionally kept open so it navigates seamlessly across all queued URLs
@@ -1144,19 +1344,28 @@ class LocalServerAgent {
         targetUrl,
         urls: [],
         secrets: [],
-        supplyChain: []
+        supplyChain: [],
+        error: err.message
       });
     }
   }
 
   async executeActiveTabAudit() {
     try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!activeTab || !activeTab.id || !activeTab.url || activeTab.url.startsWith('chrome://')) {
+      let targetTab = null;
+      const tabs = await chrome.tabs.query({ currentWindow: true });
+      const activeTab = tabs.find(t => t.active);
+      if (activeTab && activeTab.url && !activeTab.url.startsWith('chrome://') && !activeTab.url.includes(':4488') && !activeTab.url.endsWith('dashboard.html')) {
+        targetTab = activeTab;
+      } else {
+        targetTab = tabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')) && !t.url.includes(':4488') && !t.url.endsWith('dashboard.html'));
+      }
+
+      if (!targetTab || !targetTab.id || !targetTab.url) {
         this.send({
           type: 'agent:log',
           level: 'wrn',
-          message: `Active tab is invalid or protected (${activeTab ? activeTab.url : 'no tab'}). Please focus on a target web page tab first.`
+          message: `Active tab is invalid or is the Crawlizer dashboard. Please open or focus a target website tab to audit.`
         });
         return;
       }
@@ -1164,26 +1373,27 @@ class LocalServerAgent {
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Auditing active browser tab: ${activeTab.url}`
+        message: `Auditing active browser tab: ${targetTab.url}`
       });
 
       const results = await chrome.scripting.executeScript({
-        target: { tabId: activeTab.id },
+        target: { tabId: targetTab.id },
         func: katanaInTabExtractionScript
       });
 
       const extracted = results && results[0] ? results[0].result : null;
-      const findings = await this.analyzeExtractedData(activeTab.url, extracted);
+      const findings = await this.analyzeExtractedData(targetTab.url, extracted);
 
       this.send({
         type: 'agent:log',
         level: 'inf',
-        message: `Active tab audit complete for ${activeTab.url}: found ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
+        message: `Active tab audit complete for ${targetTab.url}: found ${findings.urls.length} URLs, ${findings.secrets.length} secrets, ${findings.supplyChain.length} packages.`
       });
 
       this.send({
         type: 'agent:findings',
-        targetUrl: activeTab.url,
+        isAudit: true,
+        targetUrl: targetTab.url,
         urls: findings.urls,
         secrets: findings.secrets,
         supplyChain: findings.supplyChain
@@ -1198,7 +1408,7 @@ class LocalServerAgent {
     }
   }
 
-  waitForTabReady(tabId, timeoutMs = 8000) {
+  waitForTabReady(tabId, timeoutMs = 8000, renderDelay = 800) {
     return new Promise(resolve => {
       let resolved = false;
       let timer = null;
@@ -1216,7 +1426,7 @@ class LocalServerAgent {
 
       listener = (updatedId, changeInfo) => {
         if (updatedId === tabId && changeInfo.status === 'complete') {
-          setTimeout(finish, 800);
+          setTimeout(finish, renderDelay);
         }
       };
       chrome.tabs.onUpdated.addListener(listener);
@@ -1588,5 +1798,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 setInterval(() => state.cleanup(), 60000);
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Crawlizer Pro v1.2.2 initialized (with Supply Chain Security Scanner)');
+  console.log('Crawlizer Pro v1.2.3 initialized (with Supply Chain Security Scanner)');
 });

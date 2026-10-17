@@ -527,8 +527,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderCommandList(cmdPaletteInput.value);
     });
     cmdPaletteInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const selected = cmdResultsList.querySelector('.cmd-item.selected');
+      const items = Array.from(cmdResultsList.querySelectorAll('.cmd-item'));
+      if (items.length === 0) return;
+      let currentIndex = items.findIndex(el => el.classList.contains('selected'));
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentIndex >= 0) items[currentIndex].classList.remove('selected');
+        currentIndex = (currentIndex + 1) % items.length;
+        items[currentIndex].classList.add('selected');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentIndex >= 0) items[currentIndex].classList.remove('selected');
+        currentIndex = (currentIndex - 1 + items.length) % items.length;
+        items[currentIndex].classList.add('selected');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selected = items[currentIndex >= 0 ? currentIndex : 0];
         if (selected) {
           selected.click();
         }
@@ -822,7 +839,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusLabel = document.getElementById('agent-status-label');
   let isExtensionConnected = false;
 
-  function updateAgentStatusUI(connected, version = '1.2.2') {
+  function updateAgentStatusUI(connected, version = '1.2.3') {
     isExtensionConnected = Boolean(connected);
     const sidebarExtStatus = document.getElementById('sidebar-extension-status');
     const sidebarExtDot = document.getElementById('sidebar-ext-dot');
@@ -961,6 +978,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     storage.on('log:new', (data) => {
       if (data.item) {
         engine.onLog(data.item);
+      }
+    });
+
+    storage.on('crawl:captcha', (data) => {
+      if (captchaBanner) {
+        if (captchaTypeTitle) captchaTypeTitle.textContent = `${data.challengeType || 'Bot Challenge / CAPTCHA'} Detected!`;
+        if (captchaTargetUrl) captchaTargetUrl.textContent = data.url || '';
+        captchaBanner.style.display = 'flex';
       }
     });
 
@@ -1232,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     urls.forEach(u => {
       const escapedUrl = `"${(u.url || '').replace(/"/g, '""')}"`;
       const escapedSrc = `"${(u.sourceUrl || '').replace(/"/g, '""')}"`;
-      const date = new Date(u.discoveredAt).toISOString();
+      const date = (u.discoveredAt && !isNaN(new Date(u.discoveredAt).getTime())) ? new Date(u.discoveredAt).toISOString() : (u.discoveredAt || '');
       csv += `${escapedUrl},"${u.type}",${escapedSrc},"${u.scope}","${date}"\n`;
     });
     downloadFile(csv, 'crawlizer-results.csv', 'text/csv');
@@ -1281,10 +1306,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const subdomainsFound = stats.subdomains !== undefined ? stats.subdomains : (stats.uniqueHosts ? Math.max(0, stats.uniqueHosts - 1) : 0);
     if (metricSubdomains) metricSubdomains.textContent = subdomainsFound;
 
-    try {
-      const allSecrets = await storage.getSecrets();
-      const critCount = allSecrets.filter(s => s.severity === 'critical').length;
-      const highCount = allSecrets.filter(s => s.severity === 'high').length;
+    if (stats.secrets && (stats.secrets.critical !== undefined || stats.secrets.high !== undefined)) {
+      const critCount = stats.secrets.critical || 0;
+      const highCount = stats.secrets.high || 0;
       if (metricSecretsBreakdown) {
         if (critCount > 0 || highCount > 0) {
           metricSecretsBreakdown.textContent = `${critCount} Crit, ${highCount} High`;
@@ -1292,16 +1316,38 @@ document.addEventListener('DOMContentLoaded', async () => {
           metricSecretsBreakdown.textContent = `${totalSec} Sensitive Findings`;
         }
       }
-    } catch {}
+    } else {
+      try {
+        const allSecrets = await storage.getSecrets();
+        const critCount = allSecrets.filter(s => s.severity === 'critical').length;
+        const highCount = allSecrets.filter(s => s.severity === 'high').length;
+        if (metricSecretsBreakdown) {
+          if (critCount > 0 || highCount > 0) {
+            metricSecretsBreakdown.textContent = `${critCount} Crit, ${highCount} High`;
+          } else {
+            metricSecretsBreakdown.textContent = `${totalSec} Sensitive Findings`;
+          }
+        }
+      } catch {}
+    }
 
-    try {
-      const allSupply = await storage.getSupplyChainFindings();
-      const threats = allSupply.filter(s => s.isUnregistered || (s.advisoriesCount > 0)).length;
+    if (stats.supplyChain && stats.supplyChain.threats !== undefined) {
+      const threats = stats.supplyChain.threats || 0;
+      const totalSup = stats.supplyChain.total || 0;
       if (tabSupplyChainBadge) {
-        tabSupplyChainBadge.textContent = threats > 0 ? threats : allSupply.length;
+        tabSupplyChainBadge.textContent = threats > 0 ? threats : totalSup;
         tabSupplyChainBadge.className = threats > 0 ? 'nav-badge badge-magenta' : 'nav-badge badge-cyan';
       }
-    } catch {}
+    } else {
+      try {
+        const allSupply = await storage.getSupplyChainFindings();
+        const threats = allSupply.filter(s => s.isUnregistered || (s.advisoriesCount > 0)).length;
+        if (tabSupplyChainBadge) {
+          tabSupplyChainBadge.textContent = threats > 0 ? threats : allSupply.length;
+          tabSupplyChainBadge.className = threats > 0 ? 'nav-badge badge-magenta' : 'nav-badge badge-cyan';
+        }
+      } catch {}
+    }
 
     const progress = stats.totalTargets > 0 ? Math.min(100, Math.round((stats.crawledTargets / stats.totalTargets) * 100)) : 0;
     metricProgressPercent.textContent = `${progress}% Completed`;
@@ -1309,24 +1355,41 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Update Donut Chart
     try {
-      const urls = await storage.getDiscoveredUrls();
-      const apiRegex = /(\/api\/|\/v[0-9]+\/|graphql|\.json(\?|$)|xhr|fetch|ajax|rest\/)/i;
-      let htmlCount = 0;
-      let jsCount = 0;
-      let apiCount = 0;
-
-      urls.forEach(u => {
-        const t = (u.type || '').toLowerCase();
-        const urlStr = u.url || '';
-        if (t.includes('api') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || t.includes('data-') || apiRegex.test(urlStr)) {
-          apiCount++;
-        } else if (t.includes('js') || t.includes('script') || t.includes('bundle') || urlStr.endsWith('.js') || urlStr.includes('.js?')) {
-          jsCount++;
-        } else {
-          htmlCount++;
+      if (stats.urls && stats.urls.types) {
+        let htmlCount = 0;
+        let jsCount = 0;
+        let apiCount = 0;
+        for (const [t, count] of Object.entries(stats.urls.types)) {
+          const tl = t.toLowerCase();
+          if (tl.includes('api') || tl.includes('xhr') || tl.includes('fetch') || tl.includes('endpoint') || tl.includes('data-')) {
+            apiCount += count;
+          } else if (tl.includes('js') || tl.includes('script') || tl.includes('bundle')) {
+            jsCount += count;
+          } else {
+            htmlCount += count;
+          }
         }
-      });
-      drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
+        drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
+      } else {
+        const urls = await storage.getDiscoveredUrls();
+        const apiRegex = /(\/api\/|\/v[0-9]+\/|graphql|\.json(\?|$)|xhr|fetch|ajax|rest\/)/i;
+        let htmlCount = 0;
+        let jsCount = 0;
+        let apiCount = 0;
+
+        urls.forEach(u => {
+          const t = (u.type || '').toLowerCase();
+          const urlStr = u.url || '';
+          if (t.includes('api') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || t.includes('data-') || apiRegex.test(urlStr)) {
+            apiCount++;
+          } else if (t.includes('js') || t.includes('script') || t.includes('bundle') || urlStr.endsWith('.js') || urlStr.includes('.js?')) {
+            jsCount++;
+          } else {
+            htmlCount++;
+          }
+        });
+        drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
+      }
     } catch {}
   }
 
@@ -1341,15 +1404,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let rowsHtml = '';
     targets.slice(0, 100).forEach((t, idx) => {
-      const statusColor = t.status === 'completed' ? 'var(--neon-green)' : t.status === 'crawling' ? 'var(--neon-cyan)' : t.status === 'failed' ? 'var(--neon-red)' : '#8b949e';
+      const isDone = t.status === 'completed' || t.status === 'crawled';
+      const statusColor = isDone ? 'var(--neon-green)' : t.status === 'crawling' ? 'var(--neon-cyan)' : t.status === 'failed' ? 'var(--neon-red)' : '#8b949e';
       const crawledTime = t.crawledAt ? new Date(t.crawledAt).toLocaleTimeString() : '-';
+      const count = t.endpointsFound != null ? t.endpointsFound : (t.discoveredCount || 0);
+      const displayStatus = t.status === 'failed' && t.error ? `failed (${t.error})` : t.status;
 
       rowsHtml += `
         <tr>
           <td>${idx + 1}</td>
           <td class="url-cell"><a href="${escapeHtml(t.url)}" target="_blank">${escapeHtml(t.url)}</a></td>
-          <td><span style="color: ${statusColor}; font-weight: 700; text-transform: uppercase; font-size: 11px; font-family: var(--font-mono);">${t.status}</span></td>
-          <td>${t.discoveredCount || 0}</td>
+          <td><span style="color: ${statusColor}; font-weight: 700; text-transform: uppercase; font-size: 11px; font-family: var(--font-mono);">${escapeHtml(displayStatus)}</span></td>
+          <td>${count}</td>
           <td>${crawledTime}</td>
         </tr>
       `;
@@ -1479,8 +1545,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderResultsPage();
   });
 
-  btnClearLogs.addEventListener('click', () => {
+  btnClearLogs.addEventListener('click', async () => {
     terminalBody.innerHTML = '';
+    try {
+      if (storage && storage.clearLogs) {
+        await storage.clearLogs();
+      }
+    } catch {}
     engine.log('inf', 'Logs cleared');
   });
 
@@ -3071,8 +3142,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   const urlParams = new URLSearchParams(window.location.search);

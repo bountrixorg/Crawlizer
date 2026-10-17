@@ -7,7 +7,7 @@
 
 <br/>
 
-[![Version: 1.2.2](https://img.shields.io/badge/Release-v1.2.2-00f0ff?style=for-the-badge&logo=semver&logoColor=black)](package.json)
+[![Version: 1.2.3](https://img.shields.io/badge/Release-v1.2.3-00f0ff?style=for-the-badge&logo=semver&logoColor=black)](package.json)
 [![Default Port: 4488](https://img.shields.io/badge/Port-4488-39ff14?style=for-the-badge&logo=node.js&logoColor=black)](#-quick-start)
 [![Storage: 100% Local Disk](https://img.shields.io/badge/Storage-100%25%20Local%20Disk-ff0055?style=for-the-badge&logo=databricks&logoColor=white)](#-100-local-disk-storage-zero-browser-storage)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](manifest.json)

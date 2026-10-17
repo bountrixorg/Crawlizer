@@ -628,37 +628,61 @@ class KatanaSupplyChainScanner {
     }
 
     const queryPromise = (async () => {
+      let response = null;
       try {
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-          const response = await chrome.runtime.sendMessage({
-            action: 'analyzePackage',
-            name: item.name,
-            ecosystem: item.ecosystem || 'npm',
-            version: item.version,
-            sources: [{ url: item.sourceUrl, context: item.context }],
-            options: { osvLookup: true }
-          });
-
-          if (response) {
-            const evaluatedData = {
-              ...response,
-              evaluatedAt: Date.now()
-            };
-            this.evaluatedCache.set(cacheKey, evaluatedData);
-
-            return {
-              ...item,
-              version: item.version || response.version || '',
-              isUnregistered: Boolean(response.isUnregistered),
-              riskLevel: response.riskLevel || (response.isUnregistered ? 'CRITICAL' : 'LOW'),
-              riskReasons: response.riskReasons || [],
-              weeklyDownloads: response.weeklyDownloads != null ? response.weeklyDownloads : 0,
-              advisories: response.advisories || [],
-              advisoriesCount: response.advisoriesCount || (response.advisories ? response.advisories.length : 0),
-              error: response.error,
-              evaluatedAt: Date.now()
-            };
+          try {
+            response = await chrome.runtime.sendMessage({
+              action: 'analyzePackage',
+              name: item.name,
+              ecosystem: item.ecosystem || 'npm',
+              version: item.version,
+              sources: [{ url: item.sourceUrl, context: item.context }],
+              options: { osvLookup: true }
+            });
+          } catch (e) {
+            response = null;
           }
+        }
+
+        // Standalone or local server fallback
+        if (!response) {
+          try {
+            const apiRes = await fetch('/api/supply-chain/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: item.name,
+                ecosystem: item.ecosystem || 'npm',
+                version: item.version,
+                sources: [{ url: item.sourceUrl, context: item.context }]
+              })
+            });
+            if (apiRes.ok) {
+              response = await apiRes.json();
+            }
+          } catch (fetchErr) {}
+        }
+
+        if (response) {
+          const evaluatedData = {
+            ...response,
+            evaluatedAt: Date.now()
+          };
+          this.evaluatedCache.set(cacheKey, evaluatedData);
+
+          return {
+            ...item,
+            version: item.version || response.version || '',
+            isUnregistered: Boolean(response.isUnregistered),
+            riskLevel: response.riskLevel || (response.isUnregistered ? 'CRITICAL' : 'LOW'),
+            riskReasons: response.riskReasons || [],
+            weeklyDownloads: response.weeklyDownloads != null ? response.weeklyDownloads : 0,
+            advisories: response.advisories || [],
+            advisoriesCount: response.advisoriesCount || (response.advisories ? response.advisories.length : 0),
+            error: response.error,
+            evaluatedAt: Date.now()
+          };
         }
       } catch (err) {
         console.warn(`[SupplyChainScanner] Evaluation failed for ${item.name}:`, err);

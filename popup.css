@@ -500,8 +500,8 @@ body.hacker-popup {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #121822;
-  border: 1px solid #1e293b;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 18px;
 }
@@ -513,20 +513,20 @@ body.hacker-popup {
   width: 12px;
   left: 2px;
   bottom: 2px;
-  background-color: #64748b;
+  background-color: var(--text-muted);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 50%;
 }
 
 .switch input:checked + .slider {
-  background-color: var(--neon-cyan);
-  border-color: #67e8f9;
-  box-shadow: 0 0 10px var(--neon-cyan-glow);
+  background-color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
 }
 
 .switch input:checked + .slider:before {
   transform: translateX(14px);
-  background-color: #041014;
+  background-color: var(--btn-primary-text);
 }
 
 /* Action Buttons */
@@ -559,15 +559,15 @@ body.hacker-popup {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--neon-cyan), #00a896);
-  color: #041014;
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow: 0 0 16px var(--neon-cyan-glow);
+  background: var(--accent);
+  color: var(--btn-primary-text);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
 }
 
 .btn-primary:not(:disabled):hover {
-  background: linear-gradient(135deg, #33f3ff, #02c39a);
-  box-shadow: 0 0 24px rgba(0, 240, 255, 0.6);
+  filter: brightness(1.1);
+  box-shadow: var(--glow);
   transform: translateY(-1px);
 }
 

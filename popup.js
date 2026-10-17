@@ -11,6 +11,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Initialize Multi-Theme Dropdown
+  if (window.CrawlizerTheme) {
+    window.CrawlizerTheme.initThemeDropdown({
+      wrap: 'popup-theme-wrap',
+      button: 'btn-popup-theme',
+      popover: 'popup-theme-popover',
+      swatch: 'popup-theme-swatch'
+    });
+  }
+
   const statTargets = document.getElementById('stat-targets');
   const statCrawled = document.getElementById('stat-crawled');
   const statDiscovered = document.getElementById('stat-discovered');

@@ -4,10 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRAWLIZER — Cyberpunk Web Crawler & Spider</title>
+  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('crawlizer_theme') || 'matrix';
+        var resolved = saved;
+        if (saved === 'auto') {
+          resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'clean-light' : 'matrix';
+        }
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.documentElement.setAttribute('data-theme-setting', saved);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="hacker-app">
   <!-- Subtle Scanline & Grid Overlays -->
@@ -25,7 +39,7 @@
           </div>
           <div class="sidebar-brand-text">
             <span class="brand-title">CRAWLIZER</span>
-            <span class="brand-badge">SPIDER_v1.1.8 // ROOT</span>
+            <span class="brand-badge">SPIDER_v1.1.9 // ROOT</span>
           </div>
         </a>
         <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar (Ctrl+B)">
@@ -155,9 +169,20 @@
             <span class="agent-status-label font-mono" id="agent-status-label">EXTENSION: DISCONNECTED</span>
           </div>
 
-          <button id="btn-toggle-matrix" class="btn btn-glass" title="Toggle Matrix Rain Mode">
-            <span>[01] Matrix</span>
-          </button>
+          <!-- Theme Customization Dropdown -->
+          <div class="theme-dropdown-wrap" id="theme-dropdown-wrap">
+            <button id="btn-theme-selector" class="btn btn-glass theme-trigger-btn" aria-haspopup="true" aria-expanded="false" title="Switch Theme (Alt+T)">
+              <span class="theme-trigger-swatch" id="theme-trigger-swatch">
+                <span class="swatch-dot" style="background: #0a0e14;"></span>
+                <span class="swatch-dot" style="background: #00f0ff;"></span>
+                <span class="swatch-dot" style="background: #ff2bd6;"></span>
+              </span>
+              <span class="theme-trigger-label" id="theme-trigger-label">Matrix</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="theme-menu-popover theme-popover-right" id="theme-menu-popover" role="menu"></div>
+          </div>
+          <button id="btn-toggle-matrix" style="display: none;" aria-hidden="true"></button>
 
           <button id="btn-focus-tab" class="btn btn-glass" title="Focus Single Crawler Tab" style="display: none;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -304,7 +329,7 @@
             <div class="stat-main-row">
               <div class="stat-value" id="metric-targets">0</div>
               <svg class="sparkline-svg" id="sparkline-targets" viewBox="0 0 72 28">
-                <path d="M2,24 L14,20 L26,22 L38,15 L50,18 L62,10 L70,8" stroke="#00f0ff"/>
+                <path d="M2,24 L14,20 L26,22 L38,15 L50,18 L62,10 L70,8" stroke="var(--chart-1)"/>
               </svg>
             </div>
             <div class="stat-footer" id="metric-pending">0 Pending in Queue</div>
@@ -321,7 +346,7 @@
             <div class="stat-main-row">
               <div class="stat-value" id="metric-crawled">0</div>
               <svg class="sparkline-svg" id="sparkline-crawled" viewBox="0 0 72 28">
-                <path d="M2,26 L14,22 L26,18 L38,20 L50,12 L62,14 L70,6" stroke="#39ff14"/>
+                <path d="M2,26 L14,22 L26,18 L38,20 L50,12 L62,14 L70,6" stroke="var(--chart-2)"/>
               </svg>
             </div>
             <div class="stat-footer" id="metric-progress-percent">0% Completed</div>
@@ -338,7 +363,7 @@
             <div class="stat-main-row">
               <div class="stat-value" id="metric-discovered">0</div>
               <svg class="sparkline-svg" id="sparkline-discovered" viewBox="0 0 72 28">
-                <path d="M2,24 L14,18 L26,12 L38,16 L50,8 L62,4 L70,2" stroke="#00f0ff"/>
+                <path d="M2,24 L14,18 L26,12 L38,16 L50,8 L62,4 L70,2" stroke="var(--chart-1)"/>
               </svg>
             </div>
             <div class="stat-footer" id="metric-new-session">+0 Discovered Run</div>
@@ -355,7 +380,7 @@
             <div class="stat-main-row">
               <div class="stat-value font-mono" id="metric-rps">0.0</div>
               <svg class="sparkline-svg" id="sparkline-rps" viewBox="0 0 72 28">
-                <path d="M2,20 L14,16 L26,22 L38,8 L50,14 L62,6 L70,4" stroke="#39ff14"/>
+                <path d="M2,20 L14,16 L26,22 L38,8 L50,14 L62,6 L70,4" stroke="var(--chart-2)"/>
               </svg>
             </div>
             <div class="stat-footer">Req / Second</div>
@@ -400,7 +425,7 @@
             <div class="stat-main-row">
               <div class="stat-value" id="metric-secrets">0</div>
               <svg class="sparkline-svg" id="sparkline-secrets" viewBox="0 0 72 28">
-                <path d="M2,26 L14,26 L26,20 L38,20 L50,14 L62,8 L70,4" stroke="#ff2bd6"/>
+                <path d="M2,26 L14,26 L26,20 L38,20 L50,14 L62,8 L70,4" stroke="var(--chart-4)"/>
               </svg>
             </div>
             <div class="stat-footer" id="metric-secrets-breakdown">Sensitive Findings</div>
@@ -1089,7 +1114,7 @@
   / ____/________ __      __/ (_)___  ___  _____
  / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
 / /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
-\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.1.8
+\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.1.9
 Crawlizer Engine — Cyberpunk Deep Web &amp; Secret Recon
               </div>
               <div class="log-line info font-mono">[INF] Storage and heuristics engine initialized. Ready for targets.</div>
@@ -1115,6 +1140,7 @@ Crawlizer Engine — Cyberpunk Deep Web &amp; Secret Recon
   </div>
 
   <!-- Script Inclusions -->
+  <script src="theme-manager.js"></script>
   <script src="supply-chain-scanner.js"></script>
   <script src="secret-scanner.js"></script>
   <script src="storage.js"></script>

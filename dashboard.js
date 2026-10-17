@@ -260,6 +260,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   const crawlRateCanvas = document.getElementById('crawl-rate-chart');
   const typesDonutCanvas = document.getElementById('types-donut-chart');
   let rpsHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  let lastDonutCounts = { html: 1, js: 1, api: 1, secrets: 1 };
+
+  function getThemeColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const chart1 = cs.getPropertyValue('--chart-1').trim() || '#00f0ff';
+    const chart2 = cs.getPropertyValue('--chart-2').trim() || '#39ff14';
+    const chart3 = cs.getPropertyValue('--chart-3').trim() || '#38bdf8';
+    const chart4 = cs.getPropertyValue('--chart-4').trim() || '#ff2bd6';
+    const chartGrid = cs.getPropertyValue('--chart-grid').trim() || 'rgba(255, 255, 255, 0.05)';
+    const textMain = cs.getPropertyValue('--text-main').trim() || '#f0f6fc';
+    const themeType = cs.getPropertyValue('--theme-type').trim() || 'dark';
+    const isLight = themeType === 'light';
+    return { chart1, chart2, chart3, chart4, chartGrid, textMain, isLight };
+  }
+
+  function hexToRgba(hex, alpha = 1) {
+    if (!hex) return `rgba(0, 240, 255, ${alpha})`;
+    if (hex.startsWith('rgb')) return hex;
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return `rgba(0, 240, 255, ${alpha})`;
+    return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+  }
 
   function drawRpsChart() {
     if (!crawlRateCanvas) return;
@@ -268,10 +292,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const h = (crawlRateCanvas.height = crawlRateCanvas.clientHeight || crawlRateCanvas.height || 120);
     if (w <= 10 || h <= 10) return;
 
+    const colors = getThemeColors();
     ctx.clearRect(0, 0, w, h);
 
-    // Draw dark cyber gridlines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // Draw dynamic theme gridlines
+    ctx.strokeStyle = colors.chartGrid;
     ctx.lineWidth = 1;
     for (let y = 0; y < h; y += 40) {
       ctx.beginPath();
@@ -283,7 +308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const maxVal = Math.max(10, ...rpsHistory);
     const stepX = w / Math.max(1, rpsHistory.length - 1);
 
-    // Area path
+    // Area path with theme gradient
     ctx.beginPath();
     ctx.moveTo(0, h);
     rpsHistory.forEach((val, i) => {
@@ -296,12 +321,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     ctx.closePath();
 
     const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
-    gradient.addColorStop(1, 'rgba(0, 240, 255, 0.01)');
+    gradient.addColorStop(0, hexToRgba(colors.chart1, colors.isLight ? 0.22 : 0.35));
+    gradient.addColorStop(1, hexToRgba(colors.chart1, 0.01));
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Line stroke with neon cyan glow
+    // Line stroke with theme glow
     ctx.beginPath();
     rpsHistory.forEach((val, i) => {
       const x = i * stepX;
@@ -309,10 +334,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = '#00f0ff';
+    ctx.strokeStyle = colors.chart1;
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = colors.chart1;
+    ctx.shadowBlur = colors.isLight ? 2 : 10;
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
@@ -328,13 +353,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (radius <= 5) return;
     const innerRadius = Math.max(1, radius * 0.62);
 
+    lastDonutCounts = { ...lastDonutCounts, ...counts };
+    const colors = getThemeColors();
+
     ctx.clearRect(0, 0, w, h);
 
     const data = [
-      { label: 'HTML', val: counts.html || 1, color: '#00f0ff' },
-      { label: 'JS', val: counts.js || 1, color: '#39ff14' },
-      { label: 'APIs', val: counts.api || 1, color: '#38bdf8' },
-      { label: 'Secrets', val: counts.secrets || 1, color: '#ff2bd6' }
+      { label: 'HTML', val: lastDonutCounts.html || 1, color: colors.chart1 },
+      { label: 'JS', val: lastDonutCounts.js || 1, color: colors.chart2 },
+      { label: 'APIs', val: lastDonutCounts.api || 1, color: colors.chart3 },
+      { label: 'Secrets', val: lastDonutCounts.secrets || 1, color: colors.chart4 }
     ];
 
     const total = data.reduce((acc, d) => acc + d.val, 0);
@@ -349,14 +377,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       ctx.closePath();
       ctx.fillStyle = slice.color;
       ctx.shadowColor = slice.color;
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = colors.isLight ? 0 : 8;
       ctx.fill();
       ctx.shadowBlur = 0;
       startAngle += sliceAngle;
     });
 
     // Center hole text
-    ctx.fillStyle = '#f0f6fc';
+    ctx.fillStyle = colors.textMain;
     ctx.font = 'bold 13px JetBrains Mono';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -369,10 +397,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!svg) return;
     const path = svg.querySelector('path');
     if (!path) return;
-    // Generate organic reactive wave
     const v = Math.min(24, Math.max(4, Math.round(currentVal % 20) + 4));
     path.setAttribute('d', `M2,24 L14,${28 - v} L26,${18 + Math.round(v/3)} L38,${24 - v} L50,14 L62,${26 - v} L70,${24 - Math.round(v/1.5)}`);
+    if (strokeColor) {
+      path.setAttribute('stroke', strokeColor);
+    }
   }
+
+  // Multi-Theme Manager Initialization
+  if (window.CrawlizerTheme) {
+    window.CrawlizerTheme.initThemeDropdown({
+      wrap: 'theme-dropdown-wrap',
+      button: 'btn-theme-selector',
+      popover: 'theme-menu-popover',
+      label: 'theme-trigger-label',
+      swatch: 'theme-trigger-swatch',
+      onSelect: () => {
+        drawRpsChart();
+        drawDonutChart();
+      }
+    });
+  }
+
+  // Listen to global theme changes to re-render charts immediately
+  window.addEventListener('crawlizer:themechange', () => {
+    drawRpsChart();
+    drawDonutChart();
+  });
 
   // ==========================================
   // Command Palette (Ctrl+K)
@@ -384,6 +435,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     { title: 'Secrets & Threat Findings', icon: '🗡️', shortcut: 'TAB 4', action: () => switchTab('tab-secrets') },
     { title: 'Supply Chain & Dependency Audit', icon: '📦', shortcut: 'TAB 5', action: () => switchTab('tab-supply-chain') },
     { title: 'Live Stream Terminal Feed', icon: '💻', shortcut: 'TAB 6', action: () => switchTab('tab-terminal') },
+    { title: 'Switch Theme (Cycle Alt+T)', icon: '🎨', shortcut: 'THEME', action: () => window.CrawlizerTheme && window.CrawlizerTheme.cycleTheme() },
+    { title: 'Theme: Matrix (Cyberpunk Dark)', icon: '🟢', shortcut: 'TH-1', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('matrix') },
+    { title: 'Theme: Midnight Blue (Deep Navy)', icon: '🔵', shortcut: 'TH-2', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('midnight') },
+    { title: 'Theme: Dracula (Purple-Gray)', icon: '🟣', shortcut: 'TH-3', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('dracula') },
+    { title: 'Theme: Crimson Ops (Red Team)', icon: '🔴', shortcut: 'TH-4', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('crimson') },
+    { title: 'Theme: Nord Frost (Muted Slate)', icon: '❄️', shortcut: 'TH-5', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('nord') },
+    { title: 'Theme: Clean Light (Crisp Slate)', icon: '☀️', shortcut: 'TH-6', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('clean-light') },
+    { title: 'Theme: Paper Mint (Warm Mint Light)', icon: '🍃', shortcut: 'TH-7', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('paper-mint') },
+    { title: 'Theme: Solar Sand (Amber Cream Light)', icon: '🏜️', shortcut: 'TH-8', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('solar-sand') },
+    { title: 'Theme: Auto (Follow System OS)', icon: '⚙️', shortcut: 'AUTO', action: () => window.CrawlizerTheme && window.CrawlizerTheme.applyTheme('auto') },
     { title: 'Audit Active Tab (Supply Chain)', icon: '🔍', shortcut: 'AUDIT', action: () => { switchTab('tab-supply-chain'); scanActiveTabSupplyChain(true); } },
     { title: 'Start / Resume Crawl Engine', icon: '▶️', shortcut: 'START', action: () => btnStart.click() },
     { title: 'Pause Crawl Session', icon: '⏸️', shortcut: 'PAUSE', action: () => btnPause.click() },
@@ -761,7 +822,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusLabel = document.getElementById('agent-status-label');
   let isExtensionConnected = false;
 
-  function updateAgentStatusUI(connected, version = '1.1.8') {
+  function updateAgentStatusUI(connected, version = '1.1.9') {
     isExtensionConnected = Boolean(connected);
     const sidebarExtStatus = document.getElementById('sidebar-extension-status');
     const sidebarExtDot = document.getElementById('sidebar-ext-dot');

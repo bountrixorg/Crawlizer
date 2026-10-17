@@ -906,17 +906,17 @@ body.hacker-app {
   box-shadow: none !important;
 }
 
-/* Primary Hacker Action Button (Gradient with Neon Cyan/Green glow) */
+/* Primary Action Button (Theme-Adaptive) */
 .btn-primary {
-  background: linear-gradient(135deg, var(--neon-cyan), #00a896);
-  color: #041014;
-  border-color: rgba(0, 240, 255, 0.6);
-  box-shadow: 0 0 18px var(--neon-cyan-glow);
+  background: var(--accent);
+  color: var(--btn-primary-text);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
 }
 
 .btn-primary:not(:disabled):hover {
-  background: linear-gradient(135deg, #33f3ff, #02c39a);
-  box-shadow: 0 0 28px rgba(0, 240, 255, 0.6);
+  filter: brightness(1.1);
+  box-shadow: var(--glow);
   transform: translateY(-1px);
 }
 
@@ -1506,8 +1506,8 @@ body.hacker-app {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #121822;
-  border: 1px solid #1e293b;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 20px;
 }
@@ -1519,20 +1519,20 @@ body.hacker-app {
   width: 14px;
   left: 2px;
   bottom: 2px;
-  background-color: #64748b;
+  background-color: var(--text-muted);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 50%;
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: var(--neon-cyan);
-  border-color: #67e8f9;
-  box-shadow: 0 0 12px var(--neon-cyan-glow);
+  background-color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(18px);
-  background-color: #041014;
+  background-color: var(--btn-primary-text);
 }
 
 /* ==========================================================================

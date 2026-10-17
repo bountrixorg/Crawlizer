@@ -3,10 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <title>Crawlizer — Cyber Recon</title>
+  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="popup.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('crawlizer_theme') || 'matrix';
+        var resolved = saved;
+        if (saved === 'auto') {
+          resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'clean-light' : 'matrix';
+        }
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.documentElement.setAttribute('data-theme-setting', saved);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="hacker-popup">
   <!-- Subtle Scanline & Grid Overlays -->
@@ -23,7 +37,7 @@
         <div class="brand-text">
           <div class="brand-title-row">
             <span class="title">CRAWLIZER</span>
-            <span class="badge-version">v1.1.8</span>
+            <span class="badge-version">v1.1.9</span>
           </div>
           <div class="prompt-line">
             <span class="prompt-sym">$</span>
@@ -32,9 +46,21 @@
           </div>
         </div>
       </div>
-      <div class="status-pill" id="status-pill">
-        <span class="status-pulse-dot" id="status-dot"></span>
-        <span class="status-label" id="status-text">STANDBY</span>
+      <div class="header-right-group" style="display: flex; align-items: center; gap: 8px;">
+        <div class="theme-dropdown-wrap" id="popup-theme-wrap">
+          <button id="btn-popup-theme" class="theme-trigger-btn theme-mini-btn" aria-haspopup="true" aria-expanded="false" title="Switch Theme (Alt+T)">
+            <span class="theme-trigger-swatch" id="popup-theme-swatch">
+              <span class="swatch-dot" style="background: #0a0e14;"></span>
+              <span class="swatch-dot" style="background: #00f0ff;"></span>
+              <span class="swatch-dot" style="background: #ff2bd6;"></span>
+            </span>
+          </button>
+          <div class="theme-menu-popover theme-popover-right" id="popup-theme-popover" role="menu"></div>
+        </div>
+        <div class="status-pill" id="status-pill">
+          <span class="status-pulse-dot" id="status-dot"></span>
+          <span class="status-label" id="status-text">STANDBY</span>
+        </div>
       </div>
     </header>
 
@@ -57,7 +83,7 @@
         <div class="stat-row">
           <div class="stat-number" id="stat-targets">0</div>
           <svg class="sparkline-svg" viewBox="0 0 48 18">
-            <path d="M2,14 L10,12 L18,14 L26,8 L34,10 L42,6 L46,4" stroke="#00f0ff"/>
+            <path d="M2,14 L10,12 L18,14 L26,8 L34,10 L42,6 L46,4" stroke="var(--chart-1)"/>
           </svg>
         </div>
       </div>
@@ -70,7 +96,7 @@
         <div class="stat-row">
           <div class="stat-number" id="stat-crawled">0</div>
           <svg class="sparkline-svg" viewBox="0 0 48 18">
-            <path d="M2,16 L10,14 L18,10 L26,12 L34,8 L42,9 L46,4" stroke="#39ff14"/>
+            <path d="M2,16 L10,14 L18,10 L26,12 L34,8 L42,9 L46,4" stroke="var(--chart-2)"/>
           </svg>
         </div>
       </div>
@@ -83,7 +109,7 @@
         <div class="stat-row">
           <div class="stat-number glow" id="stat-discovered">0</div>
           <svg class="sparkline-svg" viewBox="0 0 48 18">
-            <path d="M2,15 L10,11 L18,8 L26,10 L34,5 L42,3 L46,2" stroke="#00f0ff"/>
+            <path d="M2,15 L10,11 L18,8 L26,10 L34,5 L42,3 L46,2" stroke="var(--chart-1)"/>
           </svg>
         </div>
       </div>
@@ -212,7 +238,7 @@
     <!-- Tech Footer -->
     <footer class="footer">
       <div class="footer-left">
-        <span class="tech-tag">CRAWLIZER // CORE_v1.1.8</span>
+        <span class="tech-tag">CRAWLIZER // CORE_v1.1.9</span>
       </div>
       <div class="footer-right">
         <button id="btn-clear-quick" class="link-btn" title="Reset stored database">Clear DB</button>
@@ -220,6 +246,7 @@
     </footer>
   </div>
 
+  <script src="theme-manager.js"></script>
   <script src="storage.js"></script>
   <script src="popup.js"></script>
 </body>

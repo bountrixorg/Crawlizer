@@ -1,0 +1,662 @@
+/* ==========================================================================
+   CRAWLIZER — MULTI-THEME CUSTOMIZATION SYSTEM
+   Supports 8 Curated Dark & Light Themes + Auto (Follows OS)
+   ========================================================================== */
+
+/* Smooth Theme Transitions (respects prefers-reduced-motion) */
+html[data-theme-transitioning],
+html[data-theme-transitioning] *,
+html[data-theme-transitioning] *::before,
+html[data-theme-transitioning] *::after {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-transitioning],
+  html[data-theme-transitioning] * {
+    transition: none !important;
+  }
+}
+
+/* ==========================================================================
+   1. MATRIX (CURRENT DEFAULT DARK / CYBERPUNK)
+   ========================================================================== */
+:root,
+[data-theme="matrix"] {
+  --theme-type: dark;
+  --bg: #0a0e14;
+  --surface: #0e1520;
+  --surface-2: #141d2c;
+  --border: rgba(0, 240, 255, 0.18);
+  --border-focus: #00f0ff;
+  --text: #f0f6fc;
+  --text-muted: #8b949e;
+  --text-dim: #484f58;
+
+  --accent: #00f0ff;
+  --accent-glow: rgba(0, 240, 255, 0.35);
+  --accent-badge: rgba(0, 240, 255, 0.14);
+
+  --accent-2: #ff2bd6;
+  --accent-2-glow: rgba(255, 43, 214, 0.35);
+  --accent-2-badge: rgba(255, 43, 214, 0.14);
+
+  --accent-3: #38bdf8;
+  --success: #39ff14;
+  --success-glow: rgba(57, 255, 20, 0.35);
+  --success-badge: rgba(57, 255, 20, 0.14);
+
+  --warning: #ffb800;
+  --warning-glow: rgba(255, 184, 0, 0.35);
+  --danger: #ff3366;
+  --danger-glow: rgba(255, 51, 102, 0.4);
+
+  --glow: 0 0 14px rgba(0, 240, 255, 0.32);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+
+  --chart-1: #00f0ff;
+  --chart-2: #39ff14;
+  --chart-3: #38bdf8;
+  --chart-4: #ff2bd6;
+  --chart-grid: rgba(255, 255, 255, 0.05);
+
+  --btn-primary-text: #041014;
+  --scrollbar-track: #060a0f;
+  --scrollbar-thumb: rgba(0, 240, 255, 0.28);
+  --scanline-opacity: 0.55;
+  --grid-opacity: 0.02;
+}
+
+/* ==========================================================================
+   2. MIDNIGHT BLUE (DEEP NAVY, ELECTRIC BLUE & VIOLET)
+   ========================================================================== */
+[data-theme="midnight"] {
+  --theme-type: dark;
+  --bg: #070c18;
+  --surface: #0d1527;
+  --surface-2: #141f38;
+  --border: rgba(99, 140, 255, 0.2);
+  --border-focus: #38bdf8;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #475569;
+
+  --accent: #38bdf8;
+  --accent-glow: rgba(56, 189, 248, 0.35);
+  --accent-badge: rgba(56, 189, 248, 0.14);
+
+  --accent-2: #a855f7;
+  --accent-2-glow: rgba(168, 85, 247, 0.35);
+  --accent-2-badge: rgba(168, 85, 247, 0.14);
+
+  --accent-3: #60a5fa;
+  --success: #10b981;
+  --success-glow: rgba(16, 185, 129, 0.35);
+  --success-badge: rgba(16, 185, 129, 0.14);
+
+  --warning: #f59e0b;
+  --warning-glow: rgba(245, 158, 11, 0.35);
+  --danger: #f43f5e;
+  --danger-glow: rgba(244, 63, 94, 0.4);
+
+  --glow: 0 0 14px rgba(56, 189, 248, 0.32);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.75);
+
+  --chart-1: #38bdf8;
+  --chart-2: #10b981;
+  --chart-3: #a855f7;
+  --chart-4: #f43f5e;
+  --chart-grid: rgba(255, 255, 255, 0.05);
+
+  --btn-primary-text: #05101e;
+  --scrollbar-track: #040812;
+  --scrollbar-thumb: rgba(56, 189, 248, 0.32);
+  --scanline-opacity: 0.35;
+  --grid-opacity: 0.025;
+}
+
+/* ==========================================================================
+   3. DRACULA (PURPLE-GRAY BASE, PINK & VIOLET)
+   ========================================================================== */
+[data-theme="dracula"] {
+  --theme-type: dark;
+  --bg: #21222c;
+  --surface: #282a36;
+  --surface-2: #343746;
+  --border: rgba(98, 114, 164, 0.35);
+  --border-focus: #bd93f9;
+  --text: #f8f8f2;
+  --text-muted: #a6b2d4;
+  --text-dim: #6272a4;
+
+  --accent: #bd93f9;
+  --accent-glow: rgba(189, 147, 249, 0.38);
+  --accent-badge: rgba(189, 147, 249, 0.16);
+
+  --accent-2: #ff79c6;
+  --accent-2-glow: rgba(255, 121, 198, 0.38);
+  --accent-2-badge: rgba(255, 121, 198, 0.16);
+
+  --accent-3: #8be9fd;
+  --success: #50fa7b;
+  --success-glow: rgba(80, 250, 123, 0.35);
+  --success-badge: rgba(80, 250, 123, 0.15);
+
+  --warning: #f1fa8c;
+  --warning-glow: rgba(241, 250, 140, 0.35);
+  --danger: #ff5555;
+  --danger-glow: rgba(255, 85, 85, 0.4);
+
+  --glow: 0 0 14px rgba(189, 147, 249, 0.32);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+
+  --chart-1: #8be9fd;
+  --chart-2: #50fa7b;
+  --chart-3: #bd93f9;
+  --chart-4: #ff79c6;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+
+  --btn-primary-text: #191a21;
+  --scrollbar-track: #191a21;
+  --scrollbar-thumb: rgba(189, 147, 249, 0.35);
+  --scanline-opacity: 0.2;
+  --grid-opacity: 0.02;
+}
+
+/* ==========================================================================
+   4. CRIMSON OPS (RED TEAM BLACK & ORANGE/RED ACCENTS)
+   ========================================================================== */
+[data-theme="crimson"] {
+  --theme-type: dark;
+  --bg: #0b0607;
+  --surface: #140b0e;
+  --surface-2: #1e1014;
+  --border: rgba(255, 42, 75, 0.24);
+  --border-focus: #ff2a4b;
+  --text: #fef2f2;
+  --text-muted: #b99ca0;
+  --text-dim: #6e4f54;
+
+  --accent: #ff2a4b;
+  --accent-glow: rgba(255, 42, 75, 0.42);
+  --accent-badge: rgba(255, 42, 75, 0.16);
+
+  --accent-2: #ff6b35;
+  --accent-2-glow: rgba(255, 107, 53, 0.38);
+  --accent-2-badge: rgba(255, 107, 53, 0.15);
+
+  --accent-3: #ffc837;
+  --success: #22c55e;
+  --success-glow: rgba(34, 197, 94, 0.35);
+  --success-badge: rgba(34, 197, 94, 0.14);
+
+  --warning: #fb923c;
+  --warning-glow: rgba(251, 146, 60, 0.35);
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.45);
+
+  --glow: 0 0 14px rgba(255, 42, 75, 0.35);
+  --shadow: 0 8px 34px rgba(0, 0, 0, 0.8);
+
+  --chart-1: #ff2a4b;
+  --chart-2: #ff6b35;
+  --chart-3: #ffc837;
+  --chart-4: #22c55e;
+  --chart-grid: rgba(255, 42, 75, 0.08);
+
+  --btn-primary-text: #ffffff;
+  --scrollbar-track: #060304;
+  --scrollbar-thumb: rgba(255, 42, 75, 0.35);
+  --scanline-opacity: 0.45;
+  --grid-opacity: 0.03;
+}
+
+/* ==========================================================================
+   5. NORD FROST (MUTED SLATE & ICY TEAL)
+   ========================================================================== */
+[data-theme="nord"] {
+  --theme-type: dark;
+  --bg: #242933;
+  --surface: #2e3440;
+  --surface-2: #3b4252;
+  --border: rgba(136, 192, 208, 0.22);
+  --border-focus: #88c0d0;
+  --text: #eceff4;
+  --text-muted: #d8dee9;
+  --text-dim: #616e88;
+
+  --accent: #88c0d0;
+  --accent-glow: rgba(136, 192, 208, 0.3);
+  --accent-badge: rgba(136, 192, 208, 0.14);
+
+  --accent-2: #81a1c1;
+  --accent-2-glow: rgba(129, 161, 193, 0.3);
+  --accent-2-badge: rgba(129, 161, 193, 0.14);
+
+  --accent-3: #b48ead;
+  --success: #a3be8c;
+  --success-glow: rgba(163, 190, 140, 0.3);
+  --success-badge: rgba(163, 190, 140, 0.14);
+
+  --warning: #ebcb8b;
+  --warning-glow: rgba(235, 203, 139, 0.3);
+  --danger: #bf616a;
+  --danger-glow: rgba(191, 97, 106, 0.35);
+
+  --glow: 0 0 10px rgba(136, 192, 208, 0.22);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+
+  --chart-1: #88c0d0;
+  --chart-2: #a3be8c;
+  --chart-3: #81a1c1;
+  --chart-4: #b48ead;
+  --chart-grid: rgba(236, 239, 244, 0.06);
+
+  --btn-primary-text: #1d212a;
+  --scrollbar-track: #1d212a;
+  --scrollbar-thumb: rgba(136, 192, 208, 0.3);
+  --scanline-opacity: 0.12;
+  --grid-opacity: 0.02;
+}
+
+/* ==========================================================================
+   6. CLEAN LIGHT (CRISP WHITE, SOFT SLATE & INDIGO)
+   ========================================================================== */
+[data-theme="clean-light"] {
+  --theme-type: light;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --border: rgba(15, 23, 42, 0.12);
+  --border-focus: #4f46e5;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #94a3b8;
+
+  --accent: #4f46e5;
+  --accent-glow: none;
+  --accent-badge: rgba(79, 70, 229, 0.1);
+
+  --accent-2: #0284c7;
+  --accent-2-glow: none;
+  --accent-2-badge: rgba(2, 132, 199, 0.1);
+
+  --accent-3: #7c3aed;
+  --success: #16a34a;
+  --success-glow: none;
+  --success-badge: rgba(22, 163, 74, 0.12);
+
+  --warning: #d97706;
+  --warning-glow: none;
+  --danger: #dc2626;
+  --danger-glow: none;
+
+  --glow: none;
+  --shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+
+  --chart-1: #4f46e5;
+  --chart-2: #16a34a;
+  --chart-3: #0284c7;
+  --chart-4: #7c3aed;
+  --chart-grid: rgba(15, 23, 42, 0.08);
+
+  --btn-primary-text: #ffffff;
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: rgba(79, 70, 229, 0.35);
+  --scanline-opacity: 0;
+  --grid-opacity: 0.01;
+}
+
+/* ==========================================================================
+   7. PAPER MINT (WARM MINTY OFF-WHITE & EMERALD)
+   ========================================================================== */
+[data-theme="paper-mint"] {
+  --theme-type: light;
+  --bg: #f4f7f5;
+  --surface: #ffffff;
+  --surface-2: #e8f0eb;
+  --border: rgba(19, 78, 74, 0.14);
+  --border-focus: #0d9488;
+  --text: #134e4a;
+  --text-muted: #406b65;
+  --text-dim: #7c9e99;
+
+  --accent: #0d9488;
+  --accent-glow: none;
+  --accent-badge: rgba(13, 148, 136, 0.12);
+
+  --accent-2: #059669;
+  --accent-2-glow: none;
+  --accent-2-badge: rgba(5, 150, 105, 0.12);
+
+  --accent-3: #0284c7;
+  --success: #10b981;
+  --success-glow: none;
+  --success-badge: rgba(16, 185, 129, 0.12);
+
+  --warning: #d97706;
+  --warning-glow: none;
+  --danger: #e11d48;
+  --danger-glow: none;
+
+  --glow: none;
+  --shadow: 0 4px 20px rgba(19, 78, 74, 0.07);
+
+  --chart-1: #0d9488;
+  --chart-2: #059669;
+  --chart-3: #0284c7;
+  --chart-4: #d97706;
+  --chart-grid: rgba(19, 78, 74, 0.08);
+
+  --btn-primary-text: #ffffff;
+  --scrollbar-track: #e1e9e4;
+  --scrollbar-thumb: rgba(13, 148, 136, 0.35);
+  --scanline-opacity: 0;
+  --grid-opacity: 0.01;
+}
+
+/* ==========================================================================
+   8. SOLAR SAND (WARM CREAM & AMBER / FLAME)
+   ========================================================================== */
+[data-theme="solar-sand"] {
+  --theme-type: light;
+  --bg: #fbf8f2;
+  --surface: #ffffff;
+  --surface-2: #f3ece0;
+  --border: rgba(120, 53, 15, 0.14);
+  --border-focus: #d97706;
+  --text: #451a03;
+  --text-muted: #785942;
+  --text-dim: #9c816c;
+
+  --accent: #d97706;
+  --accent-glow: none;
+  --accent-badge: rgba(217, 119, 6, 0.12);
+
+  --accent-2: #ea580c;
+  --accent-2-glow: none;
+  --accent-2-badge: rgba(234, 88, 12, 0.12);
+
+  --accent-3: #ca8a04;
+  --success: #15803d;
+  --success-glow: none;
+  --success-badge: rgba(21, 128, 61, 0.12);
+
+  --warning: #b45309;
+  --warning-glow: none;
+  --danger: #b91c1c;
+  --danger-glow: none;
+
+  --glow: none;
+  --shadow: 0 4px 20px rgba(120, 53, 15, 0.07);
+
+  --chart-1: #d97706;
+  --chart-2: #15803d;
+  --chart-3: #ea580c;
+  --chart-4: #ca8a04;
+  --chart-grid: rgba(120, 53, 15, 0.08);
+
+  --btn-primary-text: #ffffff;
+  --scrollbar-track: #ede5d8;
+  --scrollbar-thumb: rgba(217, 119, 6, 0.35);
+  --scanline-opacity: 0;
+  --grid-opacity: 0.01;
+}
+
+/* ==========================================================================
+   UNIVERSAL VARIABLE ALIASES (MAPS TO EXISTING CODEBASE)
+   ========================================================================== */
+:root,
+[data-theme] {
+  --bg-deep: var(--bg);
+  --bg-sidebar: var(--surface);
+  --bg-topbar: var(--surface);
+  --bg-surface: var(--surface);
+  --bg-surface-elevated: var(--surface-2);
+  --bg-card: var(--surface);
+  --bg-card-hover: var(--surface-2);
+  --bg-input: var(--bg);
+  --bg-modal: var(--surface-2);
+
+  --text-main: var(--text);
+
+  --border-subtle: var(--border);
+  --border-glow-cyan: var(--accent);
+  --border-glow-green: var(--success);
+  --border-glow-magenta: var(--accent-2);
+
+  --neon-cyan: var(--accent);
+  --neon-cyan-glow: var(--accent-glow);
+  --neon-cyan-badge: var(--accent-badge);
+
+  --neon-green: var(--success);
+  --neon-green-glow: var(--success-glow);
+  --neon-green-badge: var(--success-badge);
+
+  --neon-magenta: var(--accent-2);
+  --neon-magenta-glow: var(--accent-2-glow);
+  --neon-magenta-badge: var(--accent-2-badge);
+
+  --neon-amber: var(--warning);
+  --neon-amber-glow: var(--warning-glow);
+  --neon-red: var(--danger);
+  --neon-red-glow: var(--danger-glow);
+}
+
+/* ==========================================================================
+   LIGHT THEME REFINEMENTS & CONTRAST TWEAKS
+   ========================================================================== */
+[data-theme="clean-light"] .scanlines-overlay,
+[data-theme="paper-mint"] .scanlines-overlay,
+[data-theme="solar-sand"] .scanlines-overlay {
+  display: none !important;
+}
+
+[data-theme="clean-light"] .grid-overlay,
+[data-theme="paper-mint"] .grid-overlay,
+[data-theme="solar-sand"] .grid-overlay {
+  background-image: 
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  opacity: 0.4;
+}
+
+[data-theme="clean-light"] .glass-panel,
+[data-theme="paper-mint"] .glass-panel,
+[data-theme="solar-sand"] .glass-panel,
+[data-theme="clean-light"] .stat-card,
+[data-theme="paper-mint"] .stat-card,
+[data-theme="solar-sand"] .stat-card {
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="clean-light"] .btn-primary,
+[data-theme="paper-mint"] .btn-primary,
+[data-theme="solar-sand"] .btn-primary {
+  color: var(--btn-primary-text) !important;
+  background: var(--accent) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="clean-light"] .btn-primary:hover,
+[data-theme="paper-mint"] .btn-primary:hover,
+[data-theme="solar-sand"] .btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+[data-theme="clean-light"] .sidebar-brand-text .brand-title,
+[data-theme="paper-mint"] .sidebar-brand-text .brand-title,
+[data-theme="solar-sand"] .sidebar-brand-text .brand-title {
+  background: none !important;
+  -webkit-text-fill-color: var(--text) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="clean-light"] .badge-risk-high,
+[data-theme="paper-mint"] .badge-risk-high,
+[data-theme="solar-sand"] .badge-risk-high {
+  background: rgba(220, 38, 38, 0.12) !important;
+  color: #dc2626 !important;
+}
+
+[data-theme="clean-light"] .badge-risk-safe,
+[data-theme="paper-mint"] .badge-risk-safe,
+[data-theme="solar-sand"] .badge-risk-safe {
+  background: rgba(22, 163, 74, 0.12) !important;
+  color: #16a34a !important;
+}
+
+/* ==========================================================================
+   THEME SELECTOR DROPDOWN & POPOVER STYLES
+   ========================================================================== */
+.theme-dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.theme-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.theme-trigger-btn:hover,
+.theme-trigger-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+.theme-trigger-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.swatch-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.theme-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  box-shadow: var(--shadow);
+  z-index: 1050;
+  backdrop-filter: blur(20px);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.theme-menu-popover.open {
+  display: flex !important;
+  animation: themeFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.theme-popover-right {
+  right: 0;
+  left: auto;
+}
+
+@keyframes themeFadeIn {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.theme-group-header {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 8px 10px 4px;
+}
+
+.theme-group-header:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-option-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.theme-option-btn:hover,
+.theme-option-btn:focus-visible {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--accent);
+  outline: none;
+}
+
+.theme-option-btn.active {
+  background: var(--accent-badge);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.theme-option-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.theme-check-icon {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.theme-option-btn.active .theme-check-icon {
+  opacity: 1;
+}
+
+/* Mini trigger for extension popup */
+.theme-mini-btn {
+  padding: 5px 8px;
+  font-size: 10.5px;
+  gap: 5px;
+}

@@ -702,7 +702,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     metricCrawled.textContent = stats.crawledTargets;
     metricDiscovered.textContent = stats.totalDiscovered;
     metricRps.textContent = stats.rps;
-    metricSubdomains.textContent = stats.subdomains;
+    metricSubdomains.textContent = stats.subdomains !== undefined ? stats.subdomains : (stats.uniqueHosts ? Math.max(0, stats.uniqueHosts - 1) : 0);
     metricDupes.textContent = stats.duplicatesFiltered;
     tabDiscoveredCount.textContent = stats.totalDiscovered;
 
@@ -822,7 +822,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const agentStatusLabel = document.getElementById('agent-status-label');
   let isExtensionConnected = false;
 
-  function updateAgentStatusUI(connected, version = '1.2.1') {
+  function updateAgentStatusUI(connected, version = '1.2.2') {
     isExtensionConnected = Boolean(connected);
     const sidebarExtStatus = document.getElementById('sidebar-extension-status');
     const sidebarExtDot = document.getElementById('sidebar-ext-dot');
@@ -1278,6 +1278,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (metricSecrets) metricSecrets.textContent = totalSec;
     if (tabSecretsCount) tabSecretsCount.textContent = totalSec;
 
+    const subdomainsFound = stats.subdomains !== undefined ? stats.subdomains : (stats.uniqueHosts ? Math.max(0, stats.uniqueHosts - 1) : 0);
+    if (metricSubdomains) metricSubdomains.textContent = subdomainsFound;
+
     try {
       const allSecrets = await storage.getSecrets();
       const critCount = allSecrets.filter(s => s.severity === 'critical').length;
@@ -1307,9 +1310,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update Donut Chart
     try {
       const urls = await storage.getDiscoveredUrls();
-      const htmlCount = urls.filter(u => (u.type || '').includes('html')).length;
-      const jsCount = urls.filter(u => (u.type || '').includes('js') || (u.type || '').includes('bundle')).length;
-      const apiCount = urls.filter(u => (u.type || '').includes('api')).length;
+      const apiRegex = /(\/api\/|\/v[0-9]+\/|graphql|\.json(\?|$)|xhr|fetch|ajax|rest\/)/i;
+      let htmlCount = 0;
+      let jsCount = 0;
+      let apiCount = 0;
+
+      urls.forEach(u => {
+        const t = (u.type || '').toLowerCase();
+        const urlStr = u.url || '';
+        if (t.includes('api') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || t.includes('data-') || apiRegex.test(urlStr)) {
+          apiCount++;
+        } else if (t.includes('js') || t.includes('script') || t.includes('bundle') || urlStr.endsWith('.js') || urlStr.includes('.js?')) {
+          jsCount++;
+        } else {
+          htmlCount++;
+        }
+      });
       drawDonutChart({ html: htmlCount, js: jsCount, api: apiCount, secrets: totalSec });
     } catch {}
   }

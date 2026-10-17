@@ -482,11 +482,18 @@ class KatanaCrawlerEngine {
   // Apex domain helper (e.g. sub.example.com -> example.com)
   getApexDomain(hostname) {
     if (!hostname) return '';
+    hostname = String(hostname).replace(/^www\./i, '').toLowerCase();
     if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(':')) {
       return hostname;
     }
     const parts = hostname.split('.');
     if (parts.length <= 2) return hostname;
+
+    // Handle common 2-part ccTLDs (.co.uk, .com.au, .gov.bd, .co.jp, etc.)
+    const ccTlds = new Set(['co', 'com', 'org', 'net', 'edu', 'gov', 'mil', 'ac', 'res', 'ne', 'or', 'go']);
+    if (parts.length >= 3 && ccTlds.has(parts[parts.length - 2]) && parts[parts.length - 1].length === 2) {
+      return parts.slice(-3).join('.');
+    }
     return parts.slice(-2).join('.');
   }
 

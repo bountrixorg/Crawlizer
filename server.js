@@ -19,6 +19,23 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+function getApexDomain(hostname) {
+  if (!hostname) return '';
+  hostname = String(hostname).replace(/^www\./i, '').toLowerCase();
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(':')) {
+    return hostname;
+  }
+  const parts = hostname.split('.');
+  if (parts.length <= 2) return hostname;
+
+  // Handle common 2-part ccTLDs (.co.uk, .com.au, .gov.bd, .co.jp, etc.)
+  const ccTlds = new Set(['co', 'com', 'org', 'net', 'edu', 'gov', 'mil', 'ac', 'res', 'ne', 'or', 'go']);
+  if (parts.length >= 3 && ccTlds.has(parts[parts.length - 2]) && parts[parts.length - 1].length === 2) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
 // ============================================================================
 // PERSISTENT DATA MANAGER
 // ============================================================================
@@ -147,7 +164,56 @@ class LocalDataManager {
   getUrls(filter = {}) {
     let list = this.urls;
     if (filter.type && filter.type !== 'all') {
-      list = list.filter(u => u.type === filter.type);
+      const fType = filter.type.toLowerCase();
+      if (fType === 'subdomain') {
+        const seedApexes = new Set();
+        this.targets.forEach(t => {
+          try {
+            const h = new URL(t.url).hostname.replace(/^www\./i, '').toLowerCase();
+            const apex = getApexDomain(h);
+            if (apex) seedApexes.add(apex);
+          } catch {}
+        });
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          if (t.includes('subdomain')) return true;
+          try {
+            const h = new URL(u.url).hostname.replace(/^www\./i, '').toLowerCase();
+            for (const apex of seedApexes) {
+              if (h.endsWith('.' + apex) && h !== apex) return true;
+            }
+          } catch {}
+          return false;
+        });
+      } else if (fType === 'network-api' || fType === 'api') {
+        const apiRegex = /(\/api\/|\/v[0-9]+\/|graphql|\.json(\?|$)|xhr|fetch|ajax|rest\/)/i;
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          return t.includes('api') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || apiRegex.test(u.url || '');
+        });
+      } else if (fType === 'js-endpoint') {
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          return t.includes('js') || t.includes('script') || t.includes('bundle') || (u.url && (u.url.endsWith('.js') || u.url.includes('.js?')));
+        });
+      } else if (fType === 'script-bundle') {
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          return t.includes('script') || t.includes('bundle');
+        });
+      } else if (fType === 'html-link') {
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          return t.includes('html') || t.includes('href') || t.includes('link');
+        });
+      } else if (fType === 'button-click') {
+        list = list.filter(u => {
+          const t = (u.type || '').toLowerCase();
+          return t.includes('button') || t.includes('click');
+        });
+      } else {
+        list = list.filter(u => (u.type || '').toLowerCase().includes(fType));
+      }
     }
     if (filter.search) {
       const q = filter.search.toLowerCase();
@@ -403,6 +469,52 @@ class LocalDataManager {
     const crawledTargets = this.targets.filter(t => t.status === 'completed' || t.status === 'crawled').length;
     const failedTargets = this.targets.filter(t => t.status === 'failed').length;
 
+    // Collect seed apex domains
+    const seedApexes = new Set();
+    const seedHosts = new Set();
+    this.targets.forEach(t => {
+      try {
+        const h = new URL(t.url).hostname.replace(/^www\./i, '').toLowerCase();
+        seedHosts.add(h);
+        const apex = getApexDomain(h);
+        if (apex) seedApexes.add(apex);
+      } catch {}
+    });
+
+    const uniqueHosts = new Set();
+    const uniqueSubdomains = new Set();
+    let apiCount = 0;
+    const apiRegex = /(\/api\/|\/v[0-9]+\/|graphql|\.json(\?|$)|xhr|fetch|ajax|rest\/)/i;
+
+    this.urls.forEach(u => {
+      try {
+        const parsed = new URL(u.url);
+        const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+        uniqueHosts.add(host);
+
+        let isSub = false;
+        for (const apex of seedApexes) {
+          if (host.endsWith('.' + apex) && host !== apex) {
+            uniqueSubdomains.add(host);
+            isSub = true;
+            break;
+          }
+        }
+        if (!isSub && (u.type === 'subdomain' || u.type === 'subdomain-api')) {
+          uniqueSubdomains.add(host);
+        }
+      } catch {}
+
+      const t = (u.type || '').toLowerCase();
+      if (t.includes('api') || t.includes('xhr') || t.includes('fetch') || t.includes('endpoint') || t.includes('data-') || apiRegex.test(u.url || '')) {
+        apiCount++;
+      }
+    });
+
+    const subdomainsCount = uniqueSubdomains.size > 0
+      ? uniqueSubdomains.size
+      : Math.max(0, uniqueHosts.size - (seedHosts.size || 1));
+
     return {
       totalTargets,
       targetsCount: totalTargets,
@@ -412,11 +524,16 @@ class LocalDataManager {
       totalDiscovered: totalUrls,
       totalSecrets,
       totalSupplyChain: totalSupply,
+      subdomains: subdomainsCount,
+      uniqueHosts: uniqueHosts.size,
+      apiCount,
       urls: {
         total: totalUrls,
         inScope: internalUrls,
         outOfScope: externalUrls,
-        jsBundles: this.urls.filter(u => u.type === 'script' || (u.url && u.url.includes('.js'))).length
+        subdomains: subdomainsCount,
+        apis: apiCount,
+        jsBundles: this.urls.filter(u => (u.type || '').includes('script') || (u.type || '').includes('bundle') || (u.url && u.url.includes('.js'))).length
       },
       secrets: {
         total: totalSecrets,
@@ -455,7 +572,7 @@ class CrawlOrchestrator {
     this.agentSocket = ws;
     this.agentInfo = {
       connected: true,
-      version: info.version || '1.2.1',
+      version: info.version || '1.2.2',
       name: info.name || 'Chrome Extension Agent',
       lastSeen: Date.now()
     };
@@ -669,7 +786,7 @@ class CrawlOrchestrator {
 
       const res = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.1',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.2',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         },
         signal: controller.signal
@@ -692,28 +809,41 @@ class CrawlOrchestrator {
     const supplyChain = [];
     if (!html || typeof html !== 'string') return { urls, secrets, supplyChain };
 
-    let origin = '';
-    try { origin = new URL(baseUrl).origin; } catch {}
+    let baseObj = null;
+    let seedApex = '';
+    let baseHost = '';
+    try {
+      baseObj = new URL(baseUrl);
+      baseHost = baseObj.hostname.replace(/^www\./i, '').toLowerCase();
+      seedApex = getApexDomain(baseHost);
+    } catch {}
 
-    const addUrl = (raw, type) => {
+    const addUrl = (raw, type = 'href') => {
       if (!raw || typeof raw !== 'string') return;
       raw = raw.trim();
-      if (raw.startsWith('#') || raw.startsWith('javascript:') || raw.startsWith('mailto:') || raw.startsWith('data:')) return;
+      if (!raw || raw.startsWith('#') || raw.startsWith('javascript:') || raw.startsWith('mailto:') || raw.startsWith('data:') || raw.startsWith('tel:') || raw.startsWith('blob:')) return;
       try {
         const resolved = new URL(raw, baseUrl).href;
         let scope = 'out-of-scope';
+        let resolvedType = type;
         try {
           const u = new URL(resolved);
-          const b = new URL(baseUrl);
           const uHost = u.hostname.replace(/^www\./i, '').toLowerCase();
-          const bHost = b.hostname.replace(/^www\./i, '').toLowerCase();
-          if (uHost === bHost || uHost.endsWith('.' + bHost) || bHost.endsWith('.' + uHost)) {
+          const uApex = getApexDomain(uHost);
+
+          if (seedApex && uApex === seedApex) {
+            scope = 'in-scope';
+            if (uHost !== baseHost && !resolvedType.includes('subdomain')) {
+              resolvedType = resolvedType.includes('api') ? 'subdomain-api' : 'subdomain';
+            }
+          } else if (baseHost && (uHost === baseHost || uHost.endsWith('.' + baseHost) || baseHost.endsWith('.' + uHost))) {
             scope = 'in-scope';
           }
         } catch {}
+
         urls.push({
           url: resolved,
-          type,
+          type: resolvedType,
           scope,
           sourceUrl: baseUrl,
           discoveredAt: new Date().toISOString()
@@ -721,8 +851,8 @@ class CrawlOrchestrator {
       } catch {}
     };
 
-    // Links & scripts
-    const hrefRegex = /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi;
+    // 1. Links & scripts & CSS & iframes
+    const hrefRegex = /<(?:a|area|base)\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi;
     let m;
     while ((m = hrefRegex.exec(html)) !== null) addUrl(m[1], 'href');
 
@@ -732,12 +862,40 @@ class CrawlOrchestrator {
     const linkRegex = /<link\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi;
     while ((m = linkRegex.exec(html)) !== null) addUrl(m[1], 'link');
 
-    // Endpoints inside strings
+    const iframeRegex = /<iframe\s+(?:[^>]*?\s+)?src=["']([^"']+)["']/gi;
+    while ((m = iframeRegex.exec(html)) !== null) addUrl(m[1], 'iframe');
+
+    // 2. Forms
+    const formRegex = /<form\s+(?:[^>]*?\s+)?action=["']([^"']+)["']/gi;
+    while ((m = formRegex.exec(html)) !== null) addUrl(m[1], 'form-action');
+
+    // 3. HTML5 Data Attributes
+    const dataAttrRegex = /\bdata-(?:url|href|src|endpoint|api|route|path|target|action)=["']([^"']+)["']/gi;
+    while ((m = dataAttrRegex.exec(html)) !== null) addUrl(m[1], 'data-endpoint');
+
+    // 4. API & Network Calls in code (fetch, axios, ajax, open, sendBeacon)
+    const apiCallRegex = /(?:fetch|axios(?:\.[a-z]+)?|\$\.(?:ajax|get|post)|window\.open|open|navigator\.sendBeacon)\s*\(\s*["'\`]([^"'\`\r\n\s]+)["'\`]/gi;
+    while ((m = apiCallRegex.exec(html)) !== null) addUrl(m[1], 'network-api');
+
+    // 5. LinkFinder / Katana deep route endpoints
+    const linkFinderRegex = /["'](\/(?:api|v[0-9]+|graphql|auth|users|admin|rest|internal|webhook|oauth|gateway|service|rpc)\/[a-zA-Z0-9_\-\/]+(?:\?[^\s"'\`]*)?)["']/gi;
+    while ((m = linkFinderRegex.exec(html)) !== null) addUrl(m[1], 'api-endpoint');
+
+    // 6. Absolute URLs inside strings/scripts/comments
     const fullUrlRegex = /https?:\/\/[a-zA-Z0-9_\-.]+(?::[0-9]+)?(?:\/[^\s"'\`<>]*)*[^\s"'\`<>.,;]/g;
     while ((m = fullUrlRegex.exec(html)) !== null) addUrl(m[0], 'regex-url');
 
-    const apiPathRegex = /["'](\/(?:api|v[0-9]+|graphql|auth|users|admin|rest|internal)\/[a-zA-Z0-9_\-\/]+(?:\?[^\s"'\`]*)?)["']/gi;
-    while ((m = apiPathRegex.exec(html)) !== null) addUrl(m[1], 'api-endpoint');
+    // 7. Subdomains matching *.seedApex in raw text or comments
+    if (seedApex) {
+      const escapedApex = seedApex.replace(/\./g, '\\.');
+      const subRegex = new RegExp(`(?:https?:\\/\\/)?(([a-zA-Z0-9_\\-]+\\.)+${escapedApex})(?::[0-9]+)?`, 'gi');
+      while ((m = subRegex.exec(html)) !== null) {
+        const fqdn = m[1].toLowerCase();
+        if (fqdn !== baseHost) {
+          addUrl(`https://${fqdn}`, 'subdomain');
+        }
+      }
+    }
 
     // Pattern-based Secret Scanning Rules
     const secretRules = [
@@ -922,7 +1080,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
     port: PORT,
-    version: '1.2.1',
+    version: '1.2.2',
     agent: orchestrator.agentInfo,
     crawler: {
       state: orchestrator.state,
@@ -1281,7 +1439,7 @@ wss.on('connection', (ws, req) => {
         clientRole = 'agent';
         orchestrator.setAgentSocket(ws, {
           name: msg.client || 'Chrome Extension',
-          version: msg.version || '1.2.1'
+          version: msg.version || '1.2.2'
         });
         return;
       }
@@ -1299,7 +1457,7 @@ wss.on('connection', (ws, req) => {
               const controller = new AbortController();
               const to = setTimeout(() => controller.abort(), 4000);
               const res = await fetch(msg.targetUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.1' },
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Crawlizer/1.2.2' },
                 signal: controller.signal
               });
               clearTimeout(to);
@@ -1359,7 +1517,7 @@ wss.on('connection', (ws, req) => {
 server.listen(PORT, HOST, () => {
   const line = '━'.repeat(64);
   console.log(`\n${line}`);
-  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.2.1`);
+  console.log(`⚡ CRAWLIZER LOCAL SERVER v1.2.2`);
   console.log(`   Cyberpunk Web Recon, Secret Spider & Supply Chain Audit`);
   console.log(`${line}`);
   console.log(`📡 Dashboard UI  : http://localhost:${PORT}`);

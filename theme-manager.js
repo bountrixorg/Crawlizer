@@ -1,5 +1,5 @@
 /**
- * Crawlizer Multi-Theme Customization Manager (v1.2.1)
+ * Crawlizer Multi-Theme Customization Manager (v1.2.2)
  * Supports 8 Curated Hacker/Modern Themes + Auto (OS Scheme Follower)
  * Multi-layer persistence across localStorage, cookie, and server settings
  */

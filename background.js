@@ -772,19 +772,32 @@ function katanaInTabExtractionScript() {
     });
   } catch(e) {}
 
-  // Extract runtime scripts via Resource Timing API (Webpack/Vite chunks, dynamic imports)
+  // Extract runtime network resources via Resource Timing API (XHR, Fetch, WebSockets, API calls & JS chunks)
   try {
     if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
       const resources = performance.getEntriesByType('resource') || [];
       for (const res of resources) {
         if (res && res.name && typeof res.name === 'string') {
-          const initiator = res.initiatorType || '';
-          if (initiator === 'script' || initiator === 'link' || /\.js(?:[?#]|$)/i.test(res.name)) {
+          const initiator = (res.initiatorType || '').toLowerCase();
+          const resName = res.name;
+
+          // 1. Intercept XHR & Fetch & Beacon network API requests
+          if (initiator === 'xmlhttprequest' || initiator === 'fetch' || initiator === 'beacon' || initiator === 'other' || /\/(api|v[0-9]+|graphql|rest|auth|oauth|rpc|user|admin)\//i.test(resName)) {
             try {
-              const resolved = new URL(res.name, base).href;
+              const resolved = new URL(resName, base).href;
+              if (!result.dataEndpoints.includes(resolved)) result.dataEndpoints.push(resolved);
+            } catch(e) {
+              if (!result.dataEndpoints.includes(resName)) result.dataEndpoints.push(resName);
+            }
+          }
+
+          // 2. Intercept dynamically loaded scripts & Webpack/Vite chunks
+          if (initiator === 'script' || initiator === 'link' || /\.js(?:[?#]|$)/i.test(resName)) {
+            try {
+              const resolved = new URL(resName, base).href;
               if (!result.scriptSources.includes(resolved)) result.scriptSources.push(resolved);
             } catch(e) {
-              if (!result.scriptSources.includes(res.name)) result.scriptSources.push(res.name);
+              if (!result.scriptSources.includes(resName)) result.scriptSources.push(resName);
             }
           }
         }
@@ -808,6 +821,36 @@ function katanaInTabExtractionScript() {
         }
       } catch(e) {}
     });
+  } catch(e) {}
+
+  // Extract DOM data-* attributes (APIs, routes, endpoints used by SPAs)
+  try {
+    const dataSelector = '[data-url], [data-href], [data-src], [data-endpoint], [data-api], [data-route], [data-path], [data-target], [data-action]';
+    document.querySelectorAll(dataSelector).forEach(el => {
+      ['data-url', 'data-href', 'data-src', 'data-endpoint', 'data-api', 'data-route', 'data-path', 'data-target', 'data-action'].forEach(attr => {
+        const val = el.getAttribute(attr);
+        if (val && typeof val === 'string' && val.length > 1 && !val.startsWith('#') && !val.startsWith('javascript:') && !val.startsWith('data:')) {
+          try {
+            const resolved = new URL(val, base).href;
+            if (!result.dataEndpoints.includes(resolved)) result.dataEndpoints.push(resolved);
+          } catch(e) {
+            if (!result.dataEndpoints.includes(val)) result.dataEndpoints.push(val);
+          }
+        }
+      });
+    });
+  } catch(e) {}
+
+  // Extract HTML comments (staging subdomains, hidden routes, dev APIs)
+  try {
+    const commentIterator = document.createNodeIterator(document, NodeFilter.SHOW_COMMENT, null, false);
+    let cNode;
+    while ((cNode = commentIterator.nextNode())) {
+      const cText = cNode.nodeValue || '';
+      if (cText.length > 3 && cText.length < 5000) {
+        result.htmlComments.push(cText);
+      }
+    }
   } catch(e) {}
 
   // Extract Inline Scripts & JSON routing blobs
@@ -932,7 +975,7 @@ class LocalServerAgent {
         this.send({
           type: 'register:agent',
           client: 'chrome-extension',
-          version: '1.2.1',
+          version: '1.2.2',
           name: 'Chrome Extension Crawler Agent'
         });
       };
@@ -1180,41 +1223,160 @@ class LocalServerAgent {
     });
   }
 
+  getApexDomain(hostname) {
+    if (!hostname) return '';
+    if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(':')) return hostname;
+    const parts = hostname.toLowerCase().split('.');
+    if (parts.length <= 2) return parts.join('.');
+    const secondToLast = parts[parts.length - 2];
+    if (['co', 'com', 'org', 'net', 'edu', 'gov', 'ac', 'mil'].includes(secondToLast) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+  }
+
+  extractEndpointsFromCode(text, contextUrl, seedApex) {
+    const findings = [];
+    if (!text || typeof text !== 'string') return findings;
+
+    // 1. Full URLs (http / https)
+    const fullUrlRegex = /https?:\/\/[a-zA-Z0-9_\-.]+(?::[0-9]+)?(?:\/[^\s"'\`<>]*)*[^\s"'\`<>.,;]/g;
+    let m;
+    while ((m = fullUrlRegex.exec(text)) !== null) {
+      findings.push({ url: m[0], type: 'regex-url' });
+    }
+
+    // 2. JavaScript API calls: fetch('...'), axios.get/post('...'), $.ajax('...'), open('GET'/'POST'...)
+    const apiCallRegex = /(?:fetch|axios(?:\.(?:get|post|put|delete|patch|request|head))?|\$\.(?:ajax|get|post|getJSON)|open\s*\(\s*["'`](?:GET|POST|PUT|DELETE|PATCH)["'`],?|navigator\.sendBeacon)\s*\(\s*["'`]([^"'`\s]+)["'`]/gi;
+    while ((m = apiCallRegex.exec(text)) !== null) {
+      if (m[1] && m[1].length > 1 && !m[1].startsWith('#')) {
+        findings.push({ url: m[1], type: 'js-api-call' });
+      }
+    }
+
+    // 3. LinkFinder / Katana comprehensive endpoint regex for REST / GraphQL / dynamic routes
+    const endpointRegex = /(?:["'`])(((?:\/|\.\.\/|\.\/)[a-zA-Z0-9_\-\.~%!$&'()*+,;=:@/]{1,}(?:\?[a-zA-Z0-9_\-\.~%!$&'()*+,;=:@/?]*)?)|([a-zA-Z0-9_\-\/]{1,}\.(?:php|asp|aspx|jsp|json|action|html|js|txt|xml|api|wsdl)(?:\?[^"'\\\/\s]*)?)|(\/(?:api|v[0-9]+|graphql|rest|auth|oauth|rpc|user|admin|internal)\/[a-zA-Z0-9_\-\/.]+))(?=["'`])/gi;
+    while ((m = endpointRegex.exec(text)) !== null) {
+      const p = m[1];
+      if (p && p.length > 1 && !p.startsWith('//') && !/\.(png|jpe?g|gif|svg|ico|woff2?|ttf|css)$/i.test(p)) {
+        findings.push({ url: p, type: 'api-endpoint' });
+      }
+    }
+
+    // 4. Subdomain hunting matching *.seedApex in raw text, scripts, or comments
+    if (seedApex) {
+      const escaped = seedApex.replace(/\./g, '\\.');
+      const subRegex = new RegExp(`(?:https?:\\/\\/)?(([a-zA-Z0-9_\\-]+\\.)+${escaped})(?::\\d+)?(?:\\/[^\\s"'\\\`<>.,;]*)?`, 'gi');
+      while ((m = subRegex.exec(text)) !== null) {
+        const full = m[0].startsWith('http') ? m[0] : `https://${m[0]}`;
+        findings.push({ url: full, type: 'subdomain' });
+      }
+    }
+
+    return findings;
+  }
+
   async analyzeExtractedData(pageUrl, extracted) {
     const discoveredUrls = [];
     const discoveredSecrets = [];
     const discoveredSupply = [];
+    const seenUrls = new Set();
 
     if (!extracted) {
       return { urls: discoveredUrls, secrets: discoveredSecrets, supplyChain: discoveredSupply };
     }
 
-    let origin = '';
-    try { origin = new URL(pageUrl).origin; } catch {}
+    let seedApex = '';
+    try {
+      seedApex = this.getApexDomain(new URL(pageUrl).hostname);
+    } catch {}
 
-    const addUrl = (url, type) => {
-      if (!url || typeof url !== 'string') return;
-      if (url.startsWith('javascript:') || url.startsWith('data:') || url.startsWith('mailto:') || url.startsWith('#')) return;
-      let scope = 'out-of-scope';
+    const addUrl = (rawUrl, assignedType, context = pageUrl) => {
+      if (!rawUrl || typeof rawUrl !== 'string') return;
+      rawUrl = rawUrl.trim();
+      if (rawUrl.startsWith('javascript:') || rawUrl.startsWith('data:') || rawUrl.startsWith('mailto:') || rawUrl.startsWith('#')) return;
+
       try {
-        const u = new URL(url);
+        const resolved = new URL(rawUrl, context).href;
+        if (seenUrls.has(resolved)) return;
+        seenUrls.add(resolved);
+
+        const u = new URL(resolved);
         const p = new URL(pageUrl);
         const uHost = u.hostname.replace(/^www\./i, '').toLowerCase();
         const pHost = p.hostname.replace(/^www\./i, '').toLowerCase();
-        if (uHost === pHost || uHost.endsWith('.' + pHost) || pHost.endsWith('.' + uHost)) {
+        const uApex = this.getApexDomain(u.hostname);
+
+        let scope = 'out-of-scope';
+        let finalType = assignedType || 'href';
+
+        // Apex-level domain scoping: *.example.com is strictly in-scope for example.com
+        if (seedApex && uApex === seedApex) {
+          scope = 'in-scope';
+          if (u.hostname.toLowerCase() !== p.hostname.toLowerCase()) {
+            if (finalType === 'href' || finalType === 'regex-url') {
+              finalType = 'subdomain';
+            } else if (finalType.includes('api')) {
+              finalType = 'subdomain-api';
+            }
+          }
+        } else if (uHost === pHost) {
           scope = 'in-scope';
         }
+
+        // Detect API / XHR signature by pathname
+        const pathLower = u.pathname.toLowerCase();
+        if (/\/(api|v[0-9]+|graphql|rest|auth|oauth|rpc)\//i.test(pathLower) || pathLower.endsWith('.json')) {
+          if (!finalType.includes('api')) {
+            finalType = 'api-endpoint';
+          }
+        }
+
+        discoveredUrls.push({
+          url: resolved,
+          type: finalType,
+          scope,
+          sourceUrl: context,
+          discoveredAt: new Date().toISOString()
+        });
       } catch {}
-      discoveredUrls.push({ url, type, scope, sourceUrl: pageUrl, discoveredAt: new Date().toISOString() });
     };
 
+    // 1. Process standard DOM links & resources
     (extracted.htmlLinks || []).forEach(u => addUrl(u, 'href'));
     (extracted.scriptSources || []).forEach(u => addUrl(u, 'script'));
     (extracted.metaLinks || []).forEach(u => addUrl(u, 'meta'));
     (extracted.formActions || []).forEach(f => addUrl(typeof f === 'string' ? f : (f.action || f.url || ''), 'form-action'));
     (extracted.cssSources || []).forEach(u => addUrl(u, 'css'));
-    (extracted.dataEndpoints || []).forEach(d => addUrl(typeof d === 'string' ? d : (d.value || d.url || ''), 'data-endpoint'));
+    (extracted.dataEndpoints || []).forEach(d => addUrl(typeof d === 'string' ? d : (d.value || d.url || ''), 'xhr-api'));
 
+    // 2. Deep extraction on raw HTML slice
+    if (extracted.rawHtml) {
+      const domEndpoints = this.extractEndpointsFromCode(extracted.rawHtml, pageUrl, seedApex);
+      domEndpoints.forEach(e => addUrl(e.url, e.type, pageUrl));
+    }
+
+    // 3. Deep extraction on HTML comments (hidden staging subdomains & dev routes)
+    (extracted.htmlComments || []).forEach(c => {
+      const cEndpoints = this.extractEndpointsFromCode(c, pageUrl, seedApex);
+      cEndpoints.forEach(e => addUrl(e.url, e.type, pageUrl));
+    });
+
+    // 4. Deep extraction on Inline Scripts
+    (extracted.inlineScripts || []).forEach(s => {
+      if (!s || typeof s !== 'string') return;
+      const sEndpoints = this.extractEndpointsFromCode(s, pageUrl, seedApex);
+      sEndpoints.forEach(e => addUrl(e.url, e.type, pageUrl));
+    });
+
+    // 5. Deep extraction on JSON routing blobs (Next.js, Nuxt.js)
+    (extracted.jsonBlobs || []).forEach(blob => {
+      if (!blob) return;
+      const bEndpoints = this.extractEndpointsFromCode(blob, pageUrl, seedApex);
+      bEndpoints.forEach(e => addUrl(e.url, e.type, pageUrl));
+    });
+
+    // 6. Secret Scanning across HTML, inline scripts, and JSON blobs
     if (this.secretScanner) {
       try {
         if (extracted.rawHtml) {
@@ -1239,6 +1401,7 @@ class LocalServerAgent {
       }
     }
 
+    // 7. Supply Chain Scanning across scripts and JSON blobs
     if (this.supplyScanner) {
       try {
         (extracted.inlineScripts || []).forEach(s => {
@@ -1264,8 +1427,8 @@ class LocalServerAgent {
       }
     }
 
-    // 1. Scan external script URLs immediately for supply-chain packages (CDN, filename patterns)
-    const scriptList = (extracted.scriptSources || []).slice(0, 16);
+    // 8. Scan external script URLs immediately for supply-chain packages (CDN, filename patterns)
+    const scriptList = (extracted.scriptSources || []).slice(0, 24);
     if (this.supplyScanner) {
       for (const scriptUrl of scriptList) {
         try {
@@ -1279,14 +1442,14 @@ class LocalServerAgent {
       }
     }
 
-    // 2. Concurrently fetch external JS files to scan their contents for secrets and bundled supply-chain modules
-    if (scriptList.length > 0 && (this.secretScanner || this.supplyScanner)) {
+    // 9. Concurrently fetch external JS files to scan for SECRETS, SUPPLY-CHAIN MODULES, and HUNT JS API ENDPOINTS
+    if (scriptList.length > 0) {
       await Promise.allSettled(
         scriptList.map(async (src) => {
           try {
             if (!/^https?:\/\//i.test(src)) return;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
             const res = await fetch(src, {
               signal: controller.signal,
               headers: { 'Accept': '*/*' }
@@ -1296,6 +1459,11 @@ class LocalServerAgent {
             const jsContent = await res.text();
             if (!jsContent || jsContent.length < 10) return;
 
+            // Harvest endpoints, APIs, and subdomains directly from the JS bundle contents!
+            const jsEndpoints = this.extractEndpointsFromCode(jsContent, src, seedApex);
+            jsEndpoints.forEach(e => addUrl(e.url, e.type, src));
+
+            // Audit JS code for secrets
             if (this.secretScanner) {
               const sec = typeof this.secretScanner.scanCode === 'function'
                 ? this.secretScanner.scanCode(jsContent, src, 'js-bundle')
@@ -1305,6 +1473,7 @@ class LocalServerAgent {
               }
             }
 
+            // Audit JS code for supply-chain packages
             if (this.supplyScanner) {
               const items = typeof this.supplyScanner.scanCode === 'function'
                 ? this.supplyScanner.scanCode(jsContent, src, 'js-bundle')
@@ -1419,5 +1588,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 setInterval(() => state.cleanup(), 60000);
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Crawlizer Pro v1.2.1 initialized (with Supply Chain Security Scanner)');
+  console.log('Crawlizer Pro v1.2.2 initialized (with Supply Chain Security Scanner)');
 });

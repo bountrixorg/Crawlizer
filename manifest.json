@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Crawlizer - Web Crawler & Supply Chain Security Spider",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "High-velocity web crawler, secret spider & supply chain dependency security scanner. Detects exposed endpoints, dependency confusion, OSV CVEs & leaked credentials.",
   "permissions": [
     "storage",

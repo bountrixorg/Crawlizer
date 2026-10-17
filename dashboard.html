@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRAWLIZER — Cyberpunk Web Crawler & Spider</title>
-  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="theme.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,6 +19,12 @@
         }
         document.documentElement.setAttribute('data-theme', resolved);
         document.documentElement.setAttribute('data-theme-setting', saved);
+        document.addEventListener('DOMContentLoaded', function() {
+          if (document.body) {
+            document.body.setAttribute('data-theme', resolved);
+            document.body.setAttribute('data-theme-setting', saved);
+          }
+        });
       } catch (e) {}
     })();
   </script>
@@ -39,7 +45,7 @@
           </div>
           <div class="sidebar-brand-text">
             <span class="brand-title">CRAWLIZER</span>
-            <span class="brand-badge">SPIDER_v1.1.9 // ROOT</span>
+            <span class="brand-badge">SPIDER_v1.2.0 // ROOT</span>
           </div>
         </a>
         <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar (Ctrl+B)">
@@ -1114,7 +1120,7 @@
   / ____/________ __      __/ (_)___  ___  _____
  / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
 / /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
-\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.1.9
+\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.0
 Crawlizer Engine — Cyberpunk Deep Web &amp; Secret Recon
               </div>
               <div class="log-line info font-mono">[INF] Storage and heuristics engine initialized. Ready for targets.</div>

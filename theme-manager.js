@@ -1,7 +1,7 @@
 /**
- * Crawlizer Multi-Theme Customization Manager
+ * Crawlizer Multi-Theme Customization Manager (v1.2.0)
  * Supports 8 Curated Hacker/Modern Themes + Auto (OS Scheme Follower)
- * Easy to extend: Add an entry to THEMES + a CSS block in theme.css
+ * Complete Palette Transformation & Rock-Solid Persistence
  */
 
 (function (root, factory) {
@@ -96,10 +96,10 @@
 
   function getStoredTheme() {
     try {
-      return localStorage.getItem(STORAGE_KEY) || 'matrix';
-    } catch (e) {
-      return 'matrix';
-    }
+      const val = localStorage.getItem(STORAGE_KEY);
+      if (val) return val;
+    } catch (e) {}
+    return 'matrix';
   }
 
   function resolveThemeId(themeId) {
@@ -115,6 +115,7 @@
     const rawThemeId = themeId || getStoredTheme();
     const resolved = resolveThemeId(rawThemeId);
     const doc = document.documentElement;
+    const body = document.body;
 
     if (withTransition) {
       doc.setAttribute('data-theme-transitioning', 'true');
@@ -122,15 +123,22 @@
 
     doc.setAttribute('data-theme', resolved);
     doc.setAttribute('data-theme-setting', rawThemeId);
+    if (body) {
+      body.setAttribute('data-theme', resolved);
+      body.setAttribute('data-theme-setting', rawThemeId);
+    }
 
     try {
       localStorage.setItem(STORAGE_KEY, rawThemeId);
+    } catch (e) {}
+
+    try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ [STORAGE_KEY]: rawThemeId });
       }
     } catch (e) {}
 
-    // Update active state in any open theme dropdowns
+    // Update active state in any theme dropdowns
     updateAllDropdownUI(rawThemeId);
 
     if (withTransition) {
@@ -139,14 +147,16 @@
       }, 220);
     }
 
-    // Broadcast theme change event so charts, canvas, and svg sparklines can immediately update
-    window.dispatchEvent(new CustomEvent('crawlizer:themechange', {
-      detail: {
-        themeId: rawThemeId,
-        resolvedTheme: resolved,
-        themeConfig: THEMES.find(t => t.id === rawThemeId) || THEMES[0]
-      }
-    }));
+    // Broadcast theme change event so charts, canvas, and svg sparklines immediately update
+    try {
+      window.dispatchEvent(new CustomEvent('crawlizer:themechange', {
+        detail: {
+          themeId: rawThemeId,
+          resolvedTheme: resolved,
+          themeConfig: THEMES.find(t => t.id === rawThemeId) || THEMES[0]
+        }
+      }));
+    } catch (e) {}
 
     return resolved;
   }
@@ -336,7 +346,32 @@
         }
       });
     }
+
+    // Attempt sync with extension chrome.storage if running in extension context
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.get([STORAGE_KEY], (res) => {
+          if (res && res[STORAGE_KEY]) {
+            const current = getStoredTheme();
+            if (current !== res[STORAGE_KEY]) {
+              applyTheme(res[STORAGE_KEY], false);
+            }
+          }
+        });
+      } catch (e) {}
+    }
   }
+
+  // Immediately apply stored theme on script load
+  try {
+    const initTheme = getStoredTheme();
+    applyTheme(initTheme, false);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('DOMContentLoaded', () => {
+        applyTheme(getStoredTheme(), false);
+      });
+    }
+  } catch (e) {}
 
   return {
     THEMES,

@@ -12,7 +12,16 @@
   <script>
     (function() {
       try {
-        var saved = localStorage.getItem('crawlizer_theme') || 'matrix';
+        var cookieMatch = document.cookie && document.cookie.match(/(?:^|;\s*)crawlizer_theme=([^;]+)/);
+        var cookieVal = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+        var saved = null;
+        try { saved = localStorage.getItem('crawlizer_theme'); } catch (e) {}
+        if (!saved && cookieVal) saved = cookieVal;
+        if (!saved) saved = 'matrix';
+
+        try { localStorage.setItem('crawlizer_theme', saved); } catch (e) {}
+        try { document.cookie = 'crawlizer_theme=' + encodeURIComponent(saved) + '; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
+
         var resolved = saved;
         if (saved === 'auto') {
           resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'clean-light' : 'matrix';
@@ -45,7 +54,7 @@
           </div>
           <div class="sidebar-brand-text">
             <span class="brand-title">CRAWLIZER</span>
-            <span class="brand-badge">SPIDER_v1.2.0 // ROOT</span>
+            <span class="brand-badge">SPIDER_v1.2.1 // ROOT</span>
           </div>
         </a>
         <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar (Ctrl+B)">
@@ -1120,7 +1129,7 @@
   / ____/________ __      __/ (_)___  ___  _____
  / /   / ___/ __ `/ | /| / / / /_  / / _ \/ ___/
 / /___/ /  / /_/ /| |/ |/ / / / / /_/  __/ /    
-\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.0
+\____/_/   \__,_/ |__/|__/_/_/ /___/\___/_/   v1.2.1
 Crawlizer Engine — Cyberpunk Deep Web &amp; Secret Recon
               </div>
               <div class="log-line info font-mono">[INF] Storage and heuristics engine initialized. Ready for targets.</div>

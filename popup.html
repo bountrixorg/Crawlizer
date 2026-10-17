@@ -11,7 +11,16 @@
   <script>
     (function() {
       try {
-        var saved = localStorage.getItem('crawlizer_theme') || 'matrix';
+        var cookieMatch = document.cookie && document.cookie.match(/(?:^|;\s*)crawlizer_theme=([^;]+)/);
+        var cookieVal = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+        var saved = null;
+        try { saved = localStorage.getItem('crawlizer_theme'); } catch (e) {}
+        if (!saved && cookieVal) saved = cookieVal;
+        if (!saved) saved = 'matrix';
+
+        try { localStorage.setItem('crawlizer_theme', saved); } catch (e) {}
+        try { document.cookie = 'crawlizer_theme=' + encodeURIComponent(saved) + '; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
+
         var resolved = saved;
         if (saved === 'auto') {
           resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'clean-light' : 'matrix';
@@ -43,7 +52,7 @@
         <div class="brand-text">
           <div class="brand-title-row">
             <span class="title">CRAWLIZER</span>
-            <span class="badge-version">v1.2.0</span>
+            <span class="badge-version">v1.2.1</span>
           </div>
           <div class="prompt-line">
             <span class="prompt-sym">$</span>
@@ -244,7 +253,7 @@
     <!-- Tech Footer -->
     <footer class="footer">
       <div class="footer-left">
-        <span class="tech-tag">CRAWLIZER // CORE_v1.2.0</span>
+        <span class="tech-tag">CRAWLIZER // CORE_v1.2.1</span>
       </div>
       <div class="footer-right">
         <button id="btn-clear-quick" class="link-btn" title="Reset stored database">Clear DB</button>

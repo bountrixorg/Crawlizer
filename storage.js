@@ -15,7 +15,7 @@ class KatanaStorage {
     this.purgeBrowserStorage();
   }
 
-  // Purge any legacy browser storage (IndexedDB & localStorage)
+  // Purge any legacy browser storage (IndexedDB & localStorage), but PRESERVE user UI preferences (e.g. crawlizer_theme)
   purgeBrowserStorage() {
     if (typeof indexedDB !== 'undefined' && indexedDB.deleteDatabase) {
       try {
@@ -24,11 +24,11 @@ class KatanaStorage {
     }
     if (typeof localStorage !== 'undefined') {
       try {
-        // Clear all Crawlizer/Katana keys from localStorage
+        // Clear all Crawlizer/Katana crawled data keys from localStorage, preserving theme preferences
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && (k.startsWith('crawlizer') || k.startsWith('katana') || k.startsWith('crawler'))) {
+          if (k && !k.startsWith('crawlizer_theme') && k !== 'crawlizer_theme' && (k.startsWith('crawlizer') || k.startsWith('katana') || k.startsWith('crawler'))) {
             keysToRemove.push(k);
           }
         }
@@ -36,7 +36,11 @@ class KatanaStorage {
       } catch (e) {}
     }
     if (typeof sessionStorage !== 'undefined') {
-      try { sessionStorage.clear(); } catch (e) {}
+      try {
+        const theme = sessionStorage.getItem('crawlizer_theme');
+        sessionStorage.clear();
+        if (theme) sessionStorage.setItem('crawlizer_theme', theme);
+      } catch (e) {}
     }
   }
 

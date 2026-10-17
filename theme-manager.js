@@ -1,7 +1,7 @@
 /**
- * Crawlizer Multi-Theme Customization Manager (v1.2.0)
+ * Crawlizer Multi-Theme Customization Manager (v1.2.1)
  * Supports 8 Curated Hacker/Modern Themes + Auto (OS Scheme Follower)
- * Complete Palette Transformation & Rock-Solid Persistence
+ * Multi-layer persistence across localStorage, cookie, and server settings
  */
 
 (function (root, factory) {
@@ -95,10 +95,31 @@
   ];
 
   function getStoredTheme() {
+    // 1. Try localStorage
     try {
       const val = localStorage.getItem(STORAGE_KEY);
-      if (val) return val;
+      if (val && THEMES.some(t => t.id === val)) return val;
     } catch (e) {}
+
+    // 2. Try cookie fallback
+    try {
+      if (typeof document !== 'undefined' && document.cookie) {
+        const m = document.cookie.match(/(?:^|;\s*)crawlizer_theme=([^;]+)/);
+        if (m && m[1]) {
+          const cVal = decodeURIComponent(m[1]);
+          if (THEMES.some(t => t.id === cVal)) return cVal;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Try sessionStorage fallback
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const sVal = sessionStorage.getItem(STORAGE_KEY);
+        if (sVal && THEMES.some(t => t.id === sVal)) return sVal;
+      }
+    } catch (e) {}
+
     return 'matrix';
   }
 
@@ -128,13 +149,44 @@
       body.setAttribute('data-theme-setting', rawThemeId);
     }
 
+    // 1. Save to localStorage
     try {
       localStorage.setItem(STORAGE_KEY, rawThemeId);
     } catch (e) {}
 
+    // 2. Save to cookie
+    try {
+      if (typeof document !== 'undefined') {
+        document.cookie = `crawlizer_theme=${encodeURIComponent(rawThemeId)}; path=/; max-age=31536000; SameSite=Lax`;
+      }
+    } catch (e) {}
+
+    // 3. Save to sessionStorage
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(STORAGE_KEY, rawThemeId);
+      }
+    } catch (e) {}
+
+    // 4. Save to chrome.storage if in extension context
     try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ [STORAGE_KEY]: rawThemeId });
+      }
+    } catch (e) {}
+
+    // 5. Asynchronously persist to backend server .data/settings.json
+    try {
+      if (typeof fetch === 'function' && typeof window !== 'undefined' && window.location) {
+        const host = window.location.hostname || 'localhost';
+        const port = window.location.port || '4488';
+        if (host === 'localhost' || host === '127.0.0.1') {
+          fetch(`http://${host}:${port}/api/settings/crawlizer_theme`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: rawThemeId })
+          }).catch(() => {});
+        }
       }
     } catch (e) {}
 
@@ -360,6 +412,25 @@
         });
       } catch (e) {}
     }
+
+    // Also check backend settings for theme on localhost
+    try {
+      const host = window.location.hostname || 'localhost';
+      const port = window.location.port || '4488';
+      if (host === 'localhost' || host === '127.0.0.1') {
+        fetch(`http://${host}:${port}/api/settings/crawlizer_theme`)
+          .then(r => r.json())
+          .then(data => {
+            if (data && data.value && THEMES.some(t => t.id === data.value)) {
+              const current = getStoredTheme();
+              if (current !== data.value) {
+                applyTheme(data.value, false);
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    } catch (e) {}
   }
 
   // Immediately apply stored theme on script load

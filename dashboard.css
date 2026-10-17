@@ -430,18 +430,24 @@ body.hacker-app {
 
 /* Sidebar Footer */
 .sidebar-footer {
-  padding: 14px 12px;
+  padding: 12px 14px;
   border-top: 1px solid var(--border-subtle);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(10, 15, 29, 0.45);
 }
 
 .operator-box {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   overflow: hidden;
+}
+
+.app-sidebar.collapsed .operator-box {
+  justify-content: center;
 }
 
 .operator-avatar {
@@ -757,27 +763,53 @@ body.hacker-app {
 .sidebar-extension-status {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  margin-top: 8px;
-  background: rgba(0, 0, 0, 0.35);
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-muted);
   transition: all 0.25s ease;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-ext-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-extension-status.connected {
   border-color: rgba(57, 255, 20, 0.35);
   color: var(--neon-green);
-  background: rgba(57, 255, 20, 0.05);
+  background: rgba(57, 255, 20, 0.06);
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.12);
 }
 
 .sidebar-extension-status.offline {
   border-color: rgba(255, 0, 85, 0.35);
   color: #ff5577;
-  background: rgba(255, 0, 85, 0.05);
+  background: rgba(255, 0, 85, 0.06);
+}
+
+.app-sidebar.collapsed .sidebar-ext-text {
+  display: none;
+}
+
+.app-sidebar.collapsed .sidebar-extension-status {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+  margin: 0 auto;
 }
 
 .extension-pulse-dot {

@@ -932,7 +932,7 @@ class LocalServerAgent {
         this.send({
           type: 'register:agent',
           client: 'chrome-extension',
-          version: '1.1.7',
+          version: '1.1.8',
           name: 'Chrome Extension Crawler Agent'
         });
       };
@@ -1419,5 +1419,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 setInterval(() => state.cleanup(), 60000);
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Crawlizer Pro v1.1.7 initialized (with Supply Chain Security Scanner)');
+  console.log('Crawlizer Pro v1.1.8 initialized (with Supply Chain Security Scanner)');
 });
